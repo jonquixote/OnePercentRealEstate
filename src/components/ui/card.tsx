@@ -37,7 +37,7 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
     return (
         <div className="relative group block h-full">
             {onSelect && (
-                <div className="absolute top-4 right-4 z-20">
+                <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200" title="Select to Compare">
                     <input
                         type="checkbox"
                         checked={isSelected}

@@ -96,7 +96,7 @@ def process_listing(row, user_id):
             "estimated_rent": estimated_rent,
             "expense_ratio": 50,
             "financial_snapshot": financial_snapshot,
-            "status": "analyzing",
+            "status": "watch",
             "user_id": user_id,
             "images": images,
             "raw_data": raw_data

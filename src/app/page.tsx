@@ -101,7 +101,7 @@ export default function Dashboard() {
 
       <div className="mx-auto max-w-7xl px-8 -mt-16 relative z-10 pb-20">
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-bold text-slate-900 flex items-center">
+          <h2 className="text-2xl font-bold text-white flex items-center">
             <BarChart3 className="mr-3 h-6 w-6 text-slate-500" />
             Recent Opportunities
             <span className="ml-4 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
