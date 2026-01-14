@@ -55,7 +55,7 @@ const tiers = [
             'CRM Integration (Coming Soon)',
             'Dedicated Account Manager',
         ],
-        cta: 'Contact Sales',
+        cta: 'Upgrade for Team',
         featured: false,
     },
 ];
@@ -79,7 +79,11 @@ export default function PricingPage() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    priceId: tierId === 'pro' ? process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO : 'contact_sales',
+                    priceId: tierId === 'pro'
+                        ? process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO
+                        : tierId === 'agency'
+                            ? process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_AGENCY
+                            : 'contact_sales',
                     propertyId: 'subscription_upgrade',
                     userId: 'current_user_id_placeholder', // Should be fetched from auth context
                 }),
