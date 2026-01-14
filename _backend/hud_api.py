@@ -1,14 +1,17 @@
 import os
 import requests
-import pandas as pd
+import time
+import json
+from datetime import datetime
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load env from parent directory
+env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../.env.local')
+load_dotenv(dotenv_path=env_path)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")
 HUD_API_TOKEN = os.getenv("HUD_API_TOKEN")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
@@ -16,94 +19,212 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     exit(1)
 
 if not HUD_API_TOKEN:
-    print("Warning: HUD_API_TOKEN not set. HUD data fetch will fail.")
+    print("Warning: HUD_API_TOKEN not set. Live data fetch will fail.")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# HUD API Base URL
 HUD_BASE_URL = "https://www.huduser.gov/hudapi/public/fmr"
 
-def fetch_safmr_data(state_code, county_code):
-    """
-    Fetches SAFMR data for a specific county.
-    Note: HUD API structure varies. This is a simplified example assuming we can get data by county.
-    Real implementation might need to iterate or use a different endpoint.
-    """
-    if not HUD_API_TOKEN:
-        return None
+# Global Caches
+_state_cache = None
+_county_cache = {} # Key: State Code (OH), Value: List of counties
+_fips_processed = set() 
 
-    headers = {"Authorization": f"Bearer {HUD_API_TOKEN}"}
+# Static Map for MVP Markets
+CITY_COUNTY_MAP = {
+    "Cleveland, OH": "Cuyahoga",
+    "Indianapolis, IN": "Marion",
+    "El Paso, TX": "El Paso",
+    "Columbia, SC": "Richland",
+    "Tuscaloosa, AL": "Tuscaloosa",
+    "Toledo, OH": "Lucas",
+    "Huntsville, AL": "Madison",
+    "Tampa, FL": "Hillsborough",
+    "Kansas City, MO": "Jackson",
+    "Ocala, FL": "Marion",
+    "Memphis, TN": "Shelby",
+    "Birmingham, AL": "Jefferson",
+    "Charlotte, NC": "Mecklenburg",
+    "Columbus, OH": "Franklin"
+}
+
+def get_properties_info():
+    """Fetches zip, city, state from properties table."""
+    try:
+        response = supabase.table("properties").select("raw_data").execute()
+        props = []
+        for row in response.data:
+            rd = row.get('raw_data', {})
+            if rd and 'zip_code' in rd:
+                z = str(rd['zip_code']).split('-')[0].split('.')[0].strip()
+                if len(z) == 5:
+                    props.append({
+                        "zip": z,
+                        "city": rd.get('city'),
+                        "state": rd.get('state')
+                    })
+        return props
+    except Exception as e:
+        print(f"Error fetching properties: {e}")
+        return []
+
+def get_hud_headers():
+    return {"Authorization": f"Bearer {HUD_API_TOKEN}"}
+
+def get_state_id(state_code):
+    global _state_cache
+    if _state_cache is None:
+        try:
+            resp = requests.get(f"{HUD_BASE_URL}/listStates", headers=get_hud_headers())
+            if resp.status_code == 200:
+                _state_cache = resp.json()
+            else:
+                print(f"Failed to list states: {resp.status_code}")
+                return None
+        except Exception as e:
+            print(f"Error fetching states: {e}")
+            return None
+    return state_code
+
+def get_county_fips(state_code, county_name):
+    """Finds FIPS code for a county within a state."""
+    global _county_cache
     
-    # Example endpoint - check HUD documentation for exact path for SAFMR
-    # Usually it's /data/{entityid} or similar. 
-    # For MVP, let's assume we have a CSV or we use a known endpoint.
-    # Let's try to fetch data.
+    if state_code not in _county_cache:
+        try:
+             resp = requests.get(f"{HUD_BASE_URL}/listCounties/{state_code}", headers=get_hud_headers())
+             if resp.status_code == 200:
+                 _county_cache[state_code] = resp.json()
+             else:
+                 print(f"Failed to list counties for {state_code}: {resp.status_code}")
+                 return None
+        except Exception as e:
+            print(f"Error fetching counties for {state_code}: {e}")
+            return None
+
+    counties = _county_cache.get(state_code, [])
+    target_name = county_name.lower().replace(" county", "").strip()
     
-    print(f"Fetching HUD data for {state_code} - {county_code}...")
-    
-    # Placeholder for actual API call
-    # response = requests.get(f"{HUD_BASE_URL}/data/{state_code}/{county_code}", headers=headers)
-    # if response.status_code == 200:
-    #     return response.json()
+    for c in counties:
+        c_name = c['county_name'].lower().replace(" county", "").strip()
+        if c_name == target_name:
+            return c['fips_code']
     
     return None
 
-def update_market_benchmarks(zip_code, safmr_data):
-    """
-    Updates the market_benchmarks table with SAFMR data.
-    """
+def fetch_county_safmr(fips_code):
+    """Fetches SAFMR data for all zips in a county FIPS."""
+    year = 2025 
+    url = f"{HUD_BASE_URL}/data/{fips_code}?year={year}"
     try:
-        data = {
-            "zip_code": zip_code,
-            "safmr_data": safmr_data, # JSONB column
-            # We can also calculate an avg_rent_sqft if we have sqft data, but SAFMR is total rent.
-            # We might leave avg_rent_sqft null or estimate it.
+        print(f"Fetching HUD Data for FIPS {fips_code}...")
+        resp = requests.get(url, headers=get_hud_headers())
+        if resp.status_code == 200:
+            return resp.json()
+        elif resp.status_code == 400:
+            print(f"400 Error for {fips_code}. Response: {resp.text}")
+        else:
+            print(f"Error {resp.status_code} fetching FIPS {fips_code}")
+        return None
+    except Exception as e:
+         print(f"Exception fetching FIPS {fips_code}: {e}")
+         return None
+
+def upsert_safmr_data(api_response):
+    """Upserts all zips found in the API response."""
+    results = []
+    
+    # Check for 'basicdata' key in 'data'
+    if isinstance(api_response, dict):
+        if 'data' in api_response and isinstance(api_response['data'], dict):
+             results = api_response['data'].get('basicdata', [])
+        elif 'basicdata' in api_response:
+             results = api_response['basicdata']
+    
+    if not results:
+        print("Warning: No 'basicdata' found in API response.")
+    
+    count = 0
+    for item in results:
+        zip_code = item.get('zip_code')
+        if not zip_code: continue
+        
+        # Transform to our schema
+        # We want: 0br, 1br, 2br...
+        safmr_entry = {
+            "0br": item.get('Efficiency'),
+            "1br": item.get('One-Bedroom'),
+            "2br": item.get('Two-Bedroom'),
+            "3br": item.get('Three-Bedroom'),
+            "4br": item.get('Four-Bedroom')
         }
         
-        # Upsert
-        supabase.table("market_benchmarks").upsert(data).execute()
-        print(f"Updated benchmark for {zip_code}")
-    except Exception as e:
-        print(f"Error updating benchmark for {zip_code}: {e}")
+        # Check if valid dict (has 2br is good proxy)
+        if safmr_entry['2br'] is None: continue
+        
+        try:
+             supabase.table("market_benchmarks").upsert({
+                 "zip_code": zip_code,
+                 "safmr_data": safmr_entry,
+                 "last_updated": datetime.now().isoformat()
+             }).execute()
+             count += 1
+        except Exception as e:
+            print(f"Error upserting {zip_code}: {e}")
+
+    print(f"Upserted {count} benchmarks from FIPS query.")
 
 def run_hud_sync():
-    print("Starting HUD SAFMR Sync...")
+    print("Starting Live HUD Sync (Static Map)...")
     
-    # For the MVP/Zero-Capital approach without a valid HUD Token immediately,
-    # we can seed with some static data for our target zip codes.
+    # 1. Get Property Info
+    props = get_properties_info()
+    print(f"Found {len(props)} properties to check.")
     
-    # Example Cleveland Zip Codes
-    static_data = {
-        "44109": {"0br": 700, "1br": 800, "2br": 950, "3br": 1200, "4br": 1400},
-        "44111": {"0br": 750, "1br": 850, "2br": 1000, "3br": 1250, "4br": 1450},
-        "44135": {"0br": 720, "1br": 820, "2br": 980, "3br": 1220, "4br": 1420},
-        "44104": {"0br": 650, "1br": 750, "2br": 900, "3br": 1100, "4br": 1300},
-        "44105": {"0br": 680, "1br": 780, "2br": 920, "3br": 1150, "4br": 1350},
-        "44108": {"0br": 660, "1br": 760, "2br": 910, "3br": 1120, "4br": 1320},
-        "44110": {"0br": 670, "1br": 770, "2br": 930, "3br": 1140, "4br": 1340},
-        "44113": {"0br": 900, "1br": 1100, "2br": 1400, "3br": 1700, "4br": 2000}, # Tremont/Ohio City - Higher
-        "44102": {"0br": 800, "1br": 950, "2br": 1150, "3br": 1400, "4br": 1600},
-        "44128": {"0br": 750, "1br": 850, "2br": 1050, "3br": 1300, "4br": 1500},
-        "44134": {"0br": 800, "1br": 900, "2br": 1100, "3br": 1350, "4br": 1550},
-        "44144": {"0br": 780, "1br": 880, "2br": 1080, "3br": 1320, "4br": 1520},
-        "44120": {"0br": 700, "1br": 800, "2br": 1000, "3br": 1250, "4br": 1450},
-        "44130": {"0br": 850, "1br": 950, "2br": 1150, "3br": 1450, "4br": 1650},
-        "44121": {"0br": 820, "1br": 920, "2br": 1120, "3br": 1400, "4br": 1600},
-        "44129": {"0br": 810, "1br": 910, "2br": 1110, "3br": 1380, "4br": 1580},
-        "44119": {"0br": 710, "1br": 810, "2br": 960, "3br": 1180, "4br": 1380},
-        "44112": {"0br": 640, "1br": 740, "2br": 890, "3br": 1090, "4br": 1290},
-        "44126": {"0br": 950, "1br": 1050, "2br": 1250, "3br": 1550, "4br": 1750},
-        "44143": {"0br": 900, "1br": 1000, "2br": 1200, "3br": 1500, "4br": 1700},
-        "44124": {"0br": 920, "1br": 1020, "2br": 1220, "3br": 1520, "4br": 1720},
-        "44122": {"0br": 980, "1br": 1100, "2br": 1350, "3br": 1650, "4br": 1900},
-        "46220": {"0br": 950, "1br": 1050, "2br": 1250, "3br": 1550, "4br": 1750}, # Indianapolis
-        "46204": {"0br": 1100, "1br": 1300, "2br": 1600, "3br": 2000, "4br": 2400}, # Indianapolis Downtown
-    }
+    unique_zips = set()
     
-    for zip_code, rents in static_data.items():
-        update_market_benchmarks(zip_code, rents)
+    # 2. Iterate
+    for p in props:
+        zip_code = p['zip']
+        city = p['city']
+        state = p['state']
         
-    print("HUD Sync Complete (Static Seed).")
+        if not city or not state:
+            continue
+            
+        key = f"{city}, {state}" 
+        county_name = None
+        
+        if key in CITY_COUNTY_MAP:
+            county_name = CITY_COUNTY_MAP[key]
+        else:
+             for k, v in CITY_COUNTY_MAP.items():
+                 if k.lower() == key.lower():
+                     county_name = v
+                     break
+        
+        if not county_name:
+             continue
+
+        unique_zips.add(zip_code)
+        
+        try:
+            fips = get_county_fips(state, county_name)
+            if fips:
+                if fips in _fips_processed:
+                    continue 
+
+                api_data = fetch_county_safmr(fips)
+                if api_data:
+                    upsert_safmr_data(api_data)
+                    _fips_processed.add(fips)
+                    time.sleep(0.5)
+            else:
+                print(f"FIPS not found for {county_name}, {state}")
+                
+        except Exception as e:
+            print(f"Error processing {city}, {state}: {e}")
+
+    print("Live Sync Complete.")
 
 if __name__ == "__main__":
     run_hud_sync()

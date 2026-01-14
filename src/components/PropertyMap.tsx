@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import Map, { Marker, Popup, Source, Layer, MapRef } from 'react-map-gl';
+import Map, { Marker, Popup, Source, Layer, type MapRef } from 'react-map-gl/mapbox';
 import { Pin } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
