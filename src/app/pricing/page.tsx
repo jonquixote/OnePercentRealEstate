@@ -85,11 +85,17 @@ export default function PricingPage() {
                 }),
             });
 
-            const { sessionId, error } = await response.json();
+            const data = await response.json();
 
-            if (error) {
-                throw new Error(error);
+            if (!response.ok) {
+                if (response.status === 401 || data.error === 'Unauthorized') {
+                    router.push('/login?returnUrl=/pricing');
+                    return;
+                }
+                throw new Error(data.error || 'Checkout failed');
             }
+
+            const { sessionId } = data;
 
             const stripe = await stripePromise;
             if (stripe) {
