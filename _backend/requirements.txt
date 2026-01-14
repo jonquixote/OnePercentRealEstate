@@ -1,0 +1,5 @@
+homeharvest
+pandas
+supabase
+python-dotenv
+requests
