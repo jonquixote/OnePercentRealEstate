@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PropertyCard } from '@/components/ui/card';
+import Header from '@/components/Header';
 import { Loader2, TrendingUp, Search, BarChart3, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
@@ -65,12 +66,13 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
+      <Header />
       {/* Hero Section */}
       <div className="relative bg-slate-900 text-white overflow-hidden">
         <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-10"></div>
         <div className="absolute inset-0 bg-gradient-to-b from-slate-900/0 to-slate-900/80"></div>
 
-        <div className="relative mx-auto max-w-7xl px-8 pt-20 pb-24 sm:px-12 lg:px-16">
+        <div className="relative mx-auto max-w-7xl px-8 pt-10 pb-24 sm:px-12 lg:px-16">
           <div className="max-w-2xl">
             <div className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 mb-6">
               <TrendingUp className="mr-2 h-4 w-4" />
@@ -90,12 +92,6 @@ export default function Dashboard() {
               <Link href="/search" className="group rounded-full bg-white px-6 py-3 text-sm font-bold text-slate-900 shadow-sm hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-all flex items-center">
                 <Search className="mr-2 h-4 w-4 transition-transform group-hover:scale-110" />
                 Acquire New Data
-              </Link>
-              <Link href="/analytics" className="text-sm font-semibold leading-6 text-white hover:text-emerald-400 transition-colors flex items-center group">
-                View Deep Analytics <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-              <Link href="/pricing" className="ml-4 text-sm font-semibold leading-6 text-amber-400 hover:text-amber-300 transition-colors flex items-center group">
-                Upgrade to Pro
               </Link>
             </div>
           </div>

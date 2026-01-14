@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import Header from '@/components/Header';
 import { Loader2, TrendingUp, DollarSign, Home, PieChart as PieChartIcon } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -145,181 +146,185 @@ export default function AnalyticsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 p-8">
-            <div className="mx-auto max-w-7xl">
-                <header className="mb-8 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Market Analytics</h1>
-                        <p className="text-gray-500">Deep dive into your property portfolio metrics.</p>
+        <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
+            <Header />
+            <div className="p-8">
+                <div className="mx-auto max-w-7xl">
+                    <header className="mb-8 flex items-center justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold tracking-tight text-gray-900">Market Analytics</h1>
+                            <p className="text-gray-500">Deep dive into your property portfolio metrics.</p>
+                        </div>
+                        <Link href="/" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                            &larr; Back to Dashboard
+                        </Link>
+                    </header>
+
+                    {/* KPI Cards */}
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
+                                <Home className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{stats.totalProperties}</div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Avg Listing Price</CardTitle>
+                                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">${stats.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Avg Est. Rent</CardTitle>
+                                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">${stats.avgRent.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Avg Gross Yield</CardTitle>
+                                <PieChartIcon className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-green-600">{stats.avgYield.toFixed(2)}%</div>
+                            </CardContent>
+                        </Card>
                     </div>
-                    <Link href="/" className="text-sm font-medium text-blue-600 hover:text-blue-500">
-                        &larr; Back to Dashboard
-                    </Link>
-                </header>
 
-                {/* KPI Cards */}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
-                            <Home className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.totalProperties}</div>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Avg Listing Price</CardTitle>
-                            <DollarSign className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">${stats.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Avg Est. Rent</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">${stats.avgRent.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Avg Gross Yield</CardTitle>
-                            <PieChartIcon className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600">{stats.avgYield.toFixed(2)}%</div>
-                        </CardContent>
-                    </Card>
-                </div>
+                    {/* Charts */}
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
 
-                {/* Charts */}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+                        {/* Price Distribution */}
+                        <Card className="col-span-4">
+                            <CardHeader>
+                                <CardTitle>Price Distribution</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pl-2">
+                                <div className="h-[300px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={priceDistribution}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                                            <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                                            <Tooltip />
+                                            <Bar dataKey="count" fill="#000000" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                    {/* Price Distribution */}
-                    <Card className="col-span-4">
-                        <CardHeader>
-                            <CardTitle>Price Distribution</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pl-2">
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={priceDistribution}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
-                                        <Tooltip />
-                                        <Bar dataKey="count" fill="#000000" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </CardContent>
-                    </Card>
+                        {/* Status Distribution */}
+                        <Card className="col-span-3">
+                            <CardHeader>
+                                <CardTitle>Portfolio Status</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-[300px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={statusDistribution}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                fill="#8884d8"
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                            >
+                                                {statusDistribution.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip />
+                                            <Legend />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                    {/* Status Distribution */}
-                    <Card className="col-span-3">
-                        <CardHeader>
-                            <CardTitle>Portfolio Status</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={statusDistribution}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            fill="#8884d8"
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                        >
-                                            {statusDistribution.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                        <Legend />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </CardContent>
-                    </Card>
+                        {/* Rent vs Price Scatter */}
+                        <Card className="col-span-7">
+                            <CardHeader>
+                                <CardTitle>Rent vs. Price Correlation</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-[400px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                                            <CartesianGrid />
+                                            <XAxis type="number" dataKey="price" name="Price" unit="$" />
+                                            <YAxis type="number" dataKey="rent" name="Rent" unit="$" />
+                                            <ZAxis type="category" dataKey="address" name="Address" />
+                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                                            <Scatter name="Properties" data={rentVsPrice} fill="#8884d8" />
+                                        </ScatterChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                    {/* Rent vs Price Scatter */}
-                    <Card className="col-span-7">
-                        <CardHeader>
-                            <CardTitle>Rent vs. Price Correlation</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="h-[400px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                                        <CartesianGrid />
-                                        <XAxis type="number" dataKey="price" name="Price" unit="$" />
-                                        <YAxis type="number" dataKey="rent" name="Rent" unit="$" />
-                                        <ZAxis type="category" dataKey="address" name="Address" />
-                                        <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                                        <Scatter name="Properties" data={rentVsPrice} fill="#8884d8" />
-                                    </ScatterChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </CardContent>
-                    </Card>
+                        {/* Rent vs HUD Benchmark */}
+                        <Card className="col-span-4">
+                            <CardHeader>
+                                <CardTitle>Rent vs. HUD Fair Market Rent (3BR)</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-[300px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={rentVsHudData}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="name" />
+                                            <YAxis />
+                                            <Tooltip />
+                                            <Legend />
+                                            <Bar dataKey="Avg Rent" fill="#8884d8" />
+                                            <Bar dataKey="HUD FMR (3BR)" fill="#82ca9d" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                    {/* Rent vs HUD Benchmark */}
-                    <Card className="col-span-4">
-                        <CardHeader>
-                            <CardTitle>Rent vs. HUD Fair Market Rent (3BR)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={rentVsHudData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="Avg Rent" fill="#8884d8" />
-                                        <Bar dataKey="HUD FMR (3BR)" fill="#82ca9d" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </CardContent>
-                    </Card>
+                        {/* Deal Economics Waterfall */}
+                        <Card className="col-span-3">
+                            <CardHeader>
+                                <CardTitle>Avg Deal Economics (Monthly)</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-[300px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={economicsData}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="name" fontSize={10} interval={0} />
+                                            <YAxis />
+                                            <Tooltip />
+                                            <Bar dataKey="value">
+                                                {economicsData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                    {/* Deal Economics Waterfall */}
-                    <Card className="col-span-3">
-                        <CardHeader>
-                            <CardTitle>Avg Deal Economics (Monthly)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={economicsData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" fontSize={10} interval={0} />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Bar dataKey="value">
-                                            {economicsData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                                            ))}
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </CardContent>
-                    </Card>
-
+                    </div>
                 </div>
             </div>
         </div>
+        </div >
     );
 }
