@@ -46,7 +46,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                         .from('market_benchmarks')
                         .select('*')
                         .eq('zip_code', zip)
-                        .single();
+                        .maybeSingle();
 
                     if (!benchError && benchData) {
                         setBenchmark(benchData);
@@ -445,7 +445,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                                         <CardTitle>Rent vs. HUD Fair Market Rent</CardTitle>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="h-[300px]">
+                                        <div className="h-[300px] w-full min-h-[300px] min-w-0">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
                                                     data={[
@@ -479,7 +479,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                                         <CardTitle>Monthly Deal Economics</CardTitle>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="h-[300px]">
+                                        <div className="h-[300px] w-full min-h-[300px] min-w-0">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
                                                     data={(() => {

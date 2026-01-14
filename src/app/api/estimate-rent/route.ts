@@ -27,7 +27,7 @@ export async function POST(req: Request) {
         const backendDir = process.cwd() + '/_backend';
 
         // Use activation script and relative script name
-        const command = `cd "${backendDir}" && source venv/bin/activate && python estimate_rent.py ${args.join(' ')}`;
+        const command = `cd "${backendDir}" && source env/bin/activate && python estimate_rent.py ${args.join(' ')}`;
         console.log("Executing command:", command);
 
         return new Promise<NextResponse>((resolve) => {

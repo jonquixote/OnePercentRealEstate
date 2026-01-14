@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PropertyCard } from '@/components/ui/card';
 import Header from '@/components/Header';
-import { Loader2, TrendingUp, Search, BarChart3, ArrowRight } from 'lucide-react';
+import { Loader2, TrendingUp, Search, BarChart3, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
 import Link from 'next/link';
+import { PropertyMap } from '@/components/PropertyMap';
+import { PropertyFilters, FilterState } from '@/components/PropertyFilters';
+import { Button } from '@/components/ui/button';
 
 interface Property {
   id: string;
@@ -14,12 +17,27 @@ interface Property {
   estimated_rent: number;
   financial_snapshot: any;
   status: string;
+  raw_data: any;
+  created_at?: string;
 }
 
 export default function Dashboard() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
+
+  // View State (for Mobile primarily, or specific toggle)
+  const [showMap, setShowMap] = useState(true);
+
+  // Filter State
+  const [filters, setFilters] = useState<FilterState>({
+    showSold: false,
+    minPrice: 0,
+    maxPrice: 2000000,
+    minBeds: 0,
+    minBaths: 0,
+    onlyOnePercentRule: false
+  });
 
   useEffect(() => {
     async function fetchProperties() {
@@ -38,6 +56,34 @@ export default function Dashboard() {
 
     fetchProperties();
   }, []);
+
+  // Filter Logic
+  const filteredProperties = useMemo(() => {
+    return properties.filter(p => {
+      // 1. Status (Hide Sold)
+      if (!filters.showSold && (p.status === 'sold' || p.listing_price === null)) return false;
+
+      // 2. Price
+      // If sold, maybe check sold_price? For now assume listing_price or raw_data.sold_price if available?
+      // Use listing_price for consistency for now
+      if (p.listing_price > filters.maxPrice) return false;
+      if (p.listing_price < filters.minPrice) return false;
+
+      // 3. Beds/Baths
+      const beds = p.raw_data?.beds || 0;
+      const baths = p.raw_data?.baths || 0;
+      if (beds < filters.minBeds) return false;
+      if (baths < filters.minBaths) return false;
+
+      // 4. 1% Rule
+      if (filters.onlyOnePercentRule) {
+        if (!p.listing_price || !p.estimated_rent) return false;
+        if ((p.estimated_rent / p.listing_price) < 0.01) return false;
+      }
+
+      return true;
+    });
+  }, [properties, filters]);
 
   const toggleSelection = (id: string) => {
     const newSelected = new Set(selectedProperties);
@@ -65,99 +111,88 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
+    <div className="min-h-screen bg-gray-50 font-sans text-slate-900 flex flex-col">
       <Header />
-      {/* Hero Section */}
-      <div className="relative bg-slate-900 text-white overflow-hidden">
-        <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-10"></div>
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/0 to-slate-900/80"></div>
 
-        <div className="relative mx-auto max-w-7xl px-8 pt-10 pb-24 sm:px-12 lg:px-16">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 mb-6">
-              <TrendingUp className="mr-2 h-4 w-4" />
-              Real-time Market Analysis
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl mb-6">
-              Investment <br className="hidden sm:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-                Dashboard
-              </span>
-            </h1>
-            <p className="mt-4 text-lg leading-8 text-slate-300">
-              Identify high-yield "Zero-Capital" real estate opportunities. Analyze listing prices vs. HUD Fair Market Rents instantly.
-            </p>
-
-            <div className="mt-10 flex items-center gap-x-6">
-              <Link href="/search" className="group rounded-full bg-white px-6 py-3 text-sm font-bold text-slate-900 shadow-sm hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-all flex items-center">
-                <Search className="mr-2 h-4 w-4 transition-transform group-hover:scale-110" />
-                Acquire New Data
-              </Link>
-            </div>
-          </div>
-        </div>
+      {/* Sticky Filters */}
+      <div className="sticky top-0 z-20 bg-white shadow-sm">
+        <PropertyFilters filters={filters} setFilters={setFilters} />
       </div>
 
-      <div className="mx-auto max-w-7xl px-8 -mt-16 relative z-10 pb-20">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-bold text-white flex items-center">
-            <BarChart3 className="mr-3 h-6 w-6 text-slate-500" />
-            Recent Opportunities
-            <span className="ml-4 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-              {properties.length} Properties
-            </span>
-          </h2>
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-140px)]">
+        {/* Use fixed height for map layout, subtract header/filter height approx */}
 
-          {/* Filter/Sort controls could go here */}
-        </div>
+        {/* List View (Scrollable) */}
+        <div className={`flex-1 overflow-y-auto p-6 ${showMap ? 'lg:w-[55%]' : 'w-full'} transition-all duration-300`}>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold flex items-center">
+              <BarChart3 className="mr-2 h-5 w-5 text-slate-500" />
+              Opportunities
+              <span className="ml-3 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                {filteredProperties.length} Found
+              </span>
+            </h2>
 
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-          {properties.map((property, idx) => {
-            return (
-              <div key={property.id} className="animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-backwards" style={{ animationDelay: `${idx * 100}ms` }}>
+            {/* Mobile Toggle */}
+            <div className="lg:hidden">
+              <Button variant="outline" size="sm" onClick={() => setShowMap(!showMap)}>
+                {showMap ? <ListIcon className="h-4 w-4 mr-2" /> : <MapIcon className="h-4 w-4 mr-2" />}
+                {showMap ? 'List' : 'Map'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Grid */}
+          <div className={`grid gap-6 ${showMap ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
+            {filteredProperties.map((property, idx) => (
+              <div key={property.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
                 <PropertyCard
                   property={property}
                   isSelected={selectedProperties.has(property.id)}
                   onSelect={toggleSelection}
                 />
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          {filteredProperties.length === 0 && (
+            <div className="mt-12 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center bg-white/50">
+              <Search className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-semibold text-gray-900">No properties match your filters</h3>
+              <p className="mt-1 text-sm text-gray-500">Try adjusting your price range or criteria.</p>
+            </div>
+          )}
         </div>
 
-        {properties.length === 0 && !loading && (
-          <div className="mt-12 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center bg-white/50">
-            <Search className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-semibold text-gray-900">No properties found</h3>
-            <p className="mt-1 text-sm text-gray-500">Get started by acquiring some market data.</p>
-            <div className="mt-6">
-              <Link
-                href="/search"
-                className="inline-flex items-center rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600"
-              >
-                <Search className="-ml-0.5 mr-1.5 h-5 w-5" aria-hidden="true" />
-                Go to Scraper
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* Floating Compare Button */}
-        {selectedProperties.size > 0 && (
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 transform z-50 animate-in slide-in-from-bottom-8 fade-in duration-300">
-            <Link
-              href={`/compare?ids=${Array.from(selectedProperties).join(',')}`}
-              className="group flex items-center rounded-full bg-slate-900 pl-4 pr-6 py-3 text-white shadow-2xl hover:bg-slate-800 transition-all hover:scale-105 ring-4 ring-white"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold mr-3 shadow-inner group-hover:scale-110 transition-transform">
-                {selectedProperties.size}
-              </span>
-              <span className="font-medium">Compare Selected</span>
-              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Link>
-          </div>
-        )}
+        {/* Map View (Sticky/Fixed) */}
+        <div className={`lg:block ${showMap ? 'block h-[50vh] lg:h-auto lg:w-[45%]' : 'hidden'} relative border-l border-gray-200`}>
+          <PropertyMap properties={filteredProperties} />
+          {/* Toggle for Desktop */}
+          <button
+            onClick={() => setShowMap(!showMap)}
+            className="absolute top-4 left-4 z-10 bg-white p-2 rounded-md shadow-md border border-gray-200 hover:bg-gray-50 hidden lg:block"
+            title={showMap ? "Hide Map" : "Show Map"}
+          >
+            {showMap ? <ArrowRight className="h-4 w-4" /> : <MapIcon className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
+
+      {/* Floating Compare Button */}
+      {selectedProperties.size > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 transform z-50 animate-in slide-in-from-bottom-8 fade-in duration-300">
+          <Link
+            href={`/compare?ids=${Array.from(selectedProperties).join(',')}`}
+            className="group flex items-center rounded-full bg-slate-900 pl-4 pr-6 py-3 text-white shadow-2xl hover:bg-slate-800 transition-all hover:scale-105 ring-4 ring-white"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold mr-3 shadow-inner group-hover:scale-110 transition-transform">
+              {selectedProperties.size}
+            </span>
+            <span className="font-medium">Compare Selected</span>
+            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

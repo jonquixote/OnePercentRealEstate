@@ -90,6 +90,16 @@ def process_listing(row, user_id):
             elif hasattr(v, 'isoformat'): # Handle dates
                 raw_data[k] = v.isoformat()
             
+        if 'sold_price' in row and pd.notna(row['sold_price']):
+             sold_price = row['sold_price']
+        else:
+             sold_price = None
+
+        if 'last_sold_date' in row and pd.notna(row['last_sold_date']):
+             sold_date = row['last_sold_date']
+        else:
+             sold_date = None
+
         return {
             "address": address,
             "listing_price": price,
@@ -99,7 +109,10 @@ def process_listing(row, user_id):
             "status": "watch",
             "user_id": user_id,
             "images": images,
-            "raw_data": raw_data
+            "raw_data": raw_data,
+            "sold_price": sold_price,
+            "sold_date": sold_date,
+            "property_type": row.get('style', None)
         }
     except Exception as e:
         print(f"Error processing listing: {e}")

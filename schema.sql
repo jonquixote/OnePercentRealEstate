@@ -86,3 +86,23 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- 4. Market Targets Table (Phase 6)
+CREATE TABLE IF NOT EXISTS market_targets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  location TEXT UNIQUE NOT NULL,
+  listing_type TEXT DEFAULT 'for_sale',
+  frequency_hours INT DEFAULT 24,
+  last_scraped TIMESTAMP WITH TIME ZONE,
+  priority INT DEFAULT 5,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE market_targets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable read access for all users" ON market_targets FOR SELECT USING (true);
+
+-- Add columns to properties table
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS sold_price NUMERIC;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS sold_date DATE;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS property_type TEXT;

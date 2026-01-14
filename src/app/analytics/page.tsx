@@ -209,7 +209,7 @@ export default function AnalyticsPage() {
                                 <CardTitle>Price Distribution</CardTitle>
                             </CardHeader>
                             <CardContent className="pl-2">
-                                <div className="h-[300px]">
+                                <div className="h-[300px] w-full min-h-[300px] min-w-0">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={priceDistribution}>
                                             <CartesianGrid strokeDasharray="3 3" />
@@ -229,7 +229,7 @@ export default function AnalyticsPage() {
                                 <CardTitle>Portfolio Status</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="h-[300px]">
+                                <div className="h-[300px] w-full min-h-[300px] min-w-0">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
                                             <Pie
@@ -260,7 +260,7 @@ export default function AnalyticsPage() {
                                 <CardTitle>Rent vs. Price Correlation</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="h-[400px]">
+                                <div className="h-[400px] w-full min-h-[400px] min-w-0">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                                             <CartesianGrid />
@@ -281,7 +281,7 @@ export default function AnalyticsPage() {
                                 <CardTitle>Rent vs. HUD Fair Market Rent (3BR)</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="h-[300px]">
+                                <div className="h-[300px] w-full min-h-[300px] min-w-0">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={rentVsHudData}>
                                             <CartesianGrid strokeDasharray="3 3" />
@@ -303,7 +303,7 @@ export default function AnalyticsPage() {
                                 <CardTitle>Avg Deal Economics (Monthly)</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="h-[300px]">
+                                <div className="h-[300px] w-full min-h-[300px] min-w-0">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={economicsData}>
                                             <CartesianGrid strokeDasharray="3 3" />
