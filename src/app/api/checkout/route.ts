@@ -59,8 +59,8 @@ export async function POST(req: Request) {
                     quantity: 1,
                 },
             ],
-            success_url: `${req.headers.get('origin')}/property/${propertyId}?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${req.headers.get('origin')}/property/${propertyId}`,
+            success_url: `${req.headers.get('origin')}/?upgrade_success=true&session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${req.headers.get('origin')}/pricing?canceled=true`,
             metadata: {
                 propertyId,
                 userId,
