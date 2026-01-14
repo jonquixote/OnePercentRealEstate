@@ -94,6 +94,9 @@ export default function Dashboard() {
               <Link href="/analytics" className="text-sm font-semibold leading-6 text-white hover:text-emerald-400 transition-colors flex items-center group">
                 View Deep Analytics <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Link>
+              <Link href="/pricing" className="ml-4 text-sm font-semibold leading-6 text-amber-400 hover:text-amber-300 transition-colors flex items-center group">
+                Upgrade to Pro
+              </Link>
             </div>
           </div>
         </div>
