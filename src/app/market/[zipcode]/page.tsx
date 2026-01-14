@@ -1,98 +1,162 @@
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Building, Wallet, MapPin } from 'lucide-react';
+import { PropertyCard } from '@/components/ui/card';
 
-// Generate static params for all known zip codes
+// Force static generation for these pages
+export const dynamic = 'force-static';
+// Revalidate every 24 hours
+export const revalidate = 86400;
+
+function getSupabase() {
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+}
+
+// 1. Generate Static Params: Build pages for all known zips at build time
 export async function generateStaticParams() {
-    const { data: benchmarks } = await supabase
-        .from('market_benchmarks')
-        .select('zip_code');
+    const supabase = getSupabase();
+    const { data: properties } = await supabase.from('properties').select('address');
 
-    return (benchmarks || []).map((b) => ({
-        zipcode: b.zip_code,
+    const zips = new Set<string>();
+    if (properties) {
+        properties.forEach(p => {
+            const match = p.address.match(/\b\d{5}\b/);
+            if (match) zips.add(match[0]);
+        });
+    }
+
+    return Array.from(zips).map((zipcode) => ({
+        zipcode: zipcode,
     }));
 }
 
+// 2. Generate Metadata for SEO
+export async function generateMetadata({ params }: { params: Promise<{ zipcode: string }> }) {
+    const { zipcode } = await params;
+    return {
+        title: `Real Estate Investment in ${zipcode} | Market Analysis`,
+        description: `Analyze cap rates, rent-to-price ratios, and investment opportunities in ${zipcode}. See average prices and rental yields on OnePercentRealEstate.`,
+    };
+}
+
+// 3. Page Component
 export default async function MarketPage({ params }: { params: Promise<{ zipcode: string }> }) {
     const { zipcode } = await params;
+    const supabase = getSupabase();
 
-    const { data: benchmark } = await supabase
+    // Fetch properties in this zip
+    // Note: Since address is unstructured, we use ILIKE. In a real app, storing zip_code column is better.
+    const { data: properties } = await supabase
+        .from('properties')
+        .select('*')
+        .ilike('address', `%${zipcode}%`)
+        .order('created_at', { ascending: false });
+
+    // Fetch market benchmarks if available
+    const { data: benchmarks } = await supabase
         .from('market_benchmarks')
         .select('*')
         .eq('zip_code', zipcode)
         .single();
 
-    if (!benchmark) {
-        notFound();
+    const activeProperties = properties || [];
+    const count = activeProperties.length;
+
+    // Calculate Averages
+    const avgPrice = count > 0
+        ? activeProperties.reduce((acc, p) => acc + (p.listing_price || 0), 0) / count
+        : 0;
+
+    const avgRent = benchmarks?.safmr_data?.['2br'] || (avgPrice * 0.008); // Fallback
+
+    if (count === 0 && !benchmarks) {
+        return notFound();
     }
 
-    const safmr = benchmark.safmr_data || {};
-    const rent3br = safmr['3br'] || 0;
-
     return (
-        <div className="min-h-screen bg-white">
-            <header className="bg-gray-50 border-b border-gray-200">
-                <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                    <Link href="/" className="flex items-center text-sm font-medium text-blue-600 hover:text-blue-500 mb-4">
-                        <ArrowLeft className="mr-2 h-4 w-4" />
-                        Back to Home
+        <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
+            <div className="bg-slate-900 text-white py-12">
+                <div className="mx-auto max-w-7xl px-8">
+                    <Link href="/" className="inline-flex items-center text-sm text-gray-400 hover:text-white mb-6 transition-colors">
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
                     </Link>
-                    <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">
-                        Real Estate Investment Analysis for {zipcode}
-                    </h1>
-                    <p className="mt-2 text-lg text-gray-500">
-                        Is {zipcode} a good place to invest? See the data.
-                    </p>
+                    <h1 className="text-4xl font-bold mb-4">Market Analysis: <span className="text-emerald-400">{zipcode}</span></h1>
+                    <p className="text-xl text-gray-300">Real estate investment usage data and active opportunities.</p>
                 </div>
-            </header>
+            </div>
 
-            <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-                <div className="grid gap-8 md:grid-cols-2">
-                    {/* Market Stats */}
-                    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Market Benchmarks</h2>
-                        <div className="space-y-4">
-                            <div className="flex justify-between border-b border-gray-100 pb-2">
-                                <span className="text-gray-600">HUD Fair Market Rent (3BR)</span>
-                                <span className="font-bold text-xl text-green-600">${rent3br}</span>
+            <div className="mx-auto max-w-7xl px-8 py-12">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-12">
+                    <div className="bg-white overflow-hidden rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex items-center">
+                            <div className="p-3 rounded-full bg-blue-100 text-blue-600">
+                                <Building className="h-6 w-6" />
                             </div>
-                            <div className="flex justify-between border-b border-gray-100 pb-2">
-                                <span className="text-gray-600">Median Home Price</span>
-                                <span className="font-bold text-xl text-gray-900">
-                                    {benchmark.median_price ? `$${benchmark.median_price.toLocaleString()}` : 'N/A'}
-                                </span>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-500">Average List Price</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(avgPrice)}
+                                </p>
                             </div>
-                        </div>
-                        <div className="mt-8">
-                            <Link
-                                href={`/search?location=${zipcode}`}
-                                className="block w-full text-center rounded-md bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700"
-                            >
-                                Find Deals in {zipcode}
-                            </Link>
                         </div>
                     </div>
 
-                    {/* SEO Content */}
-                    <div className="prose prose-blue max-w-none">
-                        <h3>Investing in {zipcode}</h3>
-                        <p>
-                            Real estate investors are increasingly looking at <strong>{zipcode}</strong> for cash flow opportunities.
-                            With a HUD Fair Market Rent of <strong>${rent3br}</strong> for a 3-bedroom unit, this area offers potential for meeting the 1% Rule.
-                        </p>
-                        <p>
-                            Our platform analyzes thousands of listings to find properties that generate positive cash flow.
-                            Use our <strong>OnePercentRealEstate Dashboard</strong> to filter by Cap Rate, Cash-on-Cash Return, and Net Operating Income.
-                        </p>
-                        <h3>Why use the 1% Rule in {zipcode}?</h3>
-                        <p>
-                            The 1% rule suggests that the monthly rent should be at least 1% of the purchase price.
-                            In {zipcode}, this means if you buy a property for $100,000, you should aim for $1,000 in monthly rent.
-                        </p>
+                    <div className="bg-white overflow-hidden rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex items-center">
+                            <div className="p-3 rounded-full bg-emerald-100 text-emerald-600">
+                                <Wallet className="h-6 w-6" />
+                            </div>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-500">Average 2BR Rent</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(avgRent)}
+                                </p>
+                                <span className="text-xs text-gray-400">HUD FMR / Est.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white overflow-hidden rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex items-center">
+                            <div className="p-3 rounded-full bg-purple-100 text-purple-600">
+                                <TrendingUp className="h-6 w-6" />
+                            </div>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-500">Est. Gross Yield</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                    {avgPrice > 0 ? ((avgRent * 12 / avgPrice) * 100).toFixed(2) : '0'}%
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </main>
+
+                {/* Properties Grid */}
+                <h2 className="text-2xl font-bold mb-6 flex items-center">
+                    <MapPin className="mr-2 h-6 w-6 text-slate-500" />
+                    Active Opportunities in {zipcode}
+                </h2>
+
+                {count > 0 ? (
+                    <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+                        {activeProperties.map((property) => (
+                            <PropertyCard key={property.id} property={property} />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
+                        <p className="text-gray-500">No active properties found in this market currently.</p>
+                        <Link href="/search" className="mt-4 inline-block text-emerald-600 font-medium hover:underline">
+                            Run a search for {zipcode}
+                        </Link>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

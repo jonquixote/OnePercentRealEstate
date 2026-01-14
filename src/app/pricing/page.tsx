@@ -93,6 +93,7 @@ export default function PricingPage() {
 
             const stripe = await stripePromise;
             if (stripe) {
+                // @ts-ignore
                 await stripe.redirectToCheckout({ sessionId });
             }
         } catch (err: any) {
