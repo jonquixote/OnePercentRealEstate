@@ -3,6 +3,9 @@ import argparse
 import json
 import pandas as pd
 import sys
+import requests
+import urllib.parse
+from time import sleep
 from homeharvest import scrape_property
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -13,12 +16,39 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 DEFAULT_USER_ID = os.getenv("DEFAULT_USER_ID")
+MAPBOX_TOKEN = os.getenv("NEXT_PUBLIC_MAPBOX_TOKEN")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print(json.dumps({"error": "Missing Supabase credentials"}))
     exit(1)
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def geocode_address(address):
+    """Geocodes an address using Mapbox."""
+    if not MAPBOX_TOKEN:
+        return None
+        
+    try:
+        encoded = urllib.parse.quote(address)
+        url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{encoded}.json"
+        params = {
+            "access_token": MAPBOX_TOKEN,
+            "country": "US",
+            "limit": 1
+        }
+        
+        resp = requests.get(url, params=params, timeout=5)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("features") and len(data["features"]) > 0:
+                coords = data["features"][0]["center"]
+                return (coords[1], coords[0])  # [lon, lat] -> (lat, lon)
+    except Exception as e:
+        print(f"Geocode error: {e}", file=sys.stderr)
+    
+    return None
 
 def get_safmr_rent(zip_code, bedrooms):
     """
@@ -89,6 +119,16 @@ def process_listing(row, user_id):
                 raw_data[k] = None
             elif hasattr(v, 'isoformat'): # Handle dates
                 raw_data[k] = v.isoformat()
+        
+        # Geocode
+        coords = geocode_address(address)
+        if coords:
+            raw_data["lat"] = coords[0]
+            raw_data["lon"] = coords[1]
+        else:
+            print(f"WARNING: Could not geocode {address}", file=sys.stderr)
+            raw_data["lat"] = None
+            raw_data["lon"] = None
             
         if 'sold_price' in row and pd.notna(row['sold_price']):
              sold_price = row['sold_price']
@@ -139,6 +179,17 @@ def process_rental(row):
                 raw_data[k] = None
             elif hasattr(v, 'isoformat'):
                 raw_data[k] = v.isoformat()
+        
+        # Geocode
+        coords = geocode_address(address)
+        lat, lon = (None, None)
+        if coords:
+            lat, lon = coords
+            raw_data["lat"] = lat
+            raw_data["lon"] = lon
+        else:
+             raw_data["lat"] = None
+             raw_data["lon"] = None
             
         return {
             "address": address,
@@ -150,8 +201,8 @@ def process_rental(row):
             "bathrooms": row['baths'] if pd.notna(row['baths']) else None,
             "sqft": row['sqft'] if pd.notna(row['sqft']) else None,
             "property_type": row['style'] if pd.notna(row['style']) else None,
-            "latitude": row['latitude'] if pd.notna(row['latitude']) else None,
-            "longitude": row['longitude'] if pd.notna(row['longitude']) else None,
+            "latitude": lat,
+            "longitude": lon,
             "source": "homeharvest",
             "raw_data": raw_data
         }

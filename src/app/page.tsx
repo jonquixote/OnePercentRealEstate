@@ -164,8 +164,8 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Map View (Sticky/Fixed) */}
-        <div className={`lg:block ${showMap ? 'block h-[50vh] lg:h-auto lg:w-[45%]' : 'hidden'} relative border-l border-gray-200`}>
+        {/* Map View */}
+        <div className={`${showMap ? 'block h-[50vh] lg:h-[calc(100vh-140px)] lg:w-[45%] lg:sticky lg:top-[140px]' : 'hidden'} relative border-l border-gray-200`}>
           <PropertyMap properties={filteredProperties} />
           {/* Toggle for Desktop */}
           <button

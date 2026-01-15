@@ -1,11 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import Map, { Marker, Popup, Source, Layer, type MapRef } from 'react-map-gl/mapbox';
-import { Pin } from 'lucide-react';
+import Map, { Source, Layer, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-// Interface if not global
 interface Property {
     id: string;
     address: string;
@@ -28,7 +26,8 @@ interface PropertyMapProps {
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
-const clusterLayer = {
+// Cluster layer styles
+const clusterLayer: any = {
     id: 'clusters',
     type: 'circle',
     source: 'properties',
@@ -39,7 +38,7 @@ const clusterLayer = {
     }
 };
 
-const clusterCountLayer = {
+const clusterCountLayer: any = {
     id: 'cluster-count',
     type: 'symbol',
     source: 'properties',
@@ -51,55 +50,66 @@ const clusterCountLayer = {
     }
 };
 
-const unclusteredPointLayer = {
+const unclusteredPointLayer: any = {
     id: 'unclustered-point',
     type: 'circle',
     source: 'properties',
     filter: ['!', ['has', 'point_count']],
     paint: {
-        'circle-color': '#4264fb', // Blue by default
-        'circle-radius': 6,
-        'circle-stroke-width': 1,
+        'circle-color': '#4264fb',
+        'circle-radius': 8,
+        'circle-stroke-width': 2,
         'circle-stroke-color': '#fff'
     }
 };
 
 export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
     const mapRef = React.useRef<MapRef>(null);
-    const [popupInfo, setPopupInfo] = React.useState<Property | null>(null);
 
-    // Filter properties strictly to those with valid lat/lon
+    // Initial viewport - centered on US
+    const [viewState, setViewState] = React.useState({
+        latitude: 39.8283,
+        longitude: -98.5795,
+        zoom: 4
+    });
+
+    // Filter properties with valid coordinates
     const validProperties = React.useMemo(() => {
-        return properties.filter(p => p.raw_data?.lat && p.raw_data?.lon);
+        return properties.filter(p =>
+            p.raw_data?.lat &&
+            p.raw_data?.lon &&
+            !isNaN(p.raw_data.lat) &&
+            !isNaN(p.raw_data.lon)
+        );
     }, [properties]);
 
-    // Convert to GeoJSON for Clustering
-    const points = React.useMemo(() => ({
-        type: 'FeatureCollection',
+    // Convert to GeoJSON
+    const geojsonData = React.useMemo(() => ({
+        type: 'FeatureCollection' as const,
         features: validProperties.map(p => ({
-            type: 'Feature',
+            type: 'Feature' as const,
             properties: {
-                cluster: false,
-                propertyId: p.id,
+                id: p.id,
                 price: p.listing_price,
-                rent: p.estimated_rent
+                rent: p.estimated_rent,
+                address: p.address
             },
             geometry: {
-                type: 'Point',
+                type: 'Point' as const,
                 coordinates: [p.raw_data.lon, p.raw_data.lat]
             }
         }))
     }), [validProperties]);
 
-    const onClick = (event: any) => {
+    // Handle cluster click to zoom in
+    const handleClick = React.useCallback((event: any) => {
         const feature = event.features?.[0];
         if (!feature) return;
 
-        const clusterId = feature.properties.cluster_id;
-        const mapboxSource = mapRef.current?.getSource('properties') as any;
-
-        if (clusterId) {
-            mapboxSource.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
+        const clusterId = feature.properties?.cluster_id;
+        if (clusterId && mapRef.current) {
+            const source = mapRef.current.getSource('properties') as any;
+            source?.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
                 if (err) return;
                 mapRef.current?.easeTo({
                     center: feature.geometry.coordinates,
@@ -108,71 +118,46 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
                 });
             });
         }
-    };
+    }, []);
 
-    // Initial Viewport State - default to US view
-    const [viewState, setViewState] = React.useState({
-        latitude: 39.8283,
-        longitude: -98.5795,
-        zoom: 3
-    });
-
+    // Check for token
     if (!MAPBOX_TOKEN) {
         return (
-            <div className="flex h-full w-full items-center justify-center bg-gray-100 p-4 text-center text-sm text-gray-500">
-                Mapbox Token Missing in .env.local
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 p-4">
+                <div className="text-center">
+                    <p className="text-sm font-medium text-gray-600">Map Unavailable</p>
+                    <p className="text-xs text-gray-400 mt-1">NEXT_PUBLIC_MAPBOX_TOKEN not configured</p>
+                </div>
             </div>
         );
     }
 
     return (
-        <Map
-            {...viewState}
-            onMove={evt => setViewState(evt.viewState)}
-            ref={mapRef}
-            mapStyle="mapbox://styles/mapbox/light-v11"
-            mapboxAccessToken={MAPBOX_TOKEN}
-            interactiveLayerIds={[clusterLayer.id]} // Only clusters are clickable currently via this method
-            onClick={onClick}
-            style={{ width: '100%', height: '100%' }}
-        >
-            <Source
-                id="properties"
-                type="geojson"
-                data={points as any}
-                cluster={true}
-                clusterMaxZoom={14}
-                clusterRadius={50}
+        <div className="absolute inset-0">
+            <Map
+                {...viewState}
+                onMove={evt => setViewState(evt.viewState)}
+                ref={mapRef}
+                mapStyle="mapbox://styles/mapbox/light-v11"
+                mapboxAccessToken={MAPBOX_TOKEN}
+                interactiveLayerIds={['clusters', 'unclustered-point']}
+                onClick={handleClick}
+                style={{ width: '100%', height: '100%' }}
+                reuseMaps
             >
-                {/* Cluster Layers */}
-                <Layer {...clusterLayer as any} />
-                <Layer {...clusterCountLayer as any} />
-
-                {/* Unclustered Points - using custom Markers instead? 
-                    Actually, mixing Layers and Markers is tricky. 
-                    If we use Source/Layer, we get performance. 
-                    Let's use Markers for unclustered points if possible, 
-                    OR just color the dots. 
-                    For now, simple dots are fine, but user wanted "pins". 
-                    
-                    Implementation detail: To use react components as markers for unclustered points, 
-                    we iterate validProperties and return Marker if NOT clustered? 
-                    But supercluster happens inside the Source. 
-                    
-                    Better approach for "Pins":
-                    We can just iterate properties and render Markers if we don't care about clustering 
-                    OR we use the Source/Layer approach for clustering and unclustered points are just circles. 
-                    User asked for grouping when zoomed out.
-                    Using Source/Layer is best for performance. 
-                    I'll stick to circle layers for now.
-                 */}
-                <Layer {...unclusteredPointLayer as any} />
-            </Source>
-
-            {/* Helper to show popup on click of unclustered point? 
-                The onClick handler above handles clusters. 
-                For unclustered points, we need another interactive layer or event.
-            */}
-        </Map>
+                <Source
+                    id="properties"
+                    type="geojson"
+                    data={geojsonData}
+                    cluster={true}
+                    clusterMaxZoom={14}
+                    clusterRadius={50}
+                >
+                    <Layer {...clusterLayer} />
+                    <Layer {...clusterCountLayer} />
+                    <Layer {...unclusteredPointLayer} />
+                </Source>
+            </Map>
+        </div>
     );
 }
