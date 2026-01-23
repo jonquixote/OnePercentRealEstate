@@ -1,238 +1,232 @@
-[
-    {
-        "updatedAt": "2026-01-22T00:37:54.962Z",
-        "createdAt": "2026-01-21T22:50:02.879Z",
-        "id": "jnQIW64CNMmy57HyIaoiQ",
-        "name": "US Real Estate Scraper Orchestrator",
-        "active": true,
-        "nodes": [
-            {
-                "parameters": {
-                    "rule": {
-                        "interval": [
-                            {
-                                "field": "seconds",
-                                "secondsInterval": 30
-                            }
-                        ]
-                    }
-                },
-                "name": "Schedule",
-                "type": "n8n-nodes-base.scheduleTrigger",
-                "typeVersion": 1,
-                "position": [
-                    0,
-                    0
-                ],
-                "id": "847c3b6a-51d0-4909-978a-087c5ed6ae6b"
-            },
-            {
-                "parameters": {
-                    "operation": "executeQuery",
-                    "query": "UPDATE crawl_jobs \nSET status = 'processing', started_at = NOW() \nWHERE id = (\n  SELECT id \n  FROM crawl_jobs \n  WHERE status = 'pending' \n  ORDER BY region_value ASC \n  LIMIT 1 \n  FOR UPDATE SKIP LOCKED\n)\nRETURNING *;",
-                    "additionalFields": {}
-                },
-                "name": "Get Next Job",
-                "type": "n8n-nodes-base.postgres",
-                "typeVersion": 1,
-                "position": [
-                    224,
-                    0
-                ],
-                "id": "56871ec6-b095-4346-815d-2afef8254c93",
-                "credentials": {
-                    "postgres": {
-                        "id": "pR4wUtye9OhGE0WS",
-                        "name": "Postgres account"
-                    }
+{
+    "name": "US Real Estate Scraper Orchestrator",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "seconds",
+                            "secondsInterval": 30
+                        }
+                    ]
                 }
             },
-            {
-                "parameters": {
-                    "conditions": {
-                        "boolean": [
-                            {
-                                "value1": "={{ $json.id }}",
-                                "operation": "notEqual",
-                                "value2": "undefined"
-                            }
-                        ]
-                    }
-                },
-                "name": "Job Found?",
-                "type": "n8n-nodes-base.if",
-                "typeVersion": 1,
-                "position": [
-                    448,
-                    0
-                ],
-                "id": "6cf6bcdb-4df2-4354-8d34-de19718cd626"
+            "name": "Schedule",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                0,
+                0
+            ],
+            "id": "847c3b6a-51d0-4909-978a-087c5ed6ae6b"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE crawl_jobs \nSET status = 'processing', started_at = NOW() \nWHERE id = (\n  SELECT id \n  FROM crawl_jobs \n  WHERE status = 'pending' \n  ORDER BY region_value ASC \n  LIMIT 1 \n  FOR UPDATE SKIP LOCKED\n)\nRETURNING *;",
+                "additionalFields": {}
             },
-            {
-                "parameters": {
-                    "requestMethod": "POST",
-                    "url": "http://scraper:8000/scrape",
-                    "jsonParameters": true,
-                    "options": {},
-                    "bodyParametersJson": "={{ JSON.stringify({\n  \"location\": $json.region_value,\n  \"listing_type\": \"for_sale\",\n  \"past_days\": 30\n}) }}"
-                },
-                "name": "Scraper Service",
-                "type": "n8n-nodes-base.httpRequest",
-                "typeVersion": 1,
-                "position": [
-                    672,
-                    0
-                ],
-                "id": "4b8d9173-8acc-46f5-a2cd-efd698e16855"
-            },
-            {
-                "parameters": {
-                    "fieldToSplitOut": "results",
-                    "options": {}
-                },
-                "name": "Split Batches",
-                "type": "n8n-nodes-base.itemLists",
-                "typeVersion": 1,
-                "position": [
-                    896,
-                    0
-                ],
-                "id": "8dd7edb2-0b84-48a3-934f-64d34bf00708"
-            },
-            {
-                "parameters": {
-                    "operation": "executeQuery",
-                    "query": "={{ \"INSERT INTO listings (address, price, bedrooms, bathrooms, sqft, latitude, longitude, listing_type, listing_status, raw_data, zip_code, city, state, url, property_url, listing_date) VALUES ('\" + ($json.address || $json.formatted_address || 'Unknown').replace(/'/g, \"''\") + \"', \" + ($json.list_price !== undefined && $json.list_price !== null ? $json.list_price : 'NULL') + \", \" + ($json.beds !== undefined && $json.beds !== null ? $json.beds : 'NULL') + \", \" + ($json.full_baths !== undefined && $json.full_baths !== null ? $json.full_baths : 'NULL') + \", \" + ($json.sqft !== undefined && $json.sqft !== null ? $json.sqft : 'NULL') + \", \" + ($json.latitude !== undefined && $json.latitude !== null ? $json.latitude : 'NULL') + \", \" + ($json.longitude !== undefined && $json.longitude !== null ? $json.longitude : 'NULL') + \", 'for_sale', 'FOR_SALE', '\" + JSON.stringify($json).replace(/'/g, \"''\") + \"'::jsonb, '\" + ($json.zip_code || '') + \"', '\" + ($json.city || '').replace(/'/g, \"''\") + \"', '\" + ($json.state || '') + \"', '\" + ($json.property_url || '') + \"', '\" + ($json.property_url || '') + \"', NOW()) ON CONFLICT (address, listing_type, listing_date) DO UPDATE SET price = EXCLUDED.price, bedrooms = EXCLUDED.bedrooms, bathrooms = EXCLUDED.bathrooms, sqft = EXCLUDED.sqft, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, raw_data = EXCLUDED.raw_data, updated_at = NOW();\" }}",
-                    "additionalFields": {}
-                },
-                "name": "Save Listing",
-                "type": "n8n-nodes-base.postgres",
-                "typeVersion": 1,
-                "position": [
-                    1120,
-                    0
-                ],
-                "id": "2081e831-f950-44b3-aa38-5e65c5afdf66",
-                "credentials": {
-                    "postgres": {
-                        "id": "pR4wUtye9OhGE0WS",
-                        "name": "Postgres account"
-                    }
+            "name": "Get Next Job",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                224,
+                0
+            ],
+            "id": "56871ec6-b095-4346-815d-2afef8254c93",
+            "credentials": {
+                "postgres": {
+                    "id": "pR4wUtye9OhGE0WS",
+                    "name": "Postgres account"
                 }
-            },
-            {
-                "parameters": {
-                    "operation": "executeQuery",
-                    "query": "={{ \"UPDATE crawl_jobs SET status = 'completed', completed_at = NOW(), items_found = \" + $items(\"Scraper Service\")[0].json.count + \", items_inserted = \" + $items(\"Scraper Service\")[0].json.count + \" WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
-                    "additionalFields": {}
-                },
-                "name": "Mark Complete",
-                "type": "n8n-nodes-base.postgres",
-                "typeVersion": 1,
-                "position": [
-                    1344,
-                    0
-                ],
-                "id": "08084984-d871-43ca-8fff-2bc9a2383b0a",
-                "credentials": {
-                    "postgres": {
-                        "id": "pR4wUtye9OhGE0WS",
-                        "name": "Postgres account"
-                    }
-                }
-            },
-            {
-                "parameters": {
-                    "operation": "executeQuery",
-                    "query": "={{ \"UPDATE crawl_jobs SET status = 'failed', error_message = '\" + $node[\"Scraper Service\"].error.message + \"' WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
-                    "additionalFields": {}
-                },
-                "name": "Mark Failed",
-                "type": "n8n-nodes-base.postgres",
-                "typeVersion": 1,
-                "position": [
-                    0,
-                    224
-                ],
-                "id": "6129a49d-9eb9-4404-a5b4-2babaeff12b4",
-                "credentials": {
-                    "postgres": {
-                        "id": "pR4wUtye9OhGE0WS",
-                        "name": "Postgres account"
-                    }
-                }
-            }
-        ],
-        "connections": {
-            "Schedule": {
-                "main": [
-                    [
-                        {
-                            "node": "Get Next Job",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Get Next Job": {
-                "main": [
-                    [
-                        {
-                            "node": "Job Found?",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Job Found?": {
-                "main": [
-                    [
-                        {
-                            "node": "Scraper Service",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Scraper Service": {
-                "main": [
-                    [
-                        {
-                            "node": "Split Batches",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Split Batches": {
-                "main": [
-                    [
-                        {
-                            "node": "Save Listing",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Save Listing": {
-                "main": [
-                    [
-                        {
-                            "node": "Mark Complete",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
             }
         },
-        "settings": {
-            "executionOrder": "v1"
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.id }}",
+                            "operation": "notEqual",
+                            "value2": "undefined"
+                        }
+                    ]
+                }
+            },
+            "name": "Job Found?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                448,
+                0
+            ],
+            "id": "6cf6bcdb-4df2-4354-8d34-de19718cd626"
+        },
+        {
+            "parameters": {
+                "requestMethod": "POST",
+                "url": "http://scraper:8000/scrape",
+                "jsonParameters": true,
+                "options": {},
+                "bodyParametersJson": "={{ JSON.stringify({\n  \"location\": $json.region_value,\n  \"listing_type\": \"for_sale\",\n  \"past_days\": 30\n}) }}"
+            },
+            "name": "Scraper Service",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                672,
+                0
+            ],
+            "id": "4b8d9173-8acc-46f5-a2cd-efd698e16855"
+        },
+        {
+            "parameters": {
+                "fieldToSplitOut": "results",
+                "options": {}
+            },
+            "name": "Split Batches",
+            "type": "n8n-nodes-base.itemLists",
+            "typeVersion": 1,
+            "position": [
+                896,
+                0
+            ],
+            "id": "8dd7edb2-0b84-48a3-934f-64d34bf00708"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"INSERT INTO listings (address, price, bedrooms, bathrooms, sqft, latitude, longitude, listing_type, listing_status, raw_data, zip_code, city, state, url, property_url, listing_date) VALUES ('\" + ($json.address || $json.formatted_address || 'Unknown').replace(/'/g, \"''\") + \"', \" + ($json.list_price !== undefined && $json.list_price !== null ? $json.list_price : 'NULL') + \", \" + ($json.beds !== undefined && $json.beds !== null ? $json.beds : 'NULL') + \", \" + ($json.full_baths !== undefined && $json.full_baths !== null ? $json.full_baths : 'NULL') + \", \" + ($json.sqft !== undefined && $json.sqft !== null ? $json.sqft : 'NULL') + \", \" + ($json.latitude !== undefined && $json.latitude !== null ? $json.latitude : 'NULL') + \", \" + ($json.longitude !== undefined && $json.longitude !== null ? $json.longitude : 'NULL') + \", 'for_sale', 'FOR_SALE', '\" + JSON.stringify($json).replace(/'/g, \"''\") + \"'::jsonb, '\" + ($json.zip_code || '') + \"', '\" + ($json.city || '').replace(/'/g, \"''\") + \"', '\" + ($json.state || '') + \"', '\" + ($json.property_url || '') + \"', '\" + ($json.property_url || '') + \"', NOW()) ON CONFLICT (address, listing_type, listing_date) DO UPDATE SET price = EXCLUDED.price, bedrooms = EXCLUDED.bedrooms, bathrooms = EXCLUDED.bathrooms, sqft = EXCLUDED.sqft, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, raw_data = EXCLUDED.raw_data, updated_at = NOW();\" }}",
+                "additionalFields": {}
+            },
+            "name": "Save Listing",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                1120,
+                0
+            ],
+            "id": "2081e831-f950-44b3-aa38-5e65c5afdf66",
+            "credentials": {
+                "postgres": {
+                    "id": "pR4wUtye9OhGE0WS",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"UPDATE crawl_jobs SET status = 'completed', completed_at = NOW(), items_found = \" + $items(\"Scraper Service\")[0].json.count + \", items_inserted = \" + $items(\"Scraper Service\")[0].json.count + \" WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
+                "additionalFields": {}
+            },
+            "name": "Mark Complete",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                1344,
+                0
+            ],
+            "id": "08084984-d871-43ca-8fff-2bc9a2383b0a",
+            "credentials": {
+                "postgres": {
+                    "id": "pR4wUtye9OhGE0WS",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"UPDATE crawl_jobs SET status = 'failed', error_message = '\" + $node[\"Scraper Service\"].error.message + \"' WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
+                "additionalFields": {}
+            },
+            "name": "Mark Failed",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                0,
+                224
+            ],
+            "id": "6129a49d-9eb9-4404-a5b4-2babaeff12b4",
+            "credentials": {
+                "postgres": {
+                    "id": "pR4wUtye9OhGE0WS",
+                    "name": "Postgres account"
+                }
+            }
         }
+    ],
+    "connections": {
+        "Schedule": {
+            "main": [
+                [
+                    {
+                        "node": "Get Next Job",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Next Job": {
+            "main": [
+                [
+                    {
+                        "node": "Job Found?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Job Found?": {
+            "main": [
+                [
+                    {
+                        "node": "Scraper Service",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Scraper Service": {
+            "main": [
+                [
+                    {
+                        "node": "Split Batches",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split Batches": {
+            "main": [
+                [
+                    {
+                        "node": "Save Listing",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Listing": {
+            "main": [
+                [
+                    {
+                        "node": "Mark Complete",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
     }
-]
+}
