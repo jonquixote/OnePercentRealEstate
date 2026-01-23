@@ -78,7 +78,29 @@
                 672,
                 0
             ],
-            "id": "4b8d9173-8acc-46f5-a2cd-efd698e16855"
+            "id": "4b8d9173-8acc-46f5-a2cd-efd698e16855",
+            "continueOnFail": true
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.results && $json.results.length > 0 }}",
+                            "operation": "equal",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "name": "Has Results?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                900,
+                0
+            ],
+            "id": "check-results-node"
         },
         {
             "parameters": {
@@ -89,8 +111,8 @@
             "type": "n8n-nodes-base.itemLists",
             "typeVersion": 1,
             "position": [
-                896,
-                0
+                1150,
+                -100
             ],
             "id": "8dd7edb2-0b84-48a3-934f-64d34bf00708"
         },
@@ -104,8 +126,8 @@
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 1,
             "position": [
-                1120,
-                0
+                1350,
+                -100
             ],
             "id": "2081e831-f950-44b3-aa38-5e65c5afdf66",
             "credentials": {
@@ -118,14 +140,14 @@
         {
             "parameters": {
                 "operation": "executeQuery",
-                "query": "={{ \"UPDATE crawl_jobs SET status = 'completed', completed_at = NOW(), items_found = \" + $items(\"Scraper Service\")[0].json.count + \", items_inserted = \" + $items(\"Scraper Service\")[0].json.count + \" WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
+                "query": "={{ \"UPDATE crawl_jobs SET status = 'completed', completed_at = NOW(), items_found = \" + ($items(\"Scraper Service\")[0].json.results ? $items(\"Scraper Service\")[0].json.results.length : 0) + \" WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
                 "additionalFields": {}
             },
             "name": "Mark Complete",
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 1,
             "position": [
-                1344,
+                1600,
                 0
             ],
             "id": "08084984-d871-43ca-8fff-2bc9a2383b0a",
@@ -139,15 +161,15 @@
         {
             "parameters": {
                 "operation": "executeQuery",
-                "query": "={{ \"UPDATE crawl_jobs SET status = 'failed', error_message = '\" + $node[\"Scraper Service\"].error.message + \"' WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
+                "query": "={{ \"UPDATE crawl_jobs SET status = 'failed', error_message = '\" + ($node[\"Scraper Service\"].error ? $node[\"Scraper Service\"].error.message : \"Unknown Error\") + \"' WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
                 "additionalFields": {}
             },
             "name": "Mark Failed",
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 1,
             "position": [
-                0,
-                224
+                900,
+                250
             ],
             "id": "6129a49d-9eb9-4404-a5b4-2babaeff12b4",
             "credentials": {
@@ -196,7 +218,25 @@
             "main": [
                 [
                     {
+                        "node": "Has Results?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Has Results?": {
+            "main": [
+                [
+                    {
                         "node": "Split Batches",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Mark Complete",
                         "type": "main",
                         "index": 0
                     }
