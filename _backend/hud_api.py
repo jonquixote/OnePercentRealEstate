@@ -266,7 +266,7 @@ def run_hud_sync():
                 upsert_safmr_data(api_data)
                 _fips_processed.add(fips)
                 
-            time.sleep(0.5) # Be nice to HUD API
+            time.sleep(2.0) # Increased delay to avoid 429 Rate Limit errors
 
         except Exception as e:
             print(f"Error processing {county_name}, {state}: {e}")
