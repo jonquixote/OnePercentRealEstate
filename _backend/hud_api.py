@@ -34,23 +34,7 @@ _state_cache = None
 _county_cache = {} # Key: State Code (OH), Value: List of counties
 _fips_processed = set() 
 
-# Static Map for MVP Markets
-CITY_COUNTY_MAP = {
-    "Cleveland, OH": "Cuyahoga",
-    "Indianapolis, IN": "Marion",
-    "El Paso, TX": "El Paso",
-    "Columbia, SC": "Richland",
-    "Tuscaloosa, AL": "Tuscaloosa",
-    "Toledo, OH": "Lucas",
-    "Huntsville, AL": "Madison",
-    "Tampa, FL": "Hillsborough",
-    "Kansas City, MO": "Jackson",
-    "Ocala, FL": "Marion",
-    "Memphis, TN": "Shelby",
-    "Birmingham, AL": "Jefferson",
-    "Charlotte, NC": "Mecklenburg",
-    "Columbus, OH": "Franklin"
-}
+# Static Map removed - using dynamic county from raw_data
 
 def get_db_connection():
     try:
@@ -61,7 +45,7 @@ def get_db_connection():
         return None
 
 def get_properties_info():
-    """Fetches unique zip, city, state from listings to identify markets."""
+    """Fetches unique zip, city, state, AND county from listings."""
     conn = get_db_connection()
     if not conn:
         return []
@@ -69,31 +53,34 @@ def get_properties_info():
     try:
         cur = conn.cursor()
         print("Fetching unique markets from database...")
-        # Optimize: Let Postgres extract unique locations instead of fetching all 370k+ rows
+        # Optimize: Let Postgres extract unique locations including COUNTY
         cur.execute("""
             SELECT DISTINCT 
                 raw_data->>'zip_code', 
                 raw_data->>'city', 
-                raw_data->>'state'
+                raw_data->>'state',
+                raw_data->>'county'
             FROM listings
             WHERE raw_data->>'zip_code' IS NOT NULL
+              AND raw_data->>'county' IS NOT NULL
         """)
         rows = cur.fetchall()
         
         props = []
         for row in rows:
-            zip_code, city, state = row
-            if zip_code:
+            zip_code, city, state, county = row
+            if zip_code and county:
                 # Clean zip code (handle 12345-6789 or 12345.0)
                 z = str(zip_code).split('-')[0].split('.')[0].strip()
                 if len(z) == 5:
                     props.append({
                         "zip": z,
                         "city": city,
-                        "state": state
+                        "state": state,
+                        "county": county
                     })
         
-        print(f"Identified {len(props)} unique markets (zip codes).")
+        print(f"Identified {len(props)} unique markets (zip+county).")
         cur.close()
         return props
     except Exception as e:
@@ -241,55 +228,48 @@ def upsert_safmr_data(api_response):
     print(f"Upserted {count} benchmarks from FIPS query.")
 
 def run_hud_sync():
-    print("Starting Live HUD Sync (Static Map)...")
+    print("Starting Live HUD Sync (Dynamic Coverage)...")
     
     # 1. Get Property Info
     props = get_properties_info()
-    print(f"Found {len(props)} properties to check.")
+    if not props:
+        print("No properties found to sync.")
+        return
+
+    # 2. Identify unique counties to fetch
+    # structure: (state, county_name)
+    target_counties = set()
     
-    unique_zips = set()
-    
-    # 2. Iterate
     for p in props:
-        zip_code = p['zip']
-        city = p['city']
-        state = p['state']
-        
-        if not city or not state:
-            continue
-            
-        key = f"{city}, {state}" 
-        county_name = None
-        
-        if key in CITY_COUNTY_MAP:
-            county_name = CITY_COUNTY_MAP[key]
-        else:
-             for k, v in CITY_COUNTY_MAP.items():
-                 if k.lower() == key.lower():
-                     county_name = v
-                     break
-        
-        if not county_name:
-             continue
-
-        unique_zips.add(zip_code)
-        
+        state = p.get('state')
+        county = p.get('county')
+        if state and county:
+            target_counties.add((state, county))
+    
+    print(f"Found {len(target_counties)} unique counties covering {len(props)} zip codes.")
+    
+    # 3. Fetch data for each county
+    for state, county_name in target_counties:
         try:
+            # Get FIPS
             fips = get_county_fips(state, county_name)
-            if fips:
-                if fips in _fips_processed:
-                    continue 
-
-                api_data = fetch_county_safmr(fips)
-                if api_data:
-                    upsert_safmr_data(api_data)
-                    _fips_processed.add(fips)
-                    time.sleep(0.5)
-            else:
+            if not fips:
                 print(f"FIPS not found for {county_name}, {state}")
+                continue
                 
+            if fips in _fips_processed:
+                continue 
+
+            # Fetch SAFMR
+            api_data = fetch_county_safmr(fips)
+            if api_data:
+                upsert_safmr_data(api_data)
+                _fips_processed.add(fips)
+                
+            time.sleep(0.5) # Be nice to HUD API
+
         except Exception as e:
-            print(f"Error processing {city}, {state}: {e}")
+            print(f"Error processing {county_name}, {state}: {e}")
 
     print("Live Sync Complete.")
 
