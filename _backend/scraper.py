@@ -259,10 +259,10 @@ def run_scraper(args):
     try:
         tasks = []
         if args.listing_type == 'for_sale':
-            tasks.append({'type': 'for_sale', 'table': 'properties'})
+            tasks.append({'type': 'for_sale', 'table': 'listings'})
             tasks.append({'type': 'for_rent', 'table': 'rental_listings'})
         else:
-            table = 'rental_listings' if args.listing_type == 'for_rent' else 'properties'
+            table = 'rental_listings' if args.listing_type == 'for_rent' else 'listings'
             tasks.append({'type': args.listing_type, 'table': table})
 
         total_found = 0

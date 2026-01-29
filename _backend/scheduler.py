@@ -4,100 +4,138 @@ import sys
 import subprocess
 import json
 from datetime import datetime, timedelta
-from supabase import create_client, Client
+import psycopg2
 from dotenv import load_dotenv
 
-# Load env from parent directory
 # Load env from parent directory
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../.env.local')
 load_dotenv(dotenv_path=env_path)
 
-SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    # Fallback
+    DB_USER = os.getenv("DB_USER", "postgres")
+    DB_PASS = os.getenv("DB_PASS", "root_password_change_me_please")
+    DB_HOST = os.getenv("DB_HOST", "infrastructure-postgres-1")
+    DB_PORT = os.getenv("DB_PORT", "5432")
+    DB_NAME = os.getenv("DB_NAME", "postgres")
+    DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("Error: Missing Supabase credentials")
-    exit(1)
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+def get_db_connection():
+    try:
+        return psycopg2.connect(DATABASE_URL)
+    except Exception as e:
+        print(f"DB Connect Error: {e}")
+        return None
 
 def get_due_targets():
     """
     Fetches targets that are active and due for scraping.
     """
-    try:
-        # We want targets where last_scraped is older than frequency_hours OR last_scraped is null.
-        # Supabase-py filtering is a bit limited for complex OR logic in one query sometimes.
-        # We'll fetch active targets and filter in python for now to keep it simple, 
-        # or use a raw query if we had a stored procedure.
-        # Let's fetch all active targets and filter client-side for simplicity.
+    conn = get_db_connection()
+    if not conn:
+        return []
         
-        response = supabase.table("market_targets").select("*").eq("is_active", True).order("priority").execute()
-        targets = response.data
+    try:
+        cursor = conn.cursor()
+        # Fetch active targets
+        cursor.execute("""
+            SELECT id, location, listing_type, frequency_hours, last_scraped 
+            FROM market_targets 
+            WHERE is_active = TRUE 
+            ORDER BY priority DESC, id ASC
+        """)
+        rows = cursor.fetchall()
+        
         due = []
         now = datetime.utcnow()
         
-        for t in targets:
-            last_scraped_str = t.get('last_scraped')
-            freq = t.get('frequency_hours', 24)
+        for r in rows:
+            tid, location, l_type, freq, last_scraped = r
             
-            if not last_scraped_str:
-                due.append(t)
+            # Map None frequency to default 24
+            if freq is None: freq = 24
+            
+            if not last_scraped:
+                due.append({'id': tid, 'location': location, 'listing_type': l_type})
                 continue
                 
-            # Parse ISO timestamp
-            # Supabase returns ISO strings usually ending in +00:00 or Z
-            try:
-                last_scraped = datetime.fromisoformat(last_scraped_str.replace('Z', '+00:00'))
-                # make now timezone aware if last_scraped is
+            # Check time
+            # last_scraped from PG is usually datetime object
+            if isinstance(last_scraped, datetime):
+                # Ensure UTC
                 if last_scraped.tzinfo:
-                    diff = now.astimezone(last_scraped.tzinfo) - last_scraped
+                    diff = now.replace(tzinfo=None) - last_scraped.replace(tzinfo=None) # Simple compare
                 else:
                     diff = now - last_scraped
-                
+                    
                 if diff > timedelta(hours=freq):
-                    due.append(t)
-            except Exception as e:
-                print(f"Error parsing date for {t['location']}: {e}")
-                due.append(t) # Retry if date error
-                
+                    due.append({'id': tid, 'location': location, 'listing_type': l_type})
+            else:
+                 # fallback if string? probably not with psycopg2
+                 due.append({'id': tid, 'location': location, 'listing_type': l_type})
+
         return due
+        
     except Exception as e:
         print(f"Error fetching targets: {e}")
         return []
+    finally:
+        conn.close()
 
 def run_scraper_for_target(target):
     location = target['location']
-    l_type = target.get('listing_type', 'for_sale')
+    l_type = target.get('listing_type', 'for_sale') or 'for_sale'
     
     print(f"Starting job: {location} ({l_type})...")
     
     # Run scraper as subprocess
+    # Use the same python executable
     cmd = [
         sys.executable, 
-        "scraper.py", 
+        "_backend/scraper.py", # Path relative to root if run from root, or absolute
         "--location", location, 
         "--listing_type", l_type,
-        "--limit", "100" # Broad scrape
+        "--limit", "100" 
     ]
     
+    # Adjust path if running from inside _backend
+    if os.getcwd().endswith("_backend"):
+        cmd[1] = "scraper.py"
+
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        # Parse output to verify success? Scraper prints JSON at end.
-        print(result.stderr) # Prints progress
+        result = subprocess.run(cmd, capture_output=True, text=True)
         
+        # Check output for errors
+        if result.returncode != 0:
+            print(f"Scraper failed for {location}: {result.stderr}")
+            return
+
+        print(f"Scraper finished for {location}.")
+        # print(result.stderr) # Optional debug
+
         # Update last_scraped
-        supabase.table("market_targets").update({
-            "last_scraped": datetime.utcnow().isoformat()
-        }).eq("id", target['id']).execute()
+        conn = get_db_connection()
+        if conn:
+            try:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE market_targets 
+                    SET last_scraped = NOW() 
+                    WHERE id = %s
+                """, (target['id'],))
+                conn.commit()
+                print(f"Updated timestamp for {location}")
+            except Exception as e:
+                print(f"Failed to update timestamp: {e}")
+            finally:
+                conn.close()
         
-        print(f"Completed job: {location}")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"Job failed for {location}: {e.stderr}")
+    except Exception as e:
+        print(f"Job execution failed for {location}: {e}")
 
 def main():
-    print("Scheduler Service Started.")
+    print("Scheduler Service Started (PostgreSQL native).")
     while True:
         targets = get_due_targets()
         
@@ -110,6 +148,8 @@ def main():
         
         for target in targets:
             run_scraper_for_target(target)
+            # Sleep briefly between targets to be nice
+            time.sleep(5)
             
         print("All due jobs completed. Sleeping for 1 hour...")
         time.sleep(3600)
