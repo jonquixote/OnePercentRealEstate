@@ -177,7 +177,15 @@ def upsert_safmr_data(api_response):
     
     if not results:
         print("Warning: No 'basicdata' found in API response.")
-    
+        return # Exit early if empty
+
+    # Normalize to list if necessary
+    if isinstance(results, dict):
+        results = [results]
+    elif not isinstance(results, list):
+        print(f"Warning: 'results' is {type(results)}, expected list or dict. Content: {results}")
+        return
+
     conn = get_db_connection()
     if not conn:
         print("Skipping upsert due to DB connection failure")
@@ -188,6 +196,10 @@ def upsert_safmr_data(api_response):
         cur = conn.cursor()
         
         for item in results:
+            if not isinstance(item, dict):
+                 # print(f"Skipping invalid item: {item} (type: {type(item)})")
+                 continue
+
             zip_code = item.get('zip_code')
             if not zip_code: continue
             
