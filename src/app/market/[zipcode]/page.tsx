@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import pool from '@/lib/db';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, Building, Wallet, MapPin } from 'lucide-react';
@@ -9,29 +9,25 @@ export const dynamic = 'force-static';
 // Revalidate every 24 hours
 export const revalidate = 86400;
 
-function getSupabase() {
-    return createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-}
-
 // 1. Generate Static Params: Build pages for all known zips at build time
 export async function generateStaticParams() {
-    const supabase = getSupabase();
-    const { data: properties } = await supabase.from('properties').select('address');
+    try {
+        const client = await pool.connect();
+        const result = await client.query(`
+            SELECT DISTINCT raw_data->>'zip_code' as zip_code 
+            FROM listings 
+            WHERE raw_data->>'zip_code' IS NOT NULL
+            LIMIT 500
+        `);
+        client.release();
 
-    const zips = new Set<string>();
-    if (properties) {
-        properties.forEach(p => {
-            const match = p.address.match(/\b\d{5}\b/);
-            if (match) zips.add(match[0]);
-        });
+        return result.rows
+            .filter(row => row.zip_code && /^\d{5}$/.test(row.zip_code))
+            .map(row => ({ zipcode: row.zip_code }));
+    } catch (error) {
+        console.error('Failed to generate static params:', error);
+        return [];
     }
-
-    return Array.from(zips).map((zipcode) => ({
-        zipcode: zipcode,
-    }));
 }
 
 // 2. Generate Metadata for SEO
@@ -46,32 +42,54 @@ export async function generateMetadata({ params }: { params: Promise<{ zipcode: 
 // 3. Page Component
 export default async function MarketPage({ params }: { params: Promise<{ zipcode: string }> }) {
     const { zipcode } = await params;
-    const supabase = getSupabase();
 
-    // Fetch properties in this zip
-    // Note: Since address is unstructured, we use ILIKE. In a real app, storing zip_code column is better.
-    const { data: properties } = await supabase
-        .from('properties')
-        .select('*')
-        .ilike('address', `%${zipcode}%`)
-        .order('created_at', { ascending: false });
+    let properties: any[] = [];
+    let benchmarks: any = null;
 
-    // Fetch market benchmarks if available
-    const { data: benchmarks } = await supabase
-        .from('market_benchmarks')
-        .select('*')
-        .eq('zip_code', zipcode)
-        .single();
+    try {
+        const client = await pool.connect();
+
+        // Fetch properties in this zip
+        const propResult = await client.query(`
+            SELECT 
+                id,
+                address,
+                COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
+                COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
+                raw_data,
+                created_at
+            FROM listings 
+            WHERE raw_data->>'zip_code' = $1
+            ORDER BY created_at DESC
+            LIMIT 100
+        `, [zipcode]);
+        properties = propResult.rows;
+
+        // Fetch market benchmarks if available
+        const benchResult = await client.query(`
+            SELECT safmr_data FROM market_benchmarks WHERE zip_code = $1
+        `, [zipcode]);
+        benchmarks = benchResult.rows[0] || null;
+
+        client.release();
+    } catch (error) {
+        console.error('Database error:', error);
+    }
 
     const activeProperties = properties || [];
     const count = activeProperties.length;
 
     // Calculate Averages
     const avgPrice = count > 0
-        ? activeProperties.reduce((acc, p) => acc + (p.listing_price || 0), 0) / count
+        ? activeProperties.reduce((acc, p) => acc + (Number(p.listing_price) || 0), 0) / count
         : 0;
 
-    const avgRent = benchmarks?.safmr_data?.['2br'] || (avgPrice * 0.008); // Fallback
+    // Use SAFMR data if available, otherwise check if we have enough estimated_rent data
+    const validRents = activeProperties.filter(p => p.estimated_rent && Number(p.estimated_rent) > 0);
+    const rentCount = validRents.length;
+
+    const avgRent = benchmarks?.safmr_data?.['2br'] ||
+        (rentCount > 0 ? validRents.reduce((acc, p) => acc + (Number(p.estimated_rent) || 0), 0) / rentCount : 0);
 
     if (count === 0 && !benchmarks) {
         return notFound();
@@ -85,7 +103,7 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
                     </Link>
                     <h1 className="text-4xl font-bold mb-4">Market Analysis: <span className="text-emerald-400">{zipcode}</span></h1>
-                    <p className="text-xl text-gray-300">Real estate investment usage data and active opportunities.</p>
+                    <p className="text-xl text-gray-300">Real estate investment data and active opportunities.</p>
                 </div>
             </div>
 
@@ -114,7 +132,10 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-500">Average 2BR Rent</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(avgRent)}
+                                    {avgRent > 0
+                                        ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(avgRent)
+                                        : <span className="text-gray-400 text-lg italic">Calculating...</span>
+                                    }
                                 </p>
                                 <span className="text-xs text-gray-400">HUD FMR / Est.</span>
                             </div>
@@ -129,7 +150,7 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-500">Est. Gross Yield</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {avgPrice > 0 ? ((avgRent * 12 / avgPrice) * 100).toFixed(2) : '0'}%
+                                    {avgPrice > 0 && avgRent > 0 ? ((avgRent * 12 / avgPrice) * 100).toFixed(2) + '%' : '-'}
                                 </p>
                             </div>
                         </div>
@@ -151,8 +172,8 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                 ) : (
                     <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
                         <p className="text-gray-500">No active properties found in this market currently.</p>
-                        <Link href="/search" className="mt-4 inline-block text-emerald-600 font-medium hover:underline">
-                            Run a search for {zipcode}
+                        <Link href="/" className="mt-4 inline-block text-emerald-600 font-medium hover:underline">
+                            Back to Dashboard
                         </Link>
                     </div>
                 )}

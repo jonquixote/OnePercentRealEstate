@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useRef, use } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Loader2, ArrowLeft, Download, MapPin, Bed, Bath, Square, Calendar, Home, DollarSign, TrendingUp, Coffee, Utensils, School, TreePine, Dumbbell, ShoppingBag, Bus, Stethoscope, Store } from 'lucide-react';
+import { useRef, use, useState, useEffect } from 'react';
+import { getProperty, getHudBenchmark } from '@/app/actions';
+import { Loader2, ArrowLeft, Download, MapPin, Bed, Bath, Square, Calendar, Home, DollarSign, TrendingUp, Coffee, Utensils, School, TreePine, Dumbbell, ShoppingBag, Bus, Stethoscope, Store, Info } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { PropertyReport } from '@/components/PropertyReport';
@@ -28,30 +28,20 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
 
     useEffect(() => {
         async function fetchProperty() {
-            const { data: propData, error: propError } = await supabase
-                .from('properties')
-                .select('*')
-                .eq('id', id)
-                .single();
+            try {
+                const data = await getProperty(id);
+                if (data) {
+                    setProperty(data);
 
-            if (propError) {
-                console.error('Error fetching property:', propError);
-            } else {
-                setProperty(propData);
-
-                // Fetch Benchmark if Zip Code exists
-                if (propData && propData.raw_data && propData.raw_data.zip_code) {
-                    const zip = propData.raw_data.zip_code.toString();
-                    const { data: benchData, error: benchError } = await supabase
-                        .from('market_benchmarks')
-                        .select('*')
-                        .eq('zip_code', zip)
-                        .maybeSingle();
-
-                    if (!benchError && benchData) {
-                        setBenchmark(benchData);
+                    if (data.raw_data && data.raw_data.zip_code) {
+                        const hudData = await getHudBenchmark(data.raw_data.zip_code);
+                        if (hudData) {
+                            setBenchmark({ safmr_data: hudData });
+                        }
                     }
                 }
+            } catch (error) {
+                console.error("Failed to fetch property", error);
             }
             setLoading(false);
         }
@@ -108,7 +98,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
         );
     }
 
-    const { address, listing_price, estimated_rent, financial_snapshot, status, images, raw_data } = property;
+    const { address = '', listing_price = 0, estimated_rent = 0, financial_snapshot = {}, status = 'watch', images = [], raw_data = {} } = property || {};
 
     // Formatters
     const formatCurrency = (val: number) =>
@@ -117,7 +107,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
     const formatNumber = (val: number) => new Intl.NumberFormat('en-US').format(val);
 
     // Basic Calcs
-    const ratio = (estimated_rent / listing_price);
+    const ratio = (listing_price > 0) ? (estimated_rent / listing_price) : 0;
     const isGoodDeal = ratio >= 0.01;
     const estCashflow = (estimated_rent * 0.70) - ((listing_price * 0.8 * 0.065 / 12) + (listing_price * 0.012 / 12) + 100); // Rough calc for overview
 
@@ -184,9 +174,14 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                                             <TrendingUp className="h-4 w-4" />
                                             <span className="text-sm font-medium">Rent Potential</span>
                                         </div>
-                                        <p className="text-3xl font-bold text-blue-600">{formatCurrency(estimated_rent)}</p>
+                                        <p className={`text-3xl font-bold ${estimated_rent > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                                            {estimated_rent > 0 ? formatCurrency(estimated_rent) : 'Pending...'}
+                                        </p>
                                         <p className="text-sm text-gray-500 mt-1">
-                                            HUD Baseline: {formatCurrency(estimated_rent * 0.9)}
+                                            {estimated_rent > 0
+                                                ? `Based on market analysis`
+                                                : 'Awaiting smart estimate generation'
+                                            }
                                         </p>
                                     </CardContent>
                                 </Card>
@@ -196,12 +191,25 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                                             <DollarSign className="h-4 w-4" />
                                             <span className="text-sm font-medium">Est. Cashflow</span>
                                         </div>
-                                        <p className={`text-3xl font-bold ${estCashflow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                            {estCashflow > 0 ? '+' : ''}{formatCurrency(estCashflow)}<span className="text-lg text-gray-400 font-normal">/mo</span>
-                                        </p>
-                                        <p className="text-sm text-gray-500 mt-1">
-                                            Based on 20% down
-                                        </p>
+                                        {estimated_rent > 0 ? (
+                                            <>
+                                                <p className={`text-3xl font-bold ${estCashflow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                    {estCashflow > 0 ? '+' : ''}{formatCurrency(estCashflow)}<span className="text-lg text-gray-400 font-normal">/mo</span>
+                                                </p>
+                                                <p className="text-sm text-gray-500 mt-1">
+                                                    Based on 20% down
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-3xl font-bold text-gray-300">
+                                                    --
+                                                </p>
+                                                <p className="text-sm text-gray-500 mt-1">
+                                                    Requires rent estimate
+                                                </p>
+                                            </>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </div>
@@ -445,31 +453,41 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                                         <CardTitle>Rent vs. HUD Fair Market Rent</CardTitle>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="h-[300px] w-full min-h-[300px] min-w-0">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    data={[
-                                                        {
-                                                            name: 'Rent Comparison',
-                                                            'Estimated Rent': property.estimated_rent,
-                                                            'HUD FMR': benchmark?.safmr_data?.[`${property.financial_snapshot?.bedrooms || 3}br`] || 0
-                                                        }
-                                                    ]}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                                                >
-                                                    <CartesianGrid strokeDasharray="3 3" />
-                                                    <XAxis dataKey="name" />
-                                                    <YAxis />
-                                                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                                                    <Legend />
-                                                    <Bar dataKey="Estimated Rent" fill="#8884d8" name="Est. Rent" />
-                                                    <Bar dataKey="HUD FMR" fill="#82ca9d" name={`HUD FMR (${property.financial_snapshot?.bedrooms || 3}BR)`} />
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-4">
-                                            Comparison of this property's estimated rent against the HUD Small Area Fair Market Rent (SAFMR) for {property.raw_data?.zip_code}.
-                                        </p>
+                                        {benchmark?.safmr_data ? (
+                                            <>
+                                                <div className="h-[300px] w-full min-h-[300px] min-w-0">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <BarChart
+                                                            data={[
+                                                                {
+                                                                    name: 'Rent Comparison',
+                                                                    'Estimated Rent': property.estimated_rent,
+                                                                    'HUD FMR': benchmark?.safmr_data?.[`${property.financial_snapshot?.bedrooms || 3}br`] || 0
+                                                                }
+                                                            ]}
+                                                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                                                        >
+                                                            <CartesianGrid strokeDasharray="3 3" />
+                                                            <XAxis dataKey="name" />
+                                                            <YAxis />
+                                                            <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                                                            <Legend />
+                                                            <Bar dataKey="Estimated Rent" fill="#8884d8" name="Est. Rent" />
+                                                            <Bar dataKey="HUD FMR" fill="#82ca9d" name={`HUD FMR (${property.financial_snapshot?.bedrooms || 3}BR)`} />
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+                                                <p className="text-xs text-gray-500 mt-4">
+                                                    Comparison of this property's estimated rent against the HUD Small Area Fair Market Rent (SAFMR) for {property.raw_data?.zip_code}.
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-[200px] text-gray-500">
+                                                <Info className="h-8 w-8 mb-2 opacity-40" />
+                                                <p className="text-sm font-medium">HUD Fair Market Rent data unavailable</p>
+                                                <p className="text-xs text-gray-400 mt-1">Using smart estimate based on nearby rental comps instead</p>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
 

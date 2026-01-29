@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next';
-import { createClient } from '@supabase/supabase-js';
+import pool from '@/lib/db';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const baseUrl = 'https://onepercentrealestate.vercel.app';
@@ -18,31 +18,32 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
 
     // programmatically generate routes for every zip code in DB
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    let marketRoutes: MetadataRoute.Sitemap = [];
 
-    const { data: properties } = await supabase
-        .from('properties')
-        .select('address');
+    try {
+        const client = await pool.connect();
+        const result = await client.query(`
+            SELECT DISTINCT raw_data->>'zip_code' as zip_code 
+            FROM listings 
+            WHERE raw_data->>'zip_code' IS NOT NULL
+            LIMIT 500
+        `);
+        client.release();
 
-    // Extract unique zip codes (assuming address format "Street, City, State Zip")
-    const zips = new Set<string>();
-    if (properties) {
-        properties.forEach(p => {
-            // crude extraction: last word matches 5 digits
-            const match = p.address.match(/\b\d{5}\b/);
-            if (match) zips.add(match[0]);
-        });
+        // Extract unique zip codes
+        const zips = result.rows
+            .filter(row => row.zip_code && /^\d{5}$/.test(row.zip_code))
+            .map(row => row.zip_code);
+
+        marketRoutes = zips.map((zip) => ({
+            url: `${baseUrl}/market/${zip}`,
+            lastModified: new Date(),
+            changeFrequency: 'weekly' as const,
+            priority: 0.8,
+        }));
+    } catch (error) {
+        console.error('Failed to fetch zip codes for sitemap:', error);
     }
-
-    const marketRoutes = Array.from(zips).map((zip) => ({
-        url: `${baseUrl}/market/${zip}`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly' as const,
-        priority: 0.8,
-    }));
 
     return [...routes, ...marketRoutes];
 }

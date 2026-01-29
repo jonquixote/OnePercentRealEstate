@@ -1,47 +1,58 @@
-import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
+import pool from '@/lib/db';
 import { getMarketTrends } from '@/lib/fred';
 import MarketTrends from '@/components/MarketTrends';
 import Header from '@/components/Header';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, TrendingUp, DollarSign, Home, PieChart as PieChartIcon } from 'lucide-react';
-import PortfolioCharts from '@/components/PortfolioCharts'; // Default export we'll need to create or keep charts inline if they are client side?
-// Actually, Recharts MUST be client side.
-// So we need to splitting this:
-// 1. Page (Server) -> Fetches Data
-// 2. MarketTrends (Client) -> Renders FRED charts
-// 3. PortfolioCharts (Client) -> Renders the existing charts (Price Dist, Pie, Scatter, etc.)
+import { TrendingUp, DollarSign, Home, PieChart as PieChartIcon } from 'lucide-react';
+import PortfolioCharts from '@/components/PortfolioCharts';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
-    const supabase = await createClient(); // Await strictly needed? Usually yes for cookie helpers
-    const { data: { user } } = await supabase.auth.getUser();
+    // Fetch data from PostgreSQL directly
+    let properties: any[] = [];
+    let benchmarks: any[] = [];
 
-    if (!user) {
-        redirect('/login');
+    try {
+        const client = await pool.connect();
+
+        // Fetch all properties
+        const propResult = await client.query(`
+            SELECT 
+                id,
+                address,
+                COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
+                COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
+                raw_data
+            FROM listings
+            ORDER BY created_at DESC
+            LIMIT 500
+        `);
+        properties = propResult.rows;
+
+        // Fetch market benchmarks
+        const benchResult = await client.query(`
+            SELECT * FROM market_benchmarks LIMIT 100
+        `);
+        benchmarks = benchResult.rows;
+
+        client.release();
+    } catch (error) {
+        console.error('Database error:', error);
     }
-
-    // 1. Fetch Data Parallel
-    const [trendsData, benchmarksResult, propertiesResult] = await Promise.all([
-        getMarketTrends(),
-        supabase.from('market_benchmarks').select('*'),
-        supabase.from('properties').select('*').eq('user_id', user.id)
-    ]);
-
-    const benchmarks = benchmarksResult.data || [];
-    const properties = propertiesResult.data || [];
 
     // 2. Calc High Level Stats (Server Side is fine/fast)
     const total = properties.length;
-    const totalPrice = properties.reduce((acc, p) => acc + (p.listing_price || 0), 0);
-    const totalRent = properties.reduce((acc, p) => acc + (p.estimated_rent || 0), 0);
+    const totalPrice = properties.reduce((acc, p) => acc + (Number(p.listing_price) || 0), 0);
+    const totalRent = properties.reduce((acc, p) => acc + (Number(p.estimated_rent) || 0), 0);
 
     // Simple Yield: (Annual Rent / Price) * 100 (Avg of yields)
     const totalYield = properties.reduce((acc, p) => {
-        if (p.listing_price > 0) {
-            return acc + ((p.estimated_rent * 12) / p.listing_price);
+        const price = Number(p.listing_price);
+        const rent = Number(p.estimated_rent);
+        if (price > 0 && rent > 0) {
+            return acc + ((rent * 12) / price);
         }
         return acc;
     }, 0);
@@ -52,6 +63,9 @@ export default async function AnalyticsPage() {
         avgRent: total > 0 ? totalRent / total : 0,
         avgYield: total > 0 ? (totalYield / total) * 100 : 0
     };
+
+    // Fetch FRED market trends
+    const trendsData = await getMarketTrends();
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
@@ -118,7 +132,6 @@ export default async function AnalyticsPage() {
                     </div>
 
                     {/* 3. Detailed Portfolio Charts (Client Component) */}
-                    {/* We need to pass data to a client component because Recharts uses context/dom */}
                     <PortfolioCharts
                         properties={properties}
                         benchmarks={benchmarks}
@@ -130,4 +143,3 @@ export default async function AnalyticsPage() {
         </div>
     );
 }
-

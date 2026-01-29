@@ -1,0 +1,217 @@
+{
+    "name": "US Real Estate Scraper Orchestrator",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "minutes",
+                            "minutes": 5
+                        }
+                    ]
+                }
+            },
+            "name": "Schedule",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE crawl_jobs \nSET status = 'processing', started_at = NOW() \nWHERE id = (\n  SELECT id \n  FROM crawl_jobs \n  WHERE status = 'pending' \n  ORDER BY region_value ASC \n  LIMIT 1 \n  FOR UPDATE SKIP LOCKED\n)\nRETURNING *;"
+            },
+            "name": "Get Next Job",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "Local Postgres"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.id }}",
+                            "operation": "notEqual",
+                            "value2": "undefined"
+                        }
+                    ]
+                }
+            },
+            "name": "Job Found?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                650,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "requestMethod": "POST",
+                "url": "http://scraper:8000/scrape",
+                "jsonParameters": true,
+                "options": {},
+                "bodyParametersJson": "={{ JSON.stringify({\n  \"location\": $json.region_value,\n  \"listing_type\": \"for_sale\",\n  \"past_days\": 30\n}) }}"
+            },
+            "name": "Scraper Service",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                850,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "fieldToSplitOut": "results"
+            },
+            "name": "Split Batches",
+            "type": "n8n-nodes-base.itemLists",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "table": "listings",
+                "columns": "address, price, listing_type, listing_status, raw_data, zip_code, city, state, url, property_url",
+                "options": {}
+            },
+            "name": "Save Listing",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                1250,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "Local Postgres"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"UPDATE crawl_jobs SET status = 'completed', completed_at = NOW(), items_found = \" + $items(\"Scraper Service\")[0].json.count + \", items_inserted = \" + $items(\"Scraper Service\")[0].json.count + \" WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}"
+            },
+            "name": "Mark Complete",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                1450,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "Local Postgres"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"UPDATE crawl_jobs SET status = 'failed', error_message = '\" + $node[\"Scraper Service\"].error.message + \"' WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}"
+            },
+            "name": "Mark Failed",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                500
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "Local Postgres"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Schedule": {
+            "main": [
+                [
+                    {
+                        "node": "Get Next Job",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Next Job": {
+            "main": [
+                [
+                    {
+                        "node": "Job Found?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Job Found?": {
+            "main": [
+                [
+                    {
+                        "node": "Scraper Service",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Scraper Service": {
+            "main": [
+                [
+                    {
+                        "node": "Split Batches",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split Batches": {
+            "main": [
+                [
+                    {
+                        "node": "Save Listing",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Listing": {
+            "main": [
+                [
+                    {
+                        "node": "Mark Complete",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pandas
+homeharvest
+psycopg2-binary
+sqlalchemy
+requests

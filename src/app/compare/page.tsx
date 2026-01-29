@@ -1,10 +1,8 @@
 'use client';
 
 import { useEffect, useState, use } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { Card, CardContent } from '@/components/ui/card';
 
 interface Property {
     id: string;
@@ -30,15 +28,16 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
             }
 
             const ids = params.ids.split(',');
-            const { data, error } = await supabase
-                .from('properties')
-                .select('*')
-                .in('id', ids);
 
-            if (error) {
+            try {
+                // Fetch properties via API endpoint
+                const response = await fetch(`/api/properties?ids=${ids.join(',')}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setProperties(data || []);
+                }
+            } catch (error) {
                 console.error('Error fetching properties:', error);
-            } else {
-                setProperties(data || []);
             }
             setLoading(false);
         }
@@ -188,7 +187,7 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                             <tr>
                                 <td className="p-4 font-medium text-gray-700">Status</td>
                                 {properties.map(p => (
-                                    <td key={p.id} className="p-4 border-l border-gray-100 capitalize">{p.status.replace('_', ' ')}</td>
+                                    <td key={p.id} className="p-4 border-l border-gray-100 capitalize">{(p.status || 'active').replace('_', ' ')}</td>
                                 ))}
                             </tr>
                         </tbody>

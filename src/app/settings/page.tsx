@@ -1,33 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { User } from '@supabase/supabase-js';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import { UserCircle, CreditCard, Mail } from 'lucide-react';
 
+// Simplified settings page without Supabase auth
 export default function SettingsPage() {
-    const [user, setUser] = useState<User | null>(null);
-    const [loading, setLoading] = useState(true);
     const router = useRouter();
-
-    useEffect(() => {
-        const getUser = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                router.push('/login');
-                return;
-            }
-            setUser(user);
-            setLoading(false);
-        };
-        getUser();
-    }, [router]);
-
-    if (loading) {
-        return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>;
-    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -55,11 +35,11 @@ export default function SettingsPage() {
                                     <input
                                         type="text"
                                         disabled
-                                        value={user?.email}
+                                        value="guest@onepercentrealestate.com"
                                         className="block w-full flex-1 rounded-none rounded-r-md border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm bg-gray-100 text-gray-500 px-3 py-2 cursor-not-allowed"
                                     />
                                 </div>
-                                <p className="mt-2 text-xs text-gray-500">Email cannot be changed directly here.</p>
+                                <p className="mt-2 text-xs text-gray-500">Authentication is currently disabled.</p>
                             </div>
                         </div>
                     </div>
@@ -83,7 +63,7 @@ export default function SettingsPage() {
                                 <div className="ml-3">
                                     <h3 className="text-sm font-medium text-emerald-800">Current Plan</h3>
                                     <div className="mt-2 text-sm text-emerald-700">
-                                        <p>You are currently on the <span className="font-bold">Free Plan</span>.</p>
+                                        <p>You have <span className="font-bold">Full Access</span> to all features.</p>
                                     </div>
                                 </div>
                             </div>
@@ -94,13 +74,14 @@ export default function SettingsPage() {
                                 onClick={() => router.push('/pricing')}
                                 className="inline-flex items-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
                             >
-                                Upgrade to Pro
+                                View Pricing
                             </button>
                             <button
                                 type="button"
+                                onClick={() => router.push('/')}
                                 className="ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
                             >
-                                Manage Billing (Stripe)
+                                Back to Dashboard
                             </button>
                         </div>
                     </div>

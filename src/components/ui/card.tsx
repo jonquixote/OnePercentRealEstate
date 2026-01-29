@@ -27,8 +27,9 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
     const { address, listing_price, estimated_rent, financial_snapshot, status } = property;
 
     // Calculate 1% Rule Ratio
-    const ratio = (estimated_rent / listing_price) * 100;
-    const isGoodDeal = ratio >= 1.0;
+    const hasRent = estimated_rent && estimated_rent > 0;
+    const ratio = hasRent ? (estimated_rent / listing_price) * 100 : 0;
+    const isGoodDeal = hasRent && ratio >= 1.0;
 
     // Format currency
     const formatCurrency = (val: number) =>
@@ -54,17 +55,42 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
                     "flex flex-col h-full overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
                     isSelected ? "ring-2 ring-slate-900 ring-offset-2" : ""
                 )}>
+                    {/* Main Image */}
+                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
+                        {property.images && property.images.length > 0 ? (
+                            <img
+                                src={property.images[0]}
+                                alt={address}
+                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                            />
+                        ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-gray-100 text-gray-400">
+                                <span className="text-xs">No Image</span>
+                            </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    </div>
+
                     {/* Status Bar */}
                     <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between bg-white relative">
-                        <div className="flex items-center space-x-2">
-                            <span className={cn(
-                                "flex h-2.5 w-2.5 rounded-full",
-                                isGoodDeal ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-amber-400"
-                            )} />
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                {isGoodDeal ? 'STRONG' : 'REVIEW'}
-                            </span>
-                        </div>
+                        {hasRent ? (
+                            <div className="flex items-center space-x-2">
+                                <span className={cn(
+                                    "flex h-2.5 w-2.5 rounded-full",
+                                    isGoodDeal ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-amber-400"
+                                )} />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                    {isGoodDeal ? 'STRONG' : 'REVIEW'}
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center space-x-2">
+                                <span className="flex h-2.5 w-2.5 rounded-full bg-blue-400 animate-pulse" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                    CALCULATING...
+                                </span>
+                            </div>
+                        )}
                         <span className={cn(
                             "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
                             status === 'watch'
@@ -104,10 +130,19 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
                                 <p className="text-lg font-bold text-gray-900 tracking-tight">{formatCurrency(listing_price)}</p>
                             </div>
                             <div>
-                                <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-1">Est. Rent</p>
+                                <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-1 flex items-center gap-1">
+                                    Est. Rent
+                                    <span className="inline-block w-3 h-3 rounded-full bg-blue-100 text-blue-600 text-[8px] font-bold flex items-center justify-center cursor-help" title="Smart estimate based on nearby rentals and HUD data">?</span>
+                                </p>
                                 <div className="flex items-baseline space-x-1">
-                                    <p className="text-lg font-bold text-gray-900 tracking-tight">{formatCurrency(estimated_rent)}</p>
-                                    <span className="text-xs text-gray-400 font-medium">/mo</span>
+                                    {hasRent ? (
+                                        <>
+                                            <p className="text-lg font-bold text-gray-900 tracking-tight">{formatCurrency(estimated_rent)}</p>
+                                            <span className="text-xs text-gray-400 font-medium">/mo</span>
+                                        </>
+                                    ) : (
+                                        <p className="text-sm font-medium text-gray-400 italic">Pending...</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -115,15 +150,15 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
 
                     <div className={cn(
                         "px-6 py-4 flex items-center justify-between",
-                        isGoodDeal ? "bg-emerald-50/50" : "bg-amber-50/50"
+                        hasRent && isGoodDeal ? "bg-emerald-50/50" : (hasRent ? "bg-amber-50/50" : "bg-gray-50")
                     )}>
                         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">1% Rule</span>
                         <div className="flex items-center">
                             <span className={cn(
                                 "text-lg font-black tracking-tight",
-                                isGoodDeal ? "text-emerald-600" : "text-amber-600"
+                                hasRent ? (isGoodDeal ? "text-emerald-600" : "text-amber-600") : "text-gray-300"
                             )}>
-                                {ratio.toFixed(2)}%
+                                {hasRent ? ratio.toFixed(2) + '%' : '—'}
                             </span>
                         </div>
                     </div>

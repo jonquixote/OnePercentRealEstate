@@ -1,35 +1,31 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import pool from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-const FRED_API_KEY = '95f42f356f5131f13257eac54897e96a';
+const FRED_API_KEY = process.env.FRED_API_KEY || '95f42f356f5131f13257eac54897e96a';
 const SERIES_ID = 'MORTGAGE30US';
 const CACHE_KEY = 'GLOBAL_MORTGAGE_RATE';
 const CACHE_DURATION_HOURS = 24;
 
-
-
 export async function GET() {
     try {
-        // Initialize Supabase Admin Client (bypasses RLS)
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
-        // 1. Check Cache
-        const { data: cachedData, error: cacheError } = await supabase
-            .from('market_benchmarks')
-            .select('*')
-            .eq('zip_code', CACHE_KEY)
-            .single();
+        const client = await pool.connect();
 
-        if (cachedData && !cacheError) {
+        // 1. Check Cache
+        const cacheResult = await client.query(
+            'SELECT safmr_data, last_updated FROM market_benchmarks WHERE zip_code = $1',
+            [CACHE_KEY]
+        );
+
+        if (cacheResult.rows.length > 0) {
+            const cachedData = cacheResult.rows[0];
             const lastUpdated = new Date(cachedData.last_updated);
             const now = new Date();
             const hoursDiff = (now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60);
 
             if (hoursDiff < CACHE_DURATION_HOURS && cachedData.safmr_data?.rate) {
+                client.release();
                 console.log("Returning cached mortgage rate");
                 return NextResponse.json({ rate: cachedData.safmr_data.rate, cached: true });
             }
@@ -52,17 +48,15 @@ export async function GET() {
         }
 
         // 3. Update Cache
-        const { error: upsertError } = await supabase
-            .from('market_benchmarks')
-            .upsert({
-                zip_code: CACHE_KEY,
-                safmr_data: { rate: rate },
-                last_updated: new Date().toISOString()
-            });
+        await client.query(`
+            INSERT INTO market_benchmarks (zip_code, safmr_data, last_updated) 
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (zip_code) DO UPDATE SET 
+                safmr_data = $2,
+                last_updated = NOW()
+        `, [CACHE_KEY, JSON.stringify({ rate: rate })]);
 
-        if (upsertError) {
-            console.error("Failed to update cache:", upsertError);
-        }
+        client.release();
 
         return NextResponse.json({ rate: rate, cached: false });
 

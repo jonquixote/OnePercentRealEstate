@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
 import { PropertyCard } from '@/components/ui/card';
 import Header from '@/components/Header';
 import { Loader2, TrendingUp, Search, BarChart3, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
@@ -18,16 +17,25 @@ interface Property {
   financial_snapshot: any;
   status: string;
   raw_data: any;
+  latitude: number;
+  longitude: number;
   created_at?: string;
 }
 
+import { getProperties } from '@/app/actions';
+
 export default function Dashboard() {
+  // State
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
 
   // View State (for Mobile primarily, or specific toggle)
   const [showMap, setShowMap] = useState(true);
+  const [sortBy, setSortBy] = useState('newest');
 
   // Filter State
   const [filters, setFilters] = useState<FilterState>({
@@ -40,22 +48,39 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    async function fetchProperties() {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .order('created_at', { ascending: false });
+    loadProperties(1);
+  }, [sortBy]); // Reload when sort changes
 
-      if (error) {
-        console.error('Error fetching properties:', error);
+  async function loadProperties(pageNum: number) {
+    try {
+      if (pageNum === 1) setLoading(true);
+      else setLoadingMore(true);
+
+      const data = await getProperties(pageNum, 100, sortBy);
+
+      // @ts-ignore
+      if (data.length < 100) setHasMore(false);
+
+      if (pageNum === 1) {
+        // @ts-ignore
+        setProperties(data);
       } else {
-        setProperties(data || []);
+        // @ts-ignore
+        setProperties(prev => [...prev, ...data]);
       }
-      setLoading(false);
-    }
 
-    fetchProperties();
-  }, []);
+      setPage(pageNum);
+    } catch (error) {
+      console.error('Failed to fetch properties:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }
+
+  const handleLoadMore = () => {
+    loadProperties(page + 1);
+  };
 
   // Filter Logic
   const filteredProperties = useMemo(() => {
@@ -64,8 +89,6 @@ export default function Dashboard() {
       if (!filters.showSold && (p.status === 'sold' || p.listing_price === null)) return false;
 
       // 2. Price
-      // If sold, maybe check sold_price? For now assume listing_price or raw_data.sold_price if available?
-      // Use listing_price for consistency for now
       if (p.listing_price > filters.maxPrice) return false;
       if (p.listing_price < filters.minPrice) return false;
 
@@ -99,7 +122,7 @@ export default function Dashboard() {
     setSelectedProperties(newSelected);
   };
 
-  if (loading) {
+  if (loading && page === 1) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center space-y-4">
@@ -124,7 +147,7 @@ export default function Dashboard() {
 
         {/* List View (Scrollable) */}
         <div className={`flex-1 overflow-y-auto p-6 ${showMap ? 'lg:w-[55%]' : 'w-full'} transition-all duration-300`}>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
             <h2 className="text-xl font-bold flex items-center">
               <BarChart3 className="mr-2 h-5 w-5 text-slate-500" />
               Opportunities
@@ -133,12 +156,26 @@ export default function Dashboard() {
               </span>
             </h2>
 
-            {/* Mobile Toggle */}
-            <div className="lg:hidden">
-              <Button variant="outline" size="sm" onClick={() => setShowMap(!showMap)}>
-                {showMap ? <ListIcon className="h-4 w-4 mr-2" /> : <MapIcon className="h-4 w-4 mr-2" />}
-                {showMap ? 'List' : 'Map'}
-              </Button>
+            <div className="flex items-center gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="h-9 rounded-md border border-slate-200 text-sm px-3 py-1 bg-white"
+              >
+                <option value="newest">Newest Listed</option>
+                <option value="one_percent_high">1% Rule: Best First</option>
+                <option value="one_percent_low">1% Rule: Worst First</option>
+                <option value="price_high">Price: High to Low</option>
+                <option value="price_low">Price: Low to High</option>
+              </select>
+
+              {/* Mobile Toggle */}
+              <div className="lg:hidden">
+                <Button variant="outline" size="sm" onClick={() => setShowMap(!showMap)}>
+                  {showMap ? <ListIcon className="h-4 w-4 mr-2" /> : <MapIcon className="h-4 w-4 mr-2" />}
+                  {showMap ? 'List' : 'Map'}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -160,6 +197,27 @@ export default function Dashboard() {
               <Search className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-semibold text-gray-900">No properties match your filters</h3>
               <p className="mt-1 text-sm text-gray-500">Try adjusting your price range or criteria.</p>
+            </div>
+          )}
+
+          {/* Load More */}
+          {hasMore && !loading && (
+            <div className="mt-8 text-center">
+              <Button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                variant="outline"
+                className="w-full md:w-auto min-w-[200px]"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Load More Properties'
+                )}
+              </Button>
             </div>
           )}
         </div>

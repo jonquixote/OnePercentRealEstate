@@ -27,10 +27,10 @@ const clusterLayer: any = {
     id: 'clusters',
     type: 'circle',
     source: 'properties',
-    filter: ['has', 'point_count'],
+    filter: ['>', ['get', 'count'], 1],
     paint: {
-        'circle-color': ['step', ['get', 'point_count'], '#51bbd6', 100, '#f1f075', 750, '#f28cb1'],
-        'circle-radius': ['step', ['get', 'point_count'], 20, 100, 30, 750, 40]
+        'circle-color': ['step', ['get', 'count'], '#51bbd6', 10, '#f1f075', 100, '#f28cb1'],
+        'circle-radius': ['step', ['get', 'count'], 15, 10, 20, 100, 30]
     }
 };
 
@@ -38,9 +38,9 @@ const clusterCountLayer: any = {
     id: 'cluster-count',
     type: 'symbol',
     source: 'properties',
-    filter: ['has', 'point_count'],
+    filter: ['>', ['get', 'count'], 1],
     layout: {
-        'text-field': '{point_count_abbreviated}',
+        'text-field': '{count}',
         'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
         'text-size': 12
     }
@@ -50,12 +50,39 @@ const unclusteredPointLayer: any = {
     id: 'unclustered-point',
     type: 'circle',
     source: 'properties',
-    filter: ['!', ['has', 'point_count']],
+    filter: ['==', ['get', 'count'], 1],
     paint: {
-        'circle-color': '#4264fb',
+        'circle-color': '#11b4da',
         'circle-radius': 8,
-        'circle-stroke-width': 2,
+        'circle-stroke-width': 1,
         'circle-stroke-color': '#fff'
+    }
+};
+
+const unclusteredLabelLayer: any = {
+    id: 'unclustered-label',
+    type: 'symbol',
+    source: 'properties',
+    filter: ['==', ['get', 'count'], 1],
+    layout: {
+        'text-field': [
+            'format',
+            ['concat', '$', ['to-string', ['get', 'avg_price']]],
+            { 'font-scale': 0.8 },
+            '\n',
+            ['concat', ['number-format', ['*', ['/', ['get', 'avg_rent'], ['get', 'avg_price']], 100], { 'min-fraction-digits': 2, 'max-fraction-digits': 2 }], '%'],
+            { 'font-scale': 0.7, 'text-color': '#10b981' }
+        ],
+        'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+        'text-size': 12,
+        'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+        'text-radial-offset': 0.8,
+        'text-justify': 'auto'
+    },
+    paint: {
+        'text-color': '#000000',
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 2
     }
 };
 
@@ -78,10 +105,13 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
     const fetchClusters = React.useCallback(async (bounds: any, zoom: number) => {
         setIsLoading(true);
         try {
-            const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
-            const res = await fetch(`/api/map/clusters?bounds=${bbox}&zoom=${zoom}`);
+            const res = await fetch(`/api/clusters?min_lat=${bounds.getSouth()}&max_lat=${bounds.getNorth()}&min_lon=${bounds.getWest()}&max_lon=${bounds.getEast()}&zoom=${Math.round(zoom)}`);
             const data = await res.json();
-            setClusters(data);
+            const features = Array.isArray(data) ? data : (data.features || []);
+            setClusters({
+                type: 'FeatureCollection',
+                features: features
+            });
         } catch (err) {
             console.error('Failed to fetch clusters:', err);
         } finally {
@@ -113,12 +143,9 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
         const feature = event.features?.[0];
         if (!feature) return;
 
-        const cluster = feature.properties?.cluster;
+        const cluster = feature.properties?.count > 1;
 
         if (cluster) {
-            const clusterId = feature.id; // Or geometry to zoom
-            // Since we are server-side, we don't have supercluster ID. 
-            // We just zoom into the center of the cluster.
             const coordinates = feature.geometry.coordinates;
             mapRef.current?.easeTo({
                 center: coordinates,
@@ -127,6 +154,8 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
             });
         } else {
             // It's a single point
+            // The property ID might be in feature.properties.id if we returned it, but our SQL aggregation might verify that.
+            // Our SQL returns 'id' as min(id)
             const propertyId = feature.properties?.id;
             if (propertyId) {
                 router.push(`/property/${propertyId}`);
@@ -136,8 +165,7 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
 
     // Check for token
     if (!MAPBOX_TOKEN) {
-        // ... (existing error UI)
-        return null;
+        return <div className="p-4 text-red-500">Mapbox Token Missing</div>;
     }
 
     return (
@@ -147,7 +175,7 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
                 onMove={evt => setViewState(evt.viewState)}
                 onMoveEnd={onMoveEnd}
                 ref={mapRef}
-                mapStyle="mapbox://styles/mapbox/light-v11"
+                mapStyle="mapbox://styles/mapbox/streets-v12"
                 mapboxAccessToken={MAPBOX_TOKEN}
                 interactiveLayerIds={['clusters', 'unclustered-point']}
                 onClick={handleClick}
@@ -159,15 +187,16 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
                     id="properties"
                     type="geojson"
                     data={clusters}
-                    cluster={false} // We handle clustering on server, so client clustering is OFF
+                    cluster={false} // Server side clustering
                 >
                     <Layer {...clusterLayer} />
                     <Layer {...clusterCountLayer} />
-                    <Layer {...unclusteredPointLayer} />
+                    <Layer {...unclusteredPointLayer} filter={['==', ['get', 'count'], 1]} />
+                    <Layer {...unclusteredLabelLayer} filter={['==', ['get', 'count'], 1]} />
                 </Source>
             </Map>
             {isLoading && (
-                <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-3 py-1 rounded-full text-xs font-medium shadow-sm z-10">
+                <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-3 py-1 rounded-full text-xs font-medium shadow-sm z-10 transition-opacity duration-200">
                     Updating...
                 </div>
             )}

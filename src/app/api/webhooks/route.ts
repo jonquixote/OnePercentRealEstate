@@ -1,15 +1,7 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { createClient } from '@supabase/supabase-js';
-
-// Helper function to get admin client
-function getSupabaseAdmin() {
-    return createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-}
+import pool from '@/lib/db';
 
 // Helper function to handle checkout session completed
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
@@ -17,14 +9,21 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
     const customerId = session.customer as string;
 
     if (userId) {
-        const supabaseAdmin = getSupabaseAdmin();
-        await supabaseAdmin
-            .from('profiles')
-            .update({
-                stripe_customer_id: customerId,
-                subscription_tier: 'pro'
-            })
-            .eq('id', userId);
+        try {
+            const client = await pool.connect();
+            // Store subscription info in a profiles table if it exists
+            await client.query(`
+                INSERT INTO profiles (id, stripe_customer_id, subscription_tier, updated_at) 
+                VALUES ($1, $2, 'pro', NOW())
+                ON CONFLICT (id) DO UPDATE SET 
+                    stripe_customer_id = $2, 
+                    subscription_tier = 'pro',
+                    updated_at = NOW()
+            `, [userId, customerId]);
+            client.release();
+        } catch (error) {
+            console.error('Failed to update profile:', error);
+        }
     }
 }
 
@@ -33,7 +32,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     const customerId = subscription.customer as string;
     const status = subscription.status;
 
-    let subscription_tier: 'free' | 'pro' | null = null;
+    let subscription_tier: 'free' | 'pro' = 'free';
 
     switch (status) {
         case 'active':
@@ -52,11 +51,17 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
             return;
     }
 
-    const supabaseAdmin = getSupabaseAdmin();
-    await supabaseAdmin
-        .from('profiles')
-        .update({ subscription_tier: subscription_tier })
-        .eq('stripe_customer_id', customerId);
+    try {
+        const client = await pool.connect();
+        await client.query(`
+            UPDATE profiles 
+            SET subscription_tier = $1, updated_at = NOW() 
+            WHERE stripe_customer_id = $2
+        `, [subscription_tier, customerId]);
+        client.release();
+    } catch (error) {
+        console.error('Failed to update subscription:', error);
+    }
 }
 
 export async function POST(req: Request) {
