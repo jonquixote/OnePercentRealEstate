@@ -2,26 +2,31 @@ import os
 import requests
 import time
 import json
+import psycopg2
+from psycopg2.extras import Json
 from datetime import datetime
-from supabase import create_client, Client
 from dotenv import load_dotenv
 
 # Load env from parent directory
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../.env.local')
 load_dotenv(dotenv_path=env_path)
 
-SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    # Fallback to backend .env if .env.local not found/set
+    backend_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    load_dotenv(dotenv_path=backend_env_path)
+    DATABASE_URL = os.getenv("DATABASE_URL")
+
 HUD_API_TOKEN = os.getenv("HUD_API_TOKEN")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in .env")
+if not DATABASE_URL:
+    print("Error: DATABASE_URL must be set in .env.local or .env")
     exit(1)
 
 if not HUD_API_TOKEN:
     print("Warning: HUD_API_TOKEN not set. Live data fetch will fail.")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 HUD_BASE_URL = "https://www.huduser.gov/hudapi/public/fmr"
 
 # Global Caches
@@ -47,14 +52,40 @@ CITY_COUNTY_MAP = {
     "Columbus, OH": "Franklin"
 }
 
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn
+    except Exception as e:
+        print(f"Error connecting to database: {e}")
+        return None
+
 def get_properties_info():
     """Fetches zip, city, state from properties table."""
+    conn = get_db_connection()
+    if not conn:
+        return []
+    
     try:
-        response = supabase.table("properties").select("raw_data").execute()
+        cur = conn.cursor()
+        # Query listings instead of properties (schema changed?) 
+        # Checking previous file content, table name is 'listings' in some places, 'properties' in others?
+        # scraper.py uses 'listings'. schema_v2.sql uses 'listings'. 
+        # property/[id]/page.tsx fetches from 'listings'.
+        # Assuming table is 'listings'.
+        
+        # Wait, the previous hud_api.py used 'properties'. 
+        # Let's check if 'properties' view exists or if we should use 'listings'.
+        # To be safe, let's try 'listings' since that's what scraper.py uses.
+        
+        cur.execute("SELECT raw_data FROM listings")
+        rows = cur.fetchall()
+        
         props = []
-        for row in response.data:
-            rd = row.get('raw_data', {})
-            if rd and 'zip_code' in rd:
+        for row in rows:
+            # row is a tuple (raw_data_dict,)
+            rd = row[0] if row else {}
+            if rd and isinstance(rd, dict) and 'zip_code' in rd:
                 z = str(rd['zip_code']).split('-')[0].split('.')[0].strip()
                 if len(z) == 5:
                     props.append({
@@ -62,10 +93,13 @@ def get_properties_info():
                         "city": rd.get('city'),
                         "state": rd.get('state')
                     })
+        cur.close()
         return props
     except Exception as e:
         print(f"Error fetching properties: {e}")
         return []
+    finally:
+        conn.close()
 
 def get_hud_headers():
     return {"Authorization": f"Bearer {HUD_API_TOKEN}"}
@@ -143,33 +177,53 @@ def upsert_safmr_data(api_response):
     if not results:
         print("Warning: No 'basicdata' found in API response.")
     
+    conn = get_db_connection()
+    if not conn:
+        print("Skipping upsert due to DB connection failure")
+        return
+
     count = 0
-    for item in results:
-        zip_code = item.get('zip_code')
-        if not zip_code: continue
+    try:
+        cur = conn.cursor()
         
-        # Transform to our schema
-        # We want: 0br, 1br, 2br...
-        safmr_entry = {
-            "0br": item.get('Efficiency'),
-            "1br": item.get('One-Bedroom'),
-            "2br": item.get('Two-Bedroom'),
-            "3br": item.get('Three-Bedroom'),
-            "4br": item.get('Four-Bedroom')
-        }
-        
-        # Check if valid dict (has 2br is good proxy)
-        if safmr_entry['2br'] is None: continue
-        
-        try:
-             supabase.table("market_benchmarks").upsert({
-                 "zip_code": zip_code,
-                 "safmr_data": safmr_entry,
-                 "last_updated": datetime.now().isoformat()
-             }).execute()
-             count += 1
-        except Exception as e:
-            print(f"Error upserting {zip_code}: {e}")
+        for item in results:
+            zip_code = item.get('zip_code')
+            if not zip_code: continue
+            
+            # Transform to our schema
+            # We want: 0br, 1br, 2br...
+            safmr_entry = {
+                "0br": item.get('Efficiency'),
+                "1br": item.get('One-Bedroom'),
+                "2br": item.get('Two-Bedroom'),
+                "3br": item.get('Three-Bedroom'),
+                "4br": item.get('Four-Bedroom')
+            }
+            
+            # Check if valid dict (has 2br is good proxy)
+            if safmr_entry['2br'] is None: continue
+            
+            try:
+                # Use PostgreSQL UPSERT
+                query = """
+                    INSERT INTO market_benchmarks (zip_code, safmr_data, last_updated)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (zip_code) DO UPDATE SET
+                        safmr_data = EXCLUDED.safmr_data,
+                        last_updated = EXCLUDED.last_updated;
+                """
+                cur.execute(query, (zip_code, Json(safmr_entry), datetime.now().isoformat()))
+                count += 1
+            except Exception as e:
+                print(f"Error upserting {zip_code}: {e}")
+                conn.rollback() # Rollback usage error for this item
+
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        print(f"Batch upsert error: {e}")
+    finally:
+        conn.close()
 
     print(f"Upserted {count} benchmarks from FIPS query.")
 

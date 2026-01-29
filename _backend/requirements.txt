@@ -1,6 +1,6 @@
 homeharvest
 pandas
-supabase
+psycopg2-binary
 python-dotenv
 requests
 # ML dependencies for rent estimation
