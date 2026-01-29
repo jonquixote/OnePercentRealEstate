@@ -61,38 +61,39 @@ def get_db_connection():
         return None
 
 def get_properties_info():
-    """Fetches zip, city, state from properties table."""
+    """Fetches unique zip, city, state from listings to identify markets."""
     conn = get_db_connection()
     if not conn:
         return []
     
     try:
         cur = conn.cursor()
-        # Query listings instead of properties (schema changed?) 
-        # Checking previous file content, table name is 'listings' in some places, 'properties' in others?
-        # scraper.py uses 'listings'. schema_v2.sql uses 'listings'. 
-        # property/[id]/page.tsx fetches from 'listings'.
-        # Assuming table is 'listings'.
-        
-        # Wait, the previous hud_api.py used 'properties'. 
-        # Let's check if 'properties' view exists or if we should use 'listings'.
-        # To be safe, let's try 'listings' since that's what scraper.py uses.
-        
-        cur.execute("SELECT raw_data FROM listings")
+        print("Fetching unique markets from database...")
+        # Optimize: Let Postgres extract unique locations instead of fetching all 370k+ rows
+        cur.execute("""
+            SELECT DISTINCT 
+                raw_data->>'zip_code', 
+                raw_data->>'city', 
+                raw_data->>'state'
+            FROM listings
+            WHERE raw_data->>'zip_code' IS NOT NULL
+        """)
         rows = cur.fetchall()
         
         props = []
         for row in rows:
-            # row is a tuple (raw_data_dict,)
-            rd = row[0] if row else {}
-            if rd and isinstance(rd, dict) and 'zip_code' in rd:
-                z = str(rd['zip_code']).split('-')[0].split('.')[0].strip()
+            zip_code, city, state = row
+            if zip_code:
+                # Clean zip code (handle 12345-6789 or 12345.0)
+                z = str(zip_code).split('-')[0].split('.')[0].strip()
                 if len(z) == 5:
                     props.append({
                         "zip": z,
-                        "city": rd.get('city'),
-                        "state": rd.get('state')
+                        "city": city,
+                        "state": state
                     })
+        
+        print(f"Identified {len(props)} unique markets (zip codes).")
         cur.close()
         return props
     except Exception as e:
