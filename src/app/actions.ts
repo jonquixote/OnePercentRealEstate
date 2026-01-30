@@ -161,19 +161,24 @@ export async function getProperty(id: string) {
             rent = getFallbackRent(Number(row.listing_price), beds);
         }
 
+        // Sanitize Row Data
+        const created_at = row.created_at instanceof Date ? row.created_at.toISOString() : (row.created_at || new Date().toISOString());
+
         return {
             ...row,
-            listing_price: Number(row.listing_price),
+            created_at,
+            listing_price: Number(row.listing_price) || 0,
             estimated_rent: Math.round(rent),
             financial_snapshot: {
-                bedrooms: Number(row.bedrooms),
-                bathrooms: Number(row.bathrooms),
-                sqft: Number(row.sqft),
+                bedrooms: Number(row.bedrooms) || 0,
+                bathrooms: Number(row.bathrooms) || 0,
+                sqft: Number(row.sqft) || 0,
             },
-            latitude: Number(row.latitude),
-            longitude: Number(row.longitude),
+            latitude: Number(row.latitude) || 0,
+            longitude: Number(row.longitude) || 0,
             images: images,
-            raw_data: raw
+            raw_data: raw,
+            status: row.status || 'watch'
         };
 
     } catch (error) {
