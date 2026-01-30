@@ -82,6 +82,11 @@ def scrape_listings(req: ScrapeRequest):
             foreclosure=req.foreclosure
         )
         
+        # Determine target table based on listing type
+        is_rental = req.listing_type == 'for_rent'
+        target_table = 'rental_listings' if is_rental else 'listings'
+        print(f"Target table: {target_table}")
+        
         if df is None or (hasattr(df, "empty") and df.empty):
             print(f"No results for {req.location}")
             return {"count": 0, "inserted": 0, "skipped": 0}
@@ -146,10 +151,7 @@ def scrape_listings(req: ScrapeRequest):
                     skipped += 1
                     continue
 
-                # Check if exists
-                cursor.execute("SELECT id, price FROM listings WHERE address = %s", (address,))
-                existing = cursor.fetchone()
-
+                # Extract data from row
                 price = row.get('list_price') or 0
                 bedrooms = row.get('beds')
                 bathrooms = row.get('baths')
@@ -174,7 +176,7 @@ def scrape_listings(req: ScrapeRequest):
                     raw_data["lat"] = row.get('latitude')
                     raw_data["lon"] = row.get('longitude')
 
-                # Images
+                # Images (for sale listings)
                 images = []
                 if row.get('primary_photo'):
                     images.append(row['primary_photo'])
@@ -183,41 +185,70 @@ def scrape_listings(req: ScrapeRequest):
                     if alts and alts.lower() != 'nan':
                         images.extend([u.strip() for u in alts.split(',') if u.strip()])
 
-                if existing:
-                    # Update if price changed
-                    old_price = float(existing[1] or 0)
-                    new_price = float(price or 0)
-                    if abs(old_price - new_price) < 1.0:
+                # Route to correct table based on listing type
+                if is_rental:
+                    # RENTAL LISTINGS TABLE
+                    cursor.execute("SELECT id, price FROM rental_listings WHERE address = %s AND listing_date = CURRENT_DATE", (address,))
+                    existing = cursor.fetchone()
+                    
+                    if existing:
+                        # Already scraped today, skip
                         skipped += 1
                         continue
-                    
-                    cursor.execute("""
-                        UPDATE listings SET 
-                            price = %s, bedrooms = %s, bathrooms = %s, sqft = %s, 
-                            year_built = %s, property_type = %s, images = %s, 
-                            raw_data = %s, latitude = %s, longitude = %s, updated_at = NOW()
-                        WHERE id = %s
-                    """, (
-                        price, bedrooms, bathrooms, sqft, year_built,
-                        get_property_type(row), images, Json(raw_data),
-                        raw_data.get("lat"), raw_data.get("lon"), existing[0]
-                    ))
-                    inserted += 1
+                    else:
+                        # Insert into rental_listings
+                        cursor.execute("""
+                            INSERT INTO rental_listings (
+                                address, city, state, zip_code, price, bedrooms, bathrooms,
+                                sqft, property_type, latitude, longitude, source, raw_data
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                            address, row.get('city'), row.get('state'), zip_code, price,
+                            bedrooms, bathrooms, sqft, get_property_type(row),
+                            raw_data.get("lat"), raw_data.get("lon"), 
+                            'homeharvest', Json(raw_data)
+                        ))
+                        inserted += 1
                 else:
-                    # Insert new
-                    cursor.execute("""
-                        INSERT INTO listings (
-                            address, city, state, zip_code, price, bedrooms, bathrooms,
-                            sqft, year_built, property_type, images, raw_data, 
-                            latitude, longitude, status, user_id
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        address, row.get('city'), row.get('state'), zip_code, price,
-                        bedrooms, bathrooms, sqft, year_built, get_property_type(row),
-                        images, Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
-                        'watch', DEFAULT_USER_ID
-                    ))
-                    inserted += 1
+                    # SALES LISTINGS TABLE
+                    cursor.execute("SELECT id, price FROM listings WHERE address = %s", (address,))
+                    existing = cursor.fetchone()
+                    
+                    if existing:
+                        # Update if price changed
+                        old_price = float(existing[1] or 0)
+                        new_price = float(price or 0)
+                        if abs(old_price - new_price) < 1.0:
+                            skipped += 1
+                            continue
+                        
+                        cursor.execute("""
+                            UPDATE listings SET 
+                                price = %s, bedrooms = %s, bathrooms = %s, sqft = %s, 
+                                year_built = %s, property_type = %s, images = %s, 
+                                raw_data = %s, latitude = %s, longitude = %s, updated_at = NOW()
+                            WHERE id = %s
+                        """, (
+                            price, bedrooms, bathrooms, sqft, year_built,
+                            get_property_type(row), images, Json(raw_data),
+                            raw_data.get("lat"), raw_data.get("lon"), existing[0]
+                        ))
+                        inserted += 1
+                    else:
+                        # Insert new
+                        cursor.execute("""
+                            INSERT INTO listings (
+                                address, city, state, zip_code, price, bedrooms, bathrooms,
+                                sqft, year_built, property_type, images, raw_data, 
+                                latitude, longitude, status, user_id
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                            address, row.get('city'), row.get('state'), zip_code, price,
+                            bedrooms, bathrooms, sqft, year_built, get_property_type(row),
+                            images, Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
+                            'watch', DEFAULT_USER_ID
+                        ))
+                        inserted += 1
 
                 conn.commit()
 
