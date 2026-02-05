@@ -211,7 +211,8 @@ def scrape_listings(req: ScrapeRequest):
                         inserted += 1
                 else:
                     # SALES LISTINGS TABLE
-                    cursor.execute("SELECT id, price FROM listings WHERE address = %s", (address,))
+                    # Check for existing by address AND listing_type to match unique constraint
+                    cursor.execute("SELECT id, price FROM listings WHERE address = %s AND listing_type = %s", (address, req.listing_type))
                     existing = cursor.fetchone()
                     
                     if existing:
@@ -239,13 +240,13 @@ def scrape_listings(req: ScrapeRequest):
                         cursor.execute("""
                             INSERT INTO listings (
                                 address, city, state, zip_code, price, bedrooms, bathrooms,
-                                sqft, year_built, property_type, images, raw_data, 
+                                sqft, year_built, property_type, listing_type, images, raw_data, 
                                 latitude, longitude, status, user_id
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """, (
                             address, row.get('city'), row.get('state'), zip_code, price,
                             bedrooms, bathrooms, sqft, year_built, get_property_type(row),
-                            images, Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
+                            req.listing_type, images, Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
                             'watch', DEFAULT_USER_ID
                         ))
                         inserted += 1

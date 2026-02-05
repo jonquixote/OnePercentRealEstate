@@ -1,0 +1,188 @@
+{
+    "name": "US Real Estate Scraper - Sales + Rentals",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "seconds",
+                            "secondsInterval": 30
+                        }
+                    ]
+                }
+            },
+            "name": "Schedule",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                0,
+                0
+            ],
+            "id": "schedule-trigger"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE crawl_jobs \nSET status = 'processing', started_at = NOW() \nWHERE id = (\n  SELECT id \n  FROM crawl_jobs \n  WHERE status = 'pending' \n  ORDER BY region_value ASC \n  LIMIT 1 \n  FOR UPDATE SKIP LOCKED\n)\nRETURNING *;",
+                "additionalFields": {}
+            },
+            "name": "Get Next Job",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                224,
+                0
+            ],
+            "id": "get-next-job",
+            "credentials": {
+                "postgres": {
+                    "id": "pR4wUtye9OhGE0WS",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.id }}",
+                            "operation": "notEqual",
+                            "value2": "undefined"
+                        }
+                    ]
+                }
+            },
+            "name": "Job Found?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                448,
+                0
+            ],
+            "id": "job-found-check"
+        },
+        {
+            "parameters": {
+                "requestMethod": "POST",
+                "url": "http://scraper:8000/scrape",
+                "jsonParameters": true,
+                "options": {
+                    "timeout": 120000
+                },
+                "bodyParametersJson": "={{ JSON.stringify({\n  \"location\": $json.region_value,\n  \"listing_type\": \"for_sale\",\n  \"past_days\": 30\n}) }}"
+            },
+            "name": "Scrape For Sale",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                672,
+                -100
+            ],
+            "id": "scrape-for-sale",
+            "continueOnFail": true
+        },
+        {
+            "parameters": {
+                "requestMethod": "POST",
+                "url": "http://scraper:8000/scrape",
+                "jsonParameters": true,
+                "options": {
+                    "timeout": 120000
+                },
+                "bodyParametersJson": "={{ JSON.stringify({\n  \"location\": $items(\"Get Next Job\")[0].json.region_value,\n  \"listing_type\": \"for_rent\",\n  \"past_days\": 30\n}) }}"
+            },
+            "name": "Scrape Rentals",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                900,
+                -100
+            ],
+            "id": "scrape-rentals",
+            "continueOnFail": true
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"UPDATE crawl_jobs SET status = 'completed', completed_at = NOW(), items_found = \" + (($items(\"Scrape For Sale\")[0].json.count || 0) + ($json.count || 0)) + \", items_inserted = \" + (($items(\"Scrape For Sale\")[0].json.inserted || 0) + ($json.inserted || 0)) + \" WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
+                "additionalFields": {}
+            },
+            "name": "Mark Complete",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                1128,
+                -100
+            ],
+            "id": "mark-complete",
+            "credentials": {
+                "postgres": {
+                    "id": "pR4wUtye9OhGE0WS",
+                    "name": "Postgres account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Schedule": {
+            "main": [
+                [
+                    {
+                        "node": "Get Next Job",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Next Job": {
+            "main": [
+                [
+                    {
+                        "node": "Job Found?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Job Found?": {
+            "main": [
+                [
+                    {
+                        "node": "Scrape For Sale",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Scrape For Sale": {
+            "main": [
+                [
+                    {
+                        "node": "Scrape Rentals",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Scrape Rentals": {
+            "main": [
+                [
+                    {
+                        "node": "Mark Complete",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    }
+}
