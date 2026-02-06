@@ -210,46 +210,43 @@ def scrape_listings(req: ScrapeRequest):
                         ))
                         inserted += 1
                 else:
-                    # SALES LISTINGS TABLE
-                    # Check for existing by address AND listing_type to match unique constraint
-                    cursor.execute("SELECT id, price FROM listings WHERE address = %s AND listing_type = %s", (address, req.listing_type))
-                    existing = cursor.fetchone()
-                    
-                    if existing:
-                        # Update if price changed
-                        old_price = float(existing[1] or 0)
-                        new_price = float(price or 0)
-                        if abs(old_price - new_price) < 1.0:
-                            skipped += 1
-                            continue
-                        
-                        cursor.execute("""
-                            UPDATE listings SET 
-                                price = %s, bedrooms = %s, bathrooms = %s, sqft = %s, 
-                                year_built = %s, property_type = %s, images = %s, 
-                                raw_data = %s, latitude = %s, longitude = %s, updated_at = NOW()
-                            WHERE id = %s
-                        """, (
-                            price, bedrooms, bathrooms, sqft, year_built,
-                            get_property_type(row), images, Json(raw_data),
-                            raw_data.get("lat"), raw_data.get("lon"), existing[0]
-                        ))
+                    # SALES LISTINGS TABLE - Use INSERT ON CONFLICT for atomic upsert
+                    # This prevents race conditions and duplicates
+                    cursor.execute("""
+                        INSERT INTO listings (
+                            address, city, state, zip_code, price, bedrooms, bathrooms,
+                            sqft, year_built, property_type, listing_type, images, raw_data, 
+                            latitude, longitude, status, user_id
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (address, listing_type) 
+                        DO UPDATE SET 
+                            price = EXCLUDED.price,
+                            bedrooms = EXCLUDED.bedrooms,
+                            bathrooms = EXCLUDED.bathrooms,
+                            sqft = EXCLUDED.sqft,
+                            year_built = EXCLUDED.year_built,
+                            property_type = EXCLUDED.property_type,
+                            images = EXCLUDED.images,
+                            raw_data = EXCLUDED.raw_data,
+                            latitude = EXCLUDED.latitude,
+                            longitude = EXCLUDED.longitude,
+                            updated_at = NOW()
+                        WHERE listings.price IS DISTINCT FROM EXCLUDED.price
+                           OR listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms
+                           OR listings.bathrooms IS DISTINCT FROM EXCLUDED.bathrooms
+                           OR listings.sqft IS DISTINCT FROM EXCLUDED.sqft
+                        RETURNING id, (xmax = 0) as was_inserted
+                    """, (
+                        address, row.get('city'), row.get('state'), zip_code, price,
+                        bedrooms, bathrooms, sqft, year_built, get_property_type(row),
+                        req.listing_type, images, Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
+                        'watch', DEFAULT_USER_ID
+                    ))
+                    result = cursor.fetchone()
+                    if result:
                         inserted += 1
                     else:
-                        # Insert new
-                        cursor.execute("""
-                            INSERT INTO listings (
-                                address, city, state, zip_code, price, bedrooms, bathrooms,
-                                sqft, year_built, property_type, listing_type, images, raw_data, 
-                                latitude, longitude, status, user_id
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """, (
-                            address, row.get('city'), row.get('state'), zip_code, price,
-                            bedrooms, bathrooms, sqft, year_built, get_property_type(row),
-                            req.listing_type, images, Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
-                            'watch', DEFAULT_USER_ID
-                        ))
-                        inserted += 1
+                        skipped += 1
 
                 conn.commit()
 
