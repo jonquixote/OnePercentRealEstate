@@ -16,6 +16,11 @@ services:
       - HUD_API_TOKEN=${HUD_API_TOKEN}
       - FRED_API_KEY=${FRED_API_KEY}
       - DATABASE_URL=postgresql://postgres:root_password_change_me_please@postgres:5432/postgres
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   n8n:
     image: n8nio/n8n:latest
@@ -37,6 +42,11 @@ services:
       - DB_POSTGRESDB_PASSWORD=n8n_password_change_me_please
     volumes:
       - n8n_data:/home/node/.n8n
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       - postgres
 
@@ -50,6 +60,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../init-scripts:/docker-entrypoint-initdb.d
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "5432:5432"
 
@@ -60,6 +75,11 @@ services:
       - "8001:8000"
     environment:
       - PORT=8000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   n8n_data:
