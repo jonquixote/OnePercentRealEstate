@@ -1,0 +1,29 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# 1. Check current disk usage
+send "df -h /\r"
+expect "root@"
+
+# 2. Check Docker disk usage summary
+send "docker system df\r"
+expect "root@"
+
+# 3. Find largest directories in / (top 10)
+send "du -h --max-depth=1 / | sort -rh | head -n 10\r"
+expect "root@"
+
+# 4. Find largest directories in /var/lib/docker (top 5) where docker stores data
+send "du -h --max-depth=1 /var/lib/docker | sort -rh | head -n 5\r"
+expect "root@"
+
+# 5. Check for large log files in /var/lib/docker/containers
+send "find /var/lib/docker/containers -name \"*-json.log\" -exec du -h {} + | sort -rh | head -n 5\r"
+expect "root@"
+
+send "exit\r"
+expect eof

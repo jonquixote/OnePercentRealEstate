@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check listing_date values for a known duplicate
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT address, listing_type, listing_date, created_at FROM listings WHERE address = '10022 Chardin Way, Saint Louis, MO 63128' ORDER BY created_at;\"\r"
+expect "root@"
+
+# Check how many listings have NULL listing_date
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) as null_listing_date FROM listings WHERE listing_date IS NULL;\"\r"
+expect "root@"
+
+# Check how many have listing_date set
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) as has_listing_date FROM listings WHERE listing_date IS NOT NULL;\"\r"
+expect "root@"
+
+# Quick count of duplicates in last 24h
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) as dup_count FROM (SELECT address, listing_type FROM listings WHERE created_at > NOW() - INTERVAL '24 hours' GROUP BY address, listing_type HAVING COUNT(*) > 1) sub;\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

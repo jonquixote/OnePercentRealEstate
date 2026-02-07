@@ -2,16 +2,52 @@
 
 import pool from '@/lib/db';
 
-export async function getProperties(page = 1, limit = 100, sortBy = 'newest') {
+export async function getProperties(
+    page = 1,
+    limit = 100,
+    sortBy = 'newest',
+    filters?: {
+        minPrice?: number;
+        maxPrice?: number;
+        minBeds?: number;
+        minBaths?: number;
+        onlyOnePercentRule?: boolean;
+    }
+) {
     try {
         const offset = (page - 1) * limit;
 
         let orderBy = 'created_at DESC';
-        if (sortBy === 'price_high') orderBy = 'listing_price DESC NULLS LAST';
-        if (sortBy === 'price_low') orderBy = 'listing_price ASC NULLS LAST';
-        if (sortBy === 'one_percent_high') orderBy = '(estimated_rent / NULLIF(listing_price, 0)) DESC NULLS LAST';
-        if (sortBy === 'one_percent_low') orderBy = '(estimated_rent / NULLIF(listing_price, 0)) ASC NULLS LAST';
+        if (sortBy === 'price_high') orderBy = 'price DESC NULLS LAST';
+        if (sortBy === 'price_low') orderBy = 'price ASC NULLS LAST';
+        if (sortBy === 'one_percent_high') orderBy = '(estimated_rent / NULLIF(price, 0)) DESC NULLS LAST';
+        if (sortBy === 'one_percent_low') orderBy = '(estimated_rent / NULLIF(price, 0)) ASC NULLS LAST';
         if (sortBy === 'newest') orderBy = 'created_at DESC';
+
+        // Build WHERE clauses dynamically
+        const whereClauses = ["listing_type = 'for_sale'"];
+        const params: any[] = [];
+        let paramIndex = 1;
+
+        if (filters?.minPrice && filters.minPrice > 0) {
+            whereClauses.push(`price >= $${paramIndex++}`);
+            params.push(filters.minPrice);
+        }
+        if (filters?.maxPrice && filters.maxPrice < 10000000) {
+            whereClauses.push(`price <= $${paramIndex++}`);
+            params.push(filters.maxPrice);
+        }
+        if (filters?.minBeds && filters.minBeds > 0) {
+            whereClauses.push(`bedrooms >= $${paramIndex++}`);
+            params.push(filters.minBeds);
+        }
+        if (filters?.minBaths && filters.minBaths > 0) {
+            whereClauses.push(`bathrooms >= $${paramIndex++}`);
+            params.push(filters.minBaths);
+        }
+        if (filters?.onlyOnePercentRule) {
+            whereClauses.push(`(estimated_rent / NULLIF(price, 0)) >= 0.01`);
+        }
 
         // Map 'listings' table to the 'Property' interface shape expected by the frontend
         const query = `
@@ -29,13 +65,15 @@ export async function getProperties(page = 1, limit = 100, sortBy = 'newest') {
         listing_status as status,
         created_at
       FROM listings
-      WHERE listing_status = 'FOR_SALE' OR listing_status IS NULL
+      WHERE ${whereClauses.join(' AND ')}
       ORDER BY ${orderBy}
-      LIMIT $1 OFFSET $2
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
 
+        params.push(limit, offset);
+
         const client = await pool.connect();
-        const result = await client.query(query, [limit, offset]);
+        const result = await client.query(query, params);
         client.release();
 
         return result.rows.map((row: any) => {

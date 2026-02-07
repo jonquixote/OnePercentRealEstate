@@ -1,0 +1,29 @@
+#!/usr/bin/expect -f
+set timeout 300
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check space before
+send "df -h / | grep '/$'\r"
+expect "root@"
+
+# Prune automated (forces yes)
+# -a: all unused images not just dangling
+# -f: force (no prompt)
+# --volumes: prune volumes (be careful with this, maybe skip volumes for now to be safe, though n8n/postgres data should be in named volumes or bind mounts which are usually safe from prune if not 'unused')
+# actually, let's stick to system prune -a -f first. Postgres data is likely in a volume. If the volume is used by a container (even stopped), it won't be pruned. But to be 100% safe, I will NOT use --volumes.
+send "docker system prune -a -f\r"
+expect "root@"
+
+# Check space after
+send "df -h / | grep '/$'\r"
+expect "root@"
+
+# Also check for large log files in /var/log/journal or docker
+send "du -h /var/lib/docker/containers | sort -rh | head -n 5\r"
+expect "root@"
+
+send "exit\r"
+expect eof

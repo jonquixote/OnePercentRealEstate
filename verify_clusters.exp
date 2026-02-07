@@ -1,0 +1,17 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Count how many results we get at high zoom (should be individual properties)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT jsonb_array_length(get_property_clusters(33.9, -118.4, 34.1, -118.0, 14)) as feature_count;\"\r"
+expect "root@"
+
+# Count total for_sale listings in that area to compare
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) FROM listings WHERE latitude BETWEEN 33.9 AND 34.1 AND longitude BETWEEN -118.4 AND -118.0 AND listing_type = 'for_sale';\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

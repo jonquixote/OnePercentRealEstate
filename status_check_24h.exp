@@ -1,0 +1,37 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Crawl Job Status
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'CRAWL_JOBS' as metric; SELECT status, COUNT(*) FROM crawl_jobs GROUP BY status ORDER BY status;\"\r"
+expect "root@"
+
+# Listings Totals & Last 24h
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'TOTAL_LISTINGS' as metric, COUNT(*) FROM listings;\"\r"
+expect "root@"
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'LISTINGS_LAST_24H' as metric, COUNT(*) FROM listings WHERE created_at > NOW() - INTERVAL '24 hours';\"\r"
+expect "root@"
+
+# Listings with 'for_rent' type in listings table (sanity check)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'FOR_RENT_IN_LISTINGS' as metric, COUNT(*) FROM listings WHERE listing_type = 'for_rent';\"\r"
+expect "root@"
+
+# Rentals Totals & Last 24h (rental_listings table)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'TOTAL_RENTALS' as metric, COUNT(*) FROM rental_listings;\"\r"
+expect "root@"
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'RENTALS_LAST_24H' as metric, COUNT(*) FROM rental_listings WHERE created_at > NOW() - INTERVAL '24 hours';\"\r"
+expect "root@"
+
+# Check for duplicates (should be 0) in last 24h
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'DUPLICATES_LAST_24H' as metric, COUNT(*) FROM (SELECT address, listing_type FROM listings WHERE created_at > NOW() - INTERVAL '24 hours' GROUP BY address, listing_type HAVING COUNT(*) > 1) sub;\"\r"
+expect "root@"
+
+# Disk Usage
+send "df -h / | grep '/$'\r"
+expect "root@"
+
+send "exit\r"
+expect eof

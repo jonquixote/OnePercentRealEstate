@@ -1,0 +1,26 @@
+#!/usr/bin/expect -f
+set timeout 180
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check docker usage breakdown
+send "docker system df -v\r"
+expect "root@"
+
+# Check for large individual files in docker dirs (often json logs)
+# Use find to list files > 100M
+send "find /var/lib/docker/containers -name \"*-json.log\" -size +100M -exec ls -lh {} \\;\r"
+expect "root@"
+
+# Check size of /var/lib/docker/volumes
+send "du -h -d 1 /var/lib/docker/volumes | sort -hr | head -n 10\r"
+expect "root@"
+
+# Check size of /var/lib/docker/overlay2 (images/layers)
+send "du -h -d 0 /var/lib/docker/overlay2\r"
+expect "root@"
+
+send "exit\r"
+expect eof

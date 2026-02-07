@@ -49,17 +49,24 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadProperties(1);
-  }, [sortBy]); // Reload when sort changes
+  }, [sortBy, filters]); // Reload when sort OR filters change
 
   async function loadProperties(pageNum: number) {
     try {
       if (pageNum === 1) setLoading(true);
       else setLoadingMore(true);
 
-      const data = await getProperties(pageNum, 100, sortBy);
+      const data = await getProperties(pageNum, 100, sortBy, {
+        minPrice: filters.minPrice,
+        maxPrice: filters.maxPrice,
+        minBeds: filters.minBeds,
+        minBaths: filters.minBaths,
+        onlyOnePercentRule: filters.onlyOnePercentRule
+      });
 
       // @ts-ignore
       if (data.length < 100) setHasMore(false);
+      else setHasMore(true);
 
       if (pageNum === 1) {
         // @ts-ignore
@@ -82,31 +89,15 @@ export default function Dashboard() {
     loadProperties(page + 1);
   };
 
-  // Filter Logic
+  // Client-side filtering is now minimal - server handles price/beds/baths/1% rule
+  // We only filter showSold client-side (status check)
   const filteredProperties = useMemo(() => {
     return properties.filter(p => {
-      // 1. Status (Hide Sold)
+      // Status (Hide Sold) - only client-side filter remaining
       if (!filters.showSold && (p.status === 'sold' || p.listing_price === null)) return false;
-
-      // 2. Price
-      if (p.listing_price > filters.maxPrice) return false;
-      if (p.listing_price < filters.minPrice) return false;
-
-      // 3. Beds/Baths
-      const beds = p.raw_data?.beds || 0;
-      const baths = p.raw_data?.baths || 0;
-      if (beds < filters.minBeds) return false;
-      if (baths < filters.minBaths) return false;
-
-      // 4. 1% Rule
-      if (filters.onlyOnePercentRule) {
-        if (!p.listing_price || !p.estimated_rent) return false;
-        if ((p.estimated_rent / p.listing_price) < 0.01) return false;
-      }
-
       return true;
     });
-  }, [properties, filters]);
+  }, [properties, filters.showSold]);
 
   const toggleSelection = (id: string) => {
     const newSelected = new Set(selectedProperties);

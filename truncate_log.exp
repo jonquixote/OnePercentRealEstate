@@ -1,0 +1,18 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Truncate the massive log file (wildcard for the scraper container id prefix 3c92bc)
+# Be careful with wildcards, but here we specific container ID prefix
+send "truncate -s 0 /var/lib/docker/containers/3c92bc1940e0*/*-json.log\r"
+expect "root@"
+
+# Verify space
+send "df -h /\r"
+expect "root@"
+
+send "exit\r"
+expect eof

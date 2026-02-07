@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check crawl job status breakdown
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'CRAWL_JOBS' as metric; SELECT status, COUNT(*) FROM crawl_jobs GROUP BY status ORDER BY status;\"\r"
+expect "root@"
+
+# Check listings added in LAST 1 HOUR (to verify it's currently running)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'LISTINGS_LAST_1H' as metric, COUNT(*) as count FROM listings WHERE created_at > NOW() - INTERVAL '1 hour';\"\r"
+expect "root@"
+
+# Check listings updated in LAST 1 HOUR (to see if existing ones are being updated)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'LISTINGS_UPDATED_LAST_1H' as metric, COUNT(*) as count FROM listings WHERE updated_at > NOW() - INTERVAL '1 hour' AND created_at < NOW() - INTERVAL '1 hour';\"\r"
+expect "root@"
+
+# Check total listings
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'TOTAL_LISTINGS' as metric, COUNT(*) FROM listings;\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

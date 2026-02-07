@@ -1,0 +1,33 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check crawl job status breakdown
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'CRAWL_JOBS' as metric; SELECT status, COUNT(*) FROM crawl_jobs GROUP BY status ORDER BY status;\"\r"
+expect "root@"
+
+# Check listings counts (Total and Last 24h)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'LISTINGS_TOTAL' as metric, COUNT(*) as count FROM listings;\"\r"
+expect "root@"
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'LISTINGS_LAST_24H' as metric, COUNT(*) as count FROM listings WHERE created_at > NOW() - INTERVAL '24 hours';\"\r"
+expect "root@"
+
+# Check rentals counts (Total and Last 24h)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'RENTALS_TOTAL' as metric, COUNT(*) as count FROM rental_listings;\"\r"
+expect "root@"
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT 'RENTALS_LAST_24H' as metric, COUNT(*) as count FROM rental_listings WHERE created_at > NOW() - INTERVAL '24 hours';\"\r"
+expect "root@"
+
+# Check disk usage
+send "df -h / | grep '/$'\r"
+expect "root@"
+
+# Check container uptime
+send "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep -E 'scraper|n8n|postgres'\r"
+expect "root@"
+
+send "exit\r"
+expect eof

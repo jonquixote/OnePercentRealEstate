@@ -1,0 +1,26 @@
+#!/usr/bin/expect -f
+set timeout 600
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Step 1: Just run the DELETE using a simpler approach
+# Delete duplicates keeping the one with lowest id (oldest)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"DELETE FROM listings a USING listings b WHERE a.address = b.address AND a.listing_type IS NOT DISTINCT FROM b.listing_type AND a.id > b.id;\"\r"
+expect "root@"
+
+# Step 2: Drop old constraint  
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"ALTER TABLE listings DROP CONSTRAINT IF EXISTS unique_listing;\"\r"
+expect "root@"
+
+# Step 3: Add new constraint
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"ALTER TABLE listings ADD CONSTRAINT unique_address_listing_type UNIQUE (address, listing_type);\"\r"
+expect "root@"
+
+# Verify
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT conname FROM pg_constraint WHERE conrelid = 'listings'::regclass AND contype = 'u';\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

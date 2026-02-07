@@ -1,0 +1,15 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT conname FROM pg_constraint WHERE conrelid = 'listings'::regclass AND contype = 'u';\"\r"
+expect "root@"
+
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) FROM listings;\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

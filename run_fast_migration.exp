@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+set timeout 900
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Pull latest
+send "cd /root/one-percent-scraper && git pull origin main\r"
+expect "root@"
+
+# Copy the new faster migration script
+send "docker cp /root/one-percent-scraper/infrastructure/fix_duplicates_fast.sql infrastructure-postgres-1:/tmp/\r"
+expect "root@"
+
+# Run the faster migration
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -f /tmp/fix_duplicates_fast.sql\r"
+expect "root@"
+
+# Verify duplicate count is now 0
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) as dup_groups FROM (SELECT address, listing_type FROM listings GROUP BY address, listing_type HAVING COUNT(*) > 1 LIMIT 10) sub;\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

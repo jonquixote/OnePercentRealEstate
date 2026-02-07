@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check if the new constraint exists
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'listings'::regclass AND contype = 'u';\"\r"
+expect "root@"
+
+# Check listing count
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) FROM listings;\"\r"
+expect "root@"
+
+# Check if there are any remaining duplicates
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) as dup_groups FROM (SELECT address, listing_type FROM listings GROUP BY address, listing_type HAVING COUNT(*) > 1 LIMIT 100) sub;\"\r"
+expect "root@"
+
+# Check scraper status
+send "docker ps | grep scraper\r"
+expect "root@"
+
+send "exit\r"
+expect eof
