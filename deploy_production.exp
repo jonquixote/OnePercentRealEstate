@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+set timeout 600
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Pull latest code
+send "cd /root/one-percent-scraper\r"
+expect "root@"
+send "git pull origin main\r"
+expect "root@"
+
+# Update containers
+send "cd infrastructure\r"
+expect "root@"
+send "docker-compose up -d --remove-orphans\r"
+expect "root@"
+
+# Verify Redis is running
+send "docker ps | grep redis\r"
+expect "root@"
+
+send "exit\r"
+expect eof

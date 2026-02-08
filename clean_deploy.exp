@@ -1,0 +1,37 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+send "cd /root/one-percent-scraper/infrastructure\r"
+expect "root@"
+
+# Stop services naturally first
+send "docker compose down\r"
+expect "root@"
+
+# Force remove conflicting containers (app, scraper, redis) if they persist
+# We use a loop or just aggressive grep
+send "docker ps -a | grep 'infrastructure-app' | awk '{print \$1}' | xargs -r docker rm -f\r"
+expect "root@"
+send "docker ps -a | grep 'infrastructure_app' | awk '{print \$1}' | xargs -r docker rm -f\r"
+expect "root@"
+
+send "docker ps -a | grep 'infrastructure-scraper' | awk '{print \$1}' | xargs -r docker rm -f\r"
+expect "root@"
+send "docker ps -a | grep 'infrastructure_scraper' | awk '{print \$1}' | xargs -r docker rm -f\r"
+expect "root@"
+
+send "docker ps -a | grep 'infrastructure-redis' | awk '{print \$1}' | xargs -r docker rm -f\r"
+expect "root@"
+send "docker ps -a | grep 'infrastructure_redis' | awk '{print \$1}' | xargs -r docker rm -f\r"
+expect "root@"
+
+# Start up again (no build needed, already built)
+send "docker compose up -d\r"
+expect "root@"
+
+send "exit\r"
+expect eof

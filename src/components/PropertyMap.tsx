@@ -106,106 +106,34 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
     });
 
     const [mapLoaded, setMapLoaded] = React.useState(false);
-    const [geoJsonData, setGeoJsonData] = React.useState<any>({ type: 'FeatureCollection', features: [] });
-    const [isLoading, setIsLoading] = React.useState(false);
 
-    // Fetch Properties/Clusters Logic
-    const fetchProperties = React.useCallback(async (bounds: any, zoom: number, currentFilters: any) => {
-        setIsLoading(true);
-        try {
-            const query = new URLSearchParams({
-                north: bounds.getNorth().toString(),
-                south: bounds.getSouth().toString(),
-                east: bounds.getEast().toString(),
-                west: bounds.getWest().toString(),
-                zoom: Math.round(zoom).toString(),
-            });
+    // Construct Tile URL with filters
+    const tileServerUrl = process.env.NEXT_PUBLIC_TILE_SERVER_URL || 'http://localhost:7800';
+    const tileUrl = React.useMemo(() => {
+        const params = new URLSearchParams();
+        if (filters?.minPrice) params.append('min_price', filters.minPrice.toString());
+        if (filters?.maxPrice) params.append('max_price', filters.maxPrice.toString());
+        if (filters?.minBeds) params.append('min_beds', filters.minBeds.toString());
+        if (filters?.minBaths) params.append('min_baths', filters.minBaths.toString());
+        if (filters?.status) params.append('listing_status', filters.status);
 
-            if (currentFilters?.minPrice) query.append('minPrice', currentFilters.minPrice.toString());
-            if (currentFilters?.maxPrice) query.append('maxPrice', currentFilters.maxPrice.toString());
-            if (currentFilters?.minBeds) query.append('beds', currentFilters.minBeds.toString());
-            if (currentFilters?.minBaths) query.append('baths', currentFilters.minBaths.toString());
-            // Map filter 'showSold' to status if needed, or assume 'for_sale' default
-            // The API expects 'status'
-            if (currentFilters?.status) query.append('status', currentFilters.status);
-
-            const res = await fetch(`/api/properties/viewport?${query.toString()}`);
-            if (!res.ok) throw new Error('API request failed');
-
-            const result = await res.json();
-
-            // Normalize to GeoJSON
-            const features = result.data.map((item: any) => ({
-                type: 'Feature',
-                geometry: {
-                    type: 'Point',
-                    coordinates: [item.longitude, item.latitude]
-                },
-                properties: {
-                    ...item,
-                    // If clustering, 'count' is in item. If individual property, force count=1
-                    count: item.count || 1,
-                    // Format price for display if needed
-                    formatted_price: item.price ? `$${item.price.toLocaleString()}` : 'N/A'
-                }
-            }));
-
-            setGeoJsonData({
-                type: 'FeatureCollection',
-                features
-            });
-        } catch (err) {
-            console.error('Failed to fetch map data:', err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    // Handle Map Move
-    const onMoveEnd = React.useCallback((evt: ViewStateChangeEvent) => {
-        const bounds = evt.target.getBounds();
-        if (bounds) {
-            fetchProperties(bounds, evt.viewState.zoom, filters);
-        }
-    }, [fetchProperties, filters]);
-
-    // Initial Load & Filter Change
-    React.useEffect(() => {
-        if (mapLoaded && mapRef.current) {
-            const bounds = mapRef.current.getBounds();
-            if (bounds) {
-                fetchProperties(bounds, viewState.zoom, filters);
-            }
-        }
-    }, [mapLoaded, filters, fetchProperties]); // Re-fetch when filters change
+        return `${tileServerUrl}/public.listings_mvt/{z}/{x}/{y}.pbf?${params.toString()}`;
+    }, [filters, tileServerUrl]);
 
     // Handle Click
     const handleClick = React.useCallback((event: any) => {
         const feature = event.features?.[0];
         if (!feature) return;
 
-        const isCluster = feature.properties?.count > 1;
-
-        if (isCluster) {
-            const coordinates = feature.geometry.coordinates.slice();
-            // Zoom in
-            mapRef.current?.easeTo({
-                center: coordinates,
-                zoom: viewState.zoom + 2,
-                duration: 500
-            });
-        } else {
-            // Individual property
-            const propertyId = feature.properties?.id;
-            if (propertyId) {
-                if (onMarkerClick) {
-                    onMarkerClick(propertyId);
-                } else {
-                    router.push(`/property/${propertyId}`);
-                }
+        const propertyId = feature.properties?.id;
+        if (propertyId) {
+            if (onMarkerClick) {
+                onMarkerClick(propertyId);
+            } else {
+                router.push(`/property/${propertyId}`);
             }
         }
-    }, [viewState.zoom, router, onMarkerClick]);
+    }, [router, onMarkerClick]);
 
     // Check for token
     if (!MAPBOX_TOKEN) {
@@ -217,34 +145,83 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
             <Map
                 {...viewState}
                 onMove={evt => setViewState(evt.viewState)}
-                onMoveEnd={onMoveEnd}
                 ref={mapRef}
                 mapStyle="mapbox://styles/mapbox/streets-v12"
                 mapboxAccessToken={MAPBOX_TOKEN}
-                interactiveLayerIds={['clusters', 'unclustered-point']}
+                interactiveLayerIds={['listings-circle']}
                 onClick={handleClick}
                 style={{ width: '100%', height: '100%' }}
                 reuseMaps
                 onLoad={() => setMapLoaded(true)}
             >
                 <Source
-                    id="properties"
-                    type="geojson"
-                    data={geoJsonData}
-                    cluster={false} // Server side clustering
+                    id="listings-source"
+                    type="vector"
+                    tiles={[tileUrl]}
                 >
-                    <Layer {...clusterLayer} />
-                    <Layer {...clusterCountLayer} />
-                    {/* Reuse existing layers, they use 'count' property logic which we preserved */}
-                    <Layer {...unclusteredPointLayer} />
-                    <Layer {...unclusteredLabelLayer} />
+                    <Layer
+                        id="listings-heatmap"
+                        type="heatmap"
+                        source-layer="listings"
+                        maxzoom={13}
+                        paint={{
+                            'heatmap-weight': 0.5,
+                            'heatmap-intensity': [
+                                'interpolate',
+                                ['linear'],
+                                ['zoom'],
+                                0, 0.5,
+                                13, 3
+                            ],
+                            'heatmap-color': [
+                                'interpolate',
+                                ['linear'],
+                                ['heatmap-density'],
+                                0, 'rgba(33,102,172,0)',
+                                0.2, 'rgb(103,169,207)',
+                                0.4, 'rgb(209,229,240)',
+                                0.6, 'rgb(253,219,199)',
+                                0.8, 'rgb(239,138,98)',
+                                1, 'rgb(178,24,43)'
+                            ],
+                            'heatmap-radius': [
+                                'interpolate',
+                                ['linear'],
+                                ['zoom'],
+                                0, 2,
+                                13, 20
+                            ],
+                            'heatmap-opacity': 0.7
+                        }}
+                    />
+                    <Layer
+                        id="listings-circle"
+                        type="circle"
+                        source-layer="listings"
+                        minzoom={12}
+                        paint={{
+                            'circle-color': [
+                                'interpolate',
+                                ['linear'],
+                                ['get', 'price'],
+                                100000, '#51bbd6',
+                                500000, '#f1f075',
+                                1000000, '#f28cb1'
+                            ],
+                            'circle-radius': [
+                                'interpolate',
+                                ['linear'],
+                                ['zoom'],
+                                12, 4,
+                                16, 8
+                            ],
+                            'circle-opacity': 0.8,
+                            'circle-stroke-width': 1,
+                            'circle-stroke-color': '#fff'
+                        }}
+                    />
                 </Source>
             </Map>
-            {isLoading && (
-                <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-3 py-1 rounded-full text-xs font-medium shadow-sm z-10 transition-opacity duration-200">
-                    Updating...
-                </div>
-            )}
         </div>
     );
 }
