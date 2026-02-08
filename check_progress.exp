@@ -1,0 +1,13 @@
+#!/usr/bin/expect -f
+set timeout 30
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Quick check of geometry migration progress
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(geom) as migrated, ROUND(COUNT(geom)::numeric / 1208520 * 100, 1) as pct FROM listings;\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

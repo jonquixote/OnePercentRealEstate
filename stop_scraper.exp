@@ -1,0 +1,30 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Stop scraper
+send "docker stop infrastructure-scraper-1\r"
+expect "root@"
+
+# Stop n8n temporarily too (just in case)
+send "docker stop infrastructure-n8n-1\r"
+expect "root@"
+
+# Check active queries - migration should be moving now
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT pid, state, now() - query_start as duration, left(query, 60) as query FROM pg_stat_activity WHERE state != 'idle' ORDER BY duration DESC;\"\r"
+expect "root@"
+
+send "echo 'Scraper stopped. Waiting 30s...'\r"
+expect "root@"
+send "sleep 30\r"
+expect "root@"
+
+# Check count again
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(geom) as migrated FROM listings;\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

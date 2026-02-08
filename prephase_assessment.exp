@@ -1,0 +1,29 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check table structure and row count
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"\n\\d listings\n\"\r"
+expect "root@"
+
+# Check total row count
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) as total_listings FROM listings;\"\r"
+expect "root@"
+
+# Check PostGIS availability
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT PostGIS_Version();\"\r"
+expect "root@"
+
+# Check if geometry column exists
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'listings' AND column_name IN ('latitude', 'longitude', 'geom');\"\r"
+expect "root@"
+
+# Check existing indexes
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT indexname FROM pg_indexes WHERE tablename = 'listings';\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

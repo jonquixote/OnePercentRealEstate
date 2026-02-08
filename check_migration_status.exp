@@ -1,0 +1,21 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check geometry migration status
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) as total, COUNT(geom) as with_geom, ROUND(COUNT(geom)::numeric / NULLIF(COUNT(*), 0)::numeric * 100, 2) as pct FROM listings WHERE latitude IS NOT NULL;\"\r"
+expect "root@"
+
+# Check if GIST index exists
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT indexname FROM pg_indexes WHERE tablename = 'listings' AND indexname LIKE '%geom%';\"\r"
+expect "root@"
+
+# Check active queries (is migration still running?)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT query, state, wait_event FROM pg_stat_activity WHERE query LIKE '%ST_SetSRID%' OR query LIKE '%geom%' LIMIT 3;\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof

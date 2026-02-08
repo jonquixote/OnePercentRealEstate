@@ -1,0 +1,31 @@
+#!/usr/bin/expect -f
+set timeout 1800
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Pull latest code 
+send "cd /root/one-percent-scraper && git pull origin main\r"
+expect "root@"
+
+# Copy new migration script to container
+send "docker cp infrastructure/phase1_bulk_migration.sql infrastructure-postgres-1:/tmp/\r"
+expect "root@"
+
+# Run migration in background with detached mode
+send "docker exec -d infrastructure-postgres-1 bash -c 'psql -U postgres -d postgres -f /tmp/phase1_bulk_migration.sql > /tmp/bulk_migration.log 2>&1'\r"
+expect "root@"
+
+send "echo 'Bulk migration started. Will monitor...'\r"
+expect "root@"
+
+# Sleep and check periodically
+send "sleep 60\r"
+expect "root@"
+
+send "docker exec infrastructure-postgres-1 cat /tmp/bulk_migration.log 2>/dev/null || echo 'Still running...'\r"
+expect "root@"
+
+send "exit\r"
+expect eof

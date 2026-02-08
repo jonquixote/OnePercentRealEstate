@@ -1,0 +1,46 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Create the monitoring script directly on the server
+send "cat > /root/monitor_and_restart.sh << 'EOF'\r"
+send "#!/bin/bash\n"
+send "LOG_FILE=\"/root/migration_monitor.log\"\n"
+send "echo \"Starting monitoring at \$(date)\" > \$LOG_FILE\n"
+send "\n"
+send "while true; do\n"
+send "    # Check if migration query is running\n"
+send "    ACTIVE=\$(docker exec infrastructure-postgres-1 psql -U postgres -d postgres -t -c \"SELECT COUNT(*) FROM pg_stat_activity WHERE query LIKE '%ST_SetSRID%' AND state = 'active';\" | tr -d '\[:space:\]')\n"
+send "    echo \"Active migration queries: \$ACTIVE\" >> \$LOG_FILE\n"
+send "    \n"
+send "    if \[ \"\$ACTIVE\" == \"0\" \]; then\n"
+send "        echo \"Migration completed at \$(date). verification needed.\" >> \$LOG_FILE\n"
+send "        # Verify count to be safe (optional, but good)\n"
+send "        COUNT=\$(docker exec infrastructure-postgres-1 psql -U postgres -d postgres -t -c \"SELECT COUNT(geom) FROM listings;\" | tr -d '\[:space:\]')\n"
+send "        echo \"Rows with geometry: \$COUNT\" >> \$LOG_FILE\n"
+send "        \n"
+send "        echo \"Restarting scraper and n8n...\" >> \$LOG_FILE\n"
+send "        docker start infrastructure-scraper-1\n"
+send "        docker start infrastructure-n8n-1\n"
+send "        echo \"Done.\" >> \$LOG_FILE\n"
+send "        break\n"
+send "    fi\n"
+send "    sleep 30\n"
+send "done\n"
+send "EOF\r"
+expect "root@"
+
+# Make executable and run in background
+send "chmod +x /root/monitor_and_restart.sh\r"
+expect "root@"
+send "nohup /root/monitor_and_restart.sh > /dev/null 2>&1 &\r"
+expect "root@"
+
+send "echo 'Monitor script started.'\r"
+expect "root@"
+
+send "exit\r"
+expect eof

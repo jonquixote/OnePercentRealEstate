@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.245.184.89
+expect "password:"
+send "appo0-buXbym-cijzy\r"
+expect "root@"
+
+# Check migration log
+send "docker exec infrastructure-postgres-1 cat /tmp/migration.log 2>/dev/null || echo 'No log yet'\r"
+expect "root@"
+
+# Check if migration query is still active
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(*) as active FROM pg_stat_activity WHERE query LIKE '%ST_SetSRID%' AND state = 'active';\"\r"
+expect "root@"
+
+# Check geometry count (use a hint for no seq scan to be fast)
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT COUNT(geom) as migrated FROM listings;\"\r"
+expect "root@"
+
+# Check for any indexes created
+send "docker exec infrastructure-postgres-1 psql -U postgres -d postgres -c \"SELECT indexname FROM pg_indexes WHERE tablename = 'listings' AND indexname LIKE '%geom%';\"\r"
+expect "root@"
+
+send "exit\r"
+expect eof
