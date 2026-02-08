@@ -95,6 +95,21 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  pg_tileserv:
+    image: ramsey/pg_tileserv:latest
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://postgres:root_password_change_me_please@postgres/postgres
+    ports:
+      - "7800:7800"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      - postgres
+
 volumes:
   n8n_data:
   postgres_data:
