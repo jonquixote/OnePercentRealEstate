@@ -215,7 +215,15 @@ export default function Dashboard() {
 
         {/* Map View */}
         <div className={`${showMap ? 'block h-[50vh] lg:h-[calc(100vh-140px)] lg:w-[45%] lg:sticky lg:top-[140px]' : 'hidden'} relative border-l border-gray-200`}>
-          <PropertyMap properties={filteredProperties} />
+          <PropertyMap
+            filters={{
+              minPrice: filters.minPrice,
+              maxPrice: filters.maxPrice,
+              minBeds: filters.minBeds,
+              minBaths: filters.minBaths,
+              status: filters.showSold ? 'sold' : 'for_sale'
+            }}
+          />
           {/* Toggle for Desktop */}
           <button
             onClick={() => setShowMap(!showMap)}

@@ -81,6 +81,21 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  redis:
+    image: redis:alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   n8n_data:
   postgres_data:
+  redis_data:

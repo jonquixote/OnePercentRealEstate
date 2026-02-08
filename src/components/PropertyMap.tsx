@@ -15,10 +15,7 @@ interface Property {
     status: string;
 }
 
-interface PropertyMapProps {
-    properties: Property[]; // Fallback or initial data
-    onMarkerClick?: (property: Property) => void;
-}
+
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -86,7 +83,18 @@ const unclusteredLabelLayer: any = {
     }
 };
 
-export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
+export interface PropertyMapProps {
+    filters?: {
+        minPrice?: number;
+        maxPrice?: number;
+        minBeds?: number;
+        minBaths?: number;
+        status?: string; // 'for_sale' | 'sold'
+    };
+    onMarkerClick?: (propertyId: string) => void;
+}
+
+export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
     const mapRef = React.useRef<MapRef>(null);
     const router = useRouter();
 
@@ -98,22 +106,56 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
     });
 
     const [mapLoaded, setMapLoaded] = React.useState(false);
-    const [clusters, setClusters] = React.useState<any>({ type: 'FeatureCollection', features: [] });
+    const [geoJsonData, setGeoJsonData] = React.useState<any>({ type: 'FeatureCollection', features: [] });
     const [isLoading, setIsLoading] = React.useState(false);
 
-    // Fetch Clusters Logic
-    const fetchClusters = React.useCallback(async (bounds: any, zoom: number) => {
+    // Fetch Properties/Clusters Logic
+    const fetchProperties = React.useCallback(async (bounds: any, zoom: number, currentFilters: any) => {
         setIsLoading(true);
         try {
-            const res = await fetch(`/api/clusters?min_lat=${bounds.getSouth()}&max_lat=${bounds.getNorth()}&min_lon=${bounds.getWest()}&max_lon=${bounds.getEast()}&zoom=${Math.round(zoom)}`);
-            const data = await res.json();
-            const features = Array.isArray(data) ? data : (data.features || []);
-            setClusters({
+            const query = new URLSearchParams({
+                north: bounds.getNorth().toString(),
+                south: bounds.getSouth().toString(),
+                east: bounds.getEast().toString(),
+                west: bounds.getWest().toString(),
+                zoom: Math.round(zoom).toString(),
+            });
+
+            if (currentFilters?.minPrice) query.append('minPrice', currentFilters.minPrice.toString());
+            if (currentFilters?.maxPrice) query.append('maxPrice', currentFilters.maxPrice.toString());
+            if (currentFilters?.minBeds) query.append('beds', currentFilters.minBeds.toString());
+            if (currentFilters?.minBaths) query.append('baths', currentFilters.minBaths.toString());
+            // Map filter 'showSold' to status if needed, or assume 'for_sale' default
+            // The API expects 'status'
+            if (currentFilters?.status) query.append('status', currentFilters.status);
+
+            const res = await fetch(`/api/properties/viewport?${query.toString()}`);
+            if (!res.ok) throw new Error('API request failed');
+
+            const result = await res.json();
+
+            // Normalize to GeoJSON
+            const features = result.data.map((item: any) => ({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [item.longitude, item.latitude]
+                },
+                properties: {
+                    ...item,
+                    // If clustering, 'count' is in item. If individual property, force count=1
+                    count: item.count || 1,
+                    // Format price for display if needed
+                    formatted_price: item.price ? `$${item.price.toLocaleString()}` : 'N/A'
+                }
+            }));
+
+            setGeoJsonData({
                 type: 'FeatureCollection',
-                features: features
+                features
             });
         } catch (err) {
-            console.error('Failed to fetch clusters:', err);
+            console.error('Failed to fetch map data:', err);
         } finally {
             setIsLoading(false);
         }
@@ -123,45 +165,47 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
     const onMoveEnd = React.useCallback((evt: ViewStateChangeEvent) => {
         const bounds = evt.target.getBounds();
         if (bounds) {
-            fetchClusters(bounds, evt.viewState.zoom);
+            fetchProperties(bounds, evt.viewState.zoom, filters);
         }
-    }, [fetchClusters]);
+    }, [fetchProperties, filters]);
 
-    // Initial Load - Fetch for whole US
+    // Initial Load & Filter Change
     React.useEffect(() => {
         if (mapLoaded && mapRef.current) {
             const bounds = mapRef.current.getBounds();
             if (bounds) {
-                fetchClusters(bounds, viewState.zoom);
+                fetchProperties(bounds, viewState.zoom, filters);
             }
         }
-    }, [mapLoaded]); // Run once when map is ready
-
+    }, [mapLoaded, filters, fetchProperties]); // Re-fetch when filters change
 
     // Handle Click
     const handleClick = React.useCallback((event: any) => {
         const feature = event.features?.[0];
         if (!feature) return;
 
-        const cluster = feature.properties?.count > 1;
+        const isCluster = feature.properties?.count > 1;
 
-        if (cluster) {
-            const coordinates = feature.geometry.coordinates;
+        if (isCluster) {
+            const coordinates = feature.geometry.coordinates.slice();
+            // Zoom in
             mapRef.current?.easeTo({
                 center: coordinates,
                 zoom: viewState.zoom + 2,
                 duration: 500
             });
         } else {
-            // It's a single point
-            // The property ID might be in feature.properties.id if we returned it, but our SQL aggregation might verify that.
-            // Our SQL returns 'id' as min(id)
+            // Individual property
             const propertyId = feature.properties?.id;
             if (propertyId) {
-                router.push(`/property/${propertyId}`);
+                if (onMarkerClick) {
+                    onMarkerClick(propertyId);
+                } else {
+                    router.push(`/property/${propertyId}`);
+                }
             }
         }
-    }, [viewState.zoom, router]);
+    }, [viewState.zoom, router, onMarkerClick]);
 
     // Check for token
     if (!MAPBOX_TOKEN) {
@@ -186,13 +230,14 @@ export function PropertyMap({ properties, onMarkerClick }: PropertyMapProps) {
                 <Source
                     id="properties"
                     type="geojson"
-                    data={clusters}
+                    data={geoJsonData}
                     cluster={false} // Server side clustering
                 >
                     <Layer {...clusterLayer} />
                     <Layer {...clusterCountLayer} />
-                    <Layer {...unclusteredPointLayer} filter={['==', ['get', 'count'], 1]} />
-                    <Layer {...unclusteredLabelLayer} filter={['==', ['get', 'count'], 1]} />
+                    {/* Reuse existing layers, they use 'count' property logic which we preserved */}
+                    <Layer {...unclusteredPointLayer} />
+                    <Layer {...unclusteredLabelLayer} />
                 </Source>
             </Map>
             {isLoading && (
