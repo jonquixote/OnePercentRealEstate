@@ -96,7 +96,7 @@ services:
         max-file: "3"
 
   pg_tileserv:
-    image: ramsey/pg_tileserv:latest
+    image: pramsey/pg_tileserv:latest
     restart: always
     environment:
       - DATABASE_URL=postgresql://postgres:root_password_change_me_please@postgres/postgres
