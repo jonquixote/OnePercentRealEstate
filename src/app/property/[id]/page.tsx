@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { PropertyReport } from '@/components/PropertyReport';
 import { AdvancedRentEstimator } from '@/components/AdvancedRentEstimator';
 import { CashflowCalculator } from '@/components/CashflowCalculator';
+import { calculatePropertyMetrics } from '@/lib/calculators';
 import { PropertyHero } from '@/components/PropertyHero';
 import { PropertyTabs } from '@/components/PropertyTabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -107,9 +108,8 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
     const formatNumber = (val: number) => new Intl.NumberFormat('en-US').format(val);
 
     // Basic Calcs
-    const ratio = (listing_price > 0) ? (estimated_rent / listing_price) : 0;
-    const isGoodDeal = ratio >= 0.01;
-    const estCashflow = (estimated_rent * 0.70) - ((listing_price * 0.8 * 0.065 / 12) + (listing_price * 0.012 / 12) + 100); // Rough calc for overview
+    const { isOnePercentRule, monthlyCashflow } = calculatePropertyMetrics(listing_price, estimated_rent);
+    const estCashflow = monthlyCashflow; // For compatibility with existing render logic
 
     return (
         <div className="min-h-screen bg-gray-50 pb-12">
@@ -429,8 +429,8 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-6">
                                     <h3 className="text-blue-900 font-semibold mb-2">Analyst Note</h3>
                                     <p className="text-sm text-blue-800">
-                                        This property {isGoodDeal ? 'passes' : 'does not pass'} the 1% rule.
-                                        {isGoodDeal
+                                        This property {isOnePercentRule ? 'passes' : 'does not pass'} the 1% rule.
+                                        {isOnePercentRule
                                             ? ' It shows strong potential for immediate cash flow.'
                                             : ' Consider negotiating the price down or verifying if market rents are higher.'}
                                     </p>

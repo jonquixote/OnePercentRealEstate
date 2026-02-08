@@ -1,6 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import Link from 'next/link';
+import { calculatePropertyMetrics } from '@/lib/calculators';
 
 const Card = React.forwardRef<
     HTMLDivElement,
@@ -26,10 +27,9 @@ interface PropertyCardProps {
 export function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {
     const { address, listing_price, estimated_rent, financial_snapshot, status } = property;
 
-    // Calculate 1% Rule Ratio
+    // Calculate Metrics
+    const { isOnePercentRule, monthlyCashflow } = calculatePropertyMetrics(listing_price, estimated_rent);
     const hasRent = estimated_rent && estimated_rent > 0;
-    const ratio = hasRent ? (estimated_rent / listing_price) * 100 : 0;
-    const isGoodDeal = hasRent && ratio >= 1.0;
 
     // Format currency
     const formatCurrency = (val: number) =>
@@ -77,10 +77,10 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
                             <div className="flex items-center space-x-2">
                                 <span className={cn(
                                     "flex h-2.5 w-2.5 rounded-full",
-                                    isGoodDeal ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-amber-400"
+                                    isOnePercentRule ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-amber-400"
                                 )} />
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                    {isGoodDeal ? 'STRONG' : 'REVIEW'}
+                                    {isOnePercentRule ? 'STRONG' : 'REVIEW'}
                                 </span>
                             </div>
                         ) : (
@@ -150,15 +150,15 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
 
                     <div className={cn(
                         "px-6 py-4 flex items-center justify-between",
-                        hasRent && isGoodDeal ? "bg-emerald-50/50" : (hasRent ? "bg-amber-50/50" : "bg-gray-50")
+                        hasRent && isOnePercentRule ? "bg-emerald-50/50" : (hasRent ? "bg-amber-50/50" : "bg-gray-50")
                     )}>
                         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">1% Rule</span>
                         <div className="flex items-center">
                             <span className={cn(
                                 "text-lg font-black tracking-tight",
-                                hasRent ? (isGoodDeal ? "text-emerald-600" : "text-amber-600") : "text-gray-300"
+                                hasRent ? (isOnePercentRule ? "text-emerald-600" : "text-amber-600") : "text-gray-300"
                             )}>
-                                {hasRent ? ratio.toFixed(2) + '%' : '—'}
+                                {hasRent ? ((estimated_rent / listing_price) * 100).toFixed(2) + '%' : '—'}
                             </span>
                         </div>
                     </div>

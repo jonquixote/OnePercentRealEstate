@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Info } from 'lucide-react';
+import { calculatePropertyMetrics, DEFAULT_LOAN_OPTIONS, DEFAULT_EXPENSE_OPTIONS } from '@/lib/calculators';
 
 const calculatorSchema = z.object({
     // Purchase Details
@@ -83,23 +84,23 @@ export function CashflowCalculator({ property }: CashflowCalculatorProps) {
         defaultValues: {
             purchasePrice: defaultPrice,
             closingCosts: defaultPrice * 0.03, // 3% closing costs
-            downPayment: defaultPrice * 0.20, // 20% down
-            loanTerm: 30,
-            interestRate: 6.5,
+            downPayment: defaultPrice * DEFAULT_LOAN_OPTIONS.downPaymentPercent,
+            loanTerm: DEFAULT_LOAN_OPTIONS.loanTermYears,
+            interestRate: DEFAULT_LOAN_OPTIONS.interestRate * 100,
             points: 0,
-            pmiRate: 0.5, // Default 0.5% PMI
-            insuranceCost: 1200,
-            propertyTaxRate: Number(defaultTaxRate.toFixed(2)),
+            pmiRate: (DEFAULT_LOAN_OPTIONS.pmiRate || 0.005) * 100,
+            insuranceCost: DEFAULT_EXPENSE_OPTIONS.insuranceAnnual,
+            propertyTaxRate: Number(defaultTaxRate.toFixed(2)) || (DEFAULT_EXPENSE_OPTIONS.propertyTaxRate * 100),
             monthlyRent: defaultRent,
             annualRentGrowth: 3,
-            maintenanceRate: 5,
-            vacancyRate: 5,
-            managementFeeRate: 8,
-            capExRate: 5,
-            utilities: 0,
-            hoaFees: defaultHOA,
+            maintenanceRate: DEFAULT_EXPENSE_OPTIONS.maintenanceRate * 100,
+            vacancyRate: DEFAULT_EXPENSE_OPTIONS.vacancyRate * 100,
+            managementFeeRate: DEFAULT_EXPENSE_OPTIONS.managementRate * 100,
+            capExRate: DEFAULT_EXPENSE_OPTIONS.capExRate * 100,
+            utilities: DEFAULT_EXPENSE_OPTIONS.utilitiesMonthly,
+            hoaFees: defaultHOA, // Keep property specific
             garbage: 0,
-            otherExpenses: 0
+            otherExpenses: DEFAULT_EXPENSE_OPTIONS.otherMonthly
         }
     });
 
@@ -140,66 +141,50 @@ export function CashflowCalculator({ property }: CashflowCalculatorProps) {
     }, []);
 
     const calculateMonthlyResults = (data: CalculatorInputs) => {
-        // Calculate monthly mortgage payment
-        const loanAmount = data.purchasePrice - data.downPayment;
-        const monthlyRate = data.interestRate / 12 / 100;
-        const numPayments = data.loanTerm * 12;
+        const {
+            monthlyMortgage,
+            monthlyPMI,
+            monthlyPropertyTax,
+            monthlyInsurance,
+            monthlyExpenses, // Ops + Tax + Ins + PMI
+            monthlyCashflow,
+            totalMonthlyExpense
+        } = calculatePropertyMetrics(
+            data.purchasePrice,
+            data.monthlyRent,
+            {
+                downPaymentPercent: data.downPayment / data.purchasePrice,
+                interestRate: data.interestRate / 100,
+                loanTermYears: data.loanTerm,
+                pmiRate: data.pmiRate / 100
+            },
+            {
+                propertyTaxRate: data.propertyTaxRate / 100,
+                insuranceAnnual: data.insuranceCost,
+                maintenanceRate: data.maintenanceRate / 100,
+                vacancyRate: data.vacancyRate / 100,
+                managementRate: data.managementFeeRate / 100,
+                capExRate: data.capExRate / 100,
+                hoaMonthly: data.hoaFees,
+                utilitiesMonthly: data.utilities,
+                otherMonthly: data.otherExpenses + data.garbage // Combine strictly per interface or add garbage field to interface if needed
+            }
+        );
 
-        let monthlyMortgage = 0;
-        if (monthlyRate > 0) {
-            monthlyMortgage = loanAmount *
-                (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) /
-                (Math.pow(1 + monthlyRate, numPayments) - 1);
-        } else {
-            monthlyMortgage = loanAmount / numPayments;
-        }
-
-        // Calculate PMI
-        let monthlyPMI = 0;
-        const downPaymentPercent = data.downPayment / data.purchasePrice;
-        if (downPaymentPercent < 0.20 && data.pmiRate > 0) {
-            monthlyPMI = (loanAmount * (data.pmiRate / 100)) / 12;
-        }
-
-        // Calculate monthly income
-        const monthlyRent = data.monthlyRent;
-        const totalIncome = monthlyRent;
-
-        // Calculate monthly expenses
-        const monthlyInsurance = data.insuranceCost / 12;
-        const monthlyPropertyTax = data.purchasePrice * data.propertyTaxRate / 12 / 100;
-        const monthlyMaintenance = monthlyRent * data.maintenanceRate / 100;
-        const monthlyVacancy = monthlyRent * data.vacancyRate / 100;
-        const monthlyManagement = monthlyRent * data.managementFeeRate / 100;
-        const monthlyCapEx = monthlyRent * data.capExRate / 100;
-        const monthlyUtilities = data.utilities;
-        const monthlyHOA = data.hoaFees;
-        const monthlyGarbage = data.garbage;
-        const monthlyOther = data.otherExpenses;
-
-        const operatingExpenses =
-            monthlyMaintenance +
-            monthlyVacancy +
-            monthlyManagement +
-            monthlyCapEx +
-            monthlyUtilities +
-            monthlyHOA +
-            monthlyGarbage +
-            monthlyOther;
-
-        const totalExpenses =
-            monthlyMortgage +
-            monthlyInsurance +
-            monthlyPropertyTax +
-            operatingExpenses +
-            monthlyPMI;
+        // Calculate operating expenses for display (excluding mortgage/tax/ins/pmi if desired, or matching previous logic)
+        // Previous logic: OpEx = Maint + Vac + Mgmt + CapEx + Util + HOA + Garbage + Other
+        // Shared logic returns totalMonthlyExpense (everything) and monthlyExpenses (everything except Mortgage)
+        // To match exact display breakdown:
+        const operatingExpensesOnly =
+            (data.monthlyRent * (data.maintenanceRate + data.vacancyRate + data.managementFeeRate + data.capExRate) / 100) +
+            data.utilities + data.hoaFees + data.garbage + data.otherExpenses;
 
         setMonthlyResults({
-            cashflow: totalIncome - totalExpenses,
-            totalIncome,
-            totalExpenses,
+            cashflow: monthlyCashflow,
+            totalIncome: data.monthlyRent,
+            totalExpenses: totalMonthlyExpense,
             mortgage: monthlyMortgage,
-            operatingExpenses,
+            operatingExpenses: operatingExpensesOnly,
             taxes: monthlyPropertyTax,
             insurance: monthlyInsurance,
             pmi: monthlyPMI
