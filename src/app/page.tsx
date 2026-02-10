@@ -137,7 +137,9 @@ export default function Dashboard() {
         {/* Use fixed height for map layout, subtract header/filter height approx */}
 
         {/* List View (Scrollable) */}
-        <div className={`flex-1 overflow-y-auto p-6 ${showMap ? 'lg:w-[55%]' : 'w-full'} transition-all duration-300`}>
+        <div className={`flex-1 overflow-y-auto p-6 transition-all duration-300
+          ${showMap ? 'hidden lg:block lg:w-[55%]' : 'w-full'} 
+        `}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
             <h2 className="text-xl font-bold flex items-center">
               <BarChart3 className="mr-2 h-5 w-5 text-slate-500" />
@@ -214,7 +216,11 @@ export default function Dashboard() {
         </div>
 
         {/* Map View */}
-        <div className={`${showMap ? 'block h-[50vh] lg:h-[calc(100vh-140px)] lg:w-[45%] lg:sticky lg:top-[140px]' : 'hidden'} relative border-l border-gray-200`}>
+        <div className={`
+          ${showMap ? 'block h-full w-full' : 'hidden'} 
+          lg:block lg:h-[calc(100vh-140px)] lg:w-[45%] lg:sticky lg:top-[140px]
+          relative border-l border-gray-200
+        `}>
           <PropertyMap
             filters={{
               minPrice: filters.minPrice,
@@ -232,6 +238,14 @@ export default function Dashboard() {
           >
             {showMap ? <ArrowRight className="h-4 w-4" /> : <MapIcon className="h-4 w-4" />}
           </button>
+
+          {/* Mobile Floating Toggle (Visible only when Map is open) */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 lg:hidden">
+            <Button variant="default" size="default" className="shadow-lg rounded-full px-6" onClick={() => setShowMap(false)}>
+              <ListIcon className="h-4 w-4 mr-2" />
+              Show List
+            </Button>
+          </div>
         </div>
       </div>
 
