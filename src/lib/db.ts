@@ -1,16 +1,22 @@
 import { Pool } from 'pg';
 
-const pool = new Pool({
-    user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD || 'root_password_change_me_please',
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: process.env.POSTGRES_DB || 'postgres',
-    // Maximum number of clients in the pool
-    max: 20,
-    // Duration of time a client can remain idle before being closed
-    idleTimeoutMillis: 30000,
-});
+const pool = new Pool(
+    process.env.DATABASE_URL
+        ? {
+            connectionString: process.env.DATABASE_URL,
+            max: 20,
+            idleTimeoutMillis: 30000,
+        }
+        : {
+            user: process.env.POSTGRES_USER || 'postgres',
+            password: process.env.POSTGRES_PASSWORD || 'root_password_change_me_please',
+            host: process.env.POSTGRES_HOST || 'localhost',
+            port: parseInt(process.env.POSTGRES_PORT || '5432'),
+            database: process.env.POSTGRES_DB || 'postgres',
+            max: 20,
+            idleTimeoutMillis: 30000,
+        }
+);
 
 // Wrap the original query method to add logging
 const originalQuery = pool.query.bind(pool);
