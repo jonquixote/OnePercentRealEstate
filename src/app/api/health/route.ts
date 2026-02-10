@@ -1,11 +1,11 @@
 
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { Redis } from 'ioredis';
+import redis from '@/lib/redis';
 
 export async function GET() {
     const healthStatus = {
-        status: 'ok',
+        status: 'ok' as 'ok' | 'degraded',
         timestamp: new Date().toISOString(),
         services: {
             database: 'unknown',
@@ -27,9 +27,8 @@ export async function GET() {
 
     // Check Redis
     try {
-        const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+        // Just check if we can ping the singleton
         await redis.ping();
-        redis.disconnect();
         healthStatus.services.redis = 'healthy';
     } catch (error) {
         console.error('Health Check - Redis Error:', error);

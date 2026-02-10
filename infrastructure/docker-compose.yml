@@ -16,6 +16,7 @@ services:
       - HUD_API_TOKEN=${HUD_API_TOKEN}
       - FRED_API_KEY=${FRED_API_KEY}
       - DATABASE_URL=postgresql://postgres:root_password_change_me_please@postgres:5432/postgres
+      - REDIS_URL=redis://redis:6379
     logging:
       driver: "json-file"
       options:
