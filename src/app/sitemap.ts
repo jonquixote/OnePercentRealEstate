@@ -1,49 +1,53 @@
 import { MetadataRoute } from 'next';
-import pool from '@/lib/db';
+
+// Sitemap is generated at request time so missing DB during `next build`
+// (e.g. on Vercel preview deploys) doesn't fail the build. The route
+// segment is force-dynamic.
+export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
+
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://one.octavo.press';
+
+async function fetchZipCodes(): Promise<string[]> {
+    try {
+        // Lazy-import to avoid pulling pg into the build graph when the
+        // env is incomplete.
+        const { default: pool } = await import('@/lib/db');
+        const client = await pool.connect();
+        try {
+            const result = await client.query(`
+                SELECT DISTINCT raw_data->>'zip_code' AS zip_code
+                FROM listings
+                WHERE raw_data->>'zip_code' IS NOT NULL
+                LIMIT 500
+            `);
+            return result.rows
+                .map((r: { zip_code: string | null }) => r.zip_code)
+                .filter((z): z is string => !!z && /^\d{5}$/.test(z));
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.warn('[sitemap] zip code query failed, returning core routes only:', error);
+        return [];
+    }
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-    const baseUrl = 'https://onepercentrealestate.vercel.app';
-
-    // core routes
-    const routes = [
-        '',
-        '/search',
-        '/analytics',
-        '/pricing',
-    ].map((route) => ({
-        url: `${baseUrl}${route}`,
+    const coreRoutes = ['', '/search', '/analytics', '/pricing'].map((route) => ({
+        url: `${BASE_URL}${route}`,
         lastModified: new Date(),
         changeFrequency: 'daily' as const,
         priority: 1,
     }));
 
-    // programmatically generate routes for every zip code in DB
-    let marketRoutes: MetadataRoute.Sitemap = [];
+    const zips = await fetchZipCodes();
+    const marketRoutes: MetadataRoute.Sitemap = zips.map((zip) => ({
+        url: `${BASE_URL}/market/${zip}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.8,
+    }));
 
-    try {
-        const client = await pool.connect();
-        const result = await client.query(`
-            SELECT DISTINCT raw_data->>'zip_code' as zip_code 
-            FROM listings 
-            WHERE raw_data->>'zip_code' IS NOT NULL
-            LIMIT 500
-        `);
-        client.release();
-
-        // Extract unique zip codes
-        const zips = result.rows
-            .filter(row => row.zip_code && /^\d{5}$/.test(row.zip_code))
-            .map(row => row.zip_code);
-
-        marketRoutes = zips.map((zip) => ({
-            url: `${baseUrl}/market/${zip}`,
-            lastModified: new Date(),
-            changeFrequency: 'weekly' as const,
-            priority: 0.8,
-        }));
-    } catch (error) {
-        console.error('Failed to fetch zip codes for sitemap:', error);
-    }
-
-    return [...routes, ...marketRoutes];
+    return [...coreRoutes, ...marketRoutes];
 }
