@@ -31,6 +31,12 @@
       ],
       "@oper/primitives/*": [
         "../../packages/primitives/src/*"
+      ],
+      "@oper/api-client": [
+        "../../packages/api-client/src/index.ts"
+      ],
+      "@oper/api-client/*": [
+        "../../packages/api-client/src/*"
       ]
     }
   },

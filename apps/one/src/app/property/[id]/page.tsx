@@ -3,6 +3,7 @@
 import { use, useState, useEffect } from 'react';
 import { getProperty, getHudBenchmark } from '@/app/actions';
 import { Loader2 } from 'lucide-react';
+import { Schema, type RealEstateListingData } from '@oper/primitives';
 import { PropertyReport } from '@/components/PropertyReport';
 import { calculatePropertyMetrics } from '@/lib/calculators';
 import { PropertyHero } from '@/components/PropertyHero';
@@ -13,6 +14,39 @@ import { PropertyFinancialsTab } from '@/components/property/PropertyFinancialsT
 import { PropertyMarketTab } from '@/components/property/PropertyMarketTab';
 import { useToast } from '@/components/ui/toast';
 import { usePropertyExport } from '@/hooks/usePropertyExport';
+
+function buildSchemaData(property: any, id: string): RealEstateListingData | null {
+    if (!property) return null;
+    const raw = property.raw_data || {};
+    const site = process.env.NEXT_PUBLIC_SITE_URL || 'https://one.octavo.press';
+    const image: string[] = Array.isArray(property.images) ? property.images.filter(Boolean) : [];
+    return {
+        url: `${site}/property/${id}`,
+        name: property.address || `Property ${id}`,
+        description: typeof raw.text === 'string' ? raw.text.slice(0, 500) : undefined,
+        image: image.length > 0 ? image : undefined,
+        address: {
+            streetAddress: property.address,
+            addressLocality: raw.city || undefined,
+            addressRegion: raw.state || undefined,
+            postalCode: raw.zip_code || undefined,
+            addressCountry: 'US',
+        },
+        geo: property.latitude && property.longitude
+            ? { latitude: Number(property.latitude), longitude: Number(property.longitude) }
+            : undefined,
+        offers: property.listing_price
+            ? { price: Number(property.listing_price), priceCurrency: 'USD', availability: 'InStock' }
+            : undefined,
+        numberOfBedrooms: property.financial_snapshot?.bedrooms || undefined,
+        numberOfBathrooms: property.financial_snapshot?.bathrooms || undefined,
+        floorSize: property.financial_snapshot?.sqft
+            ? { value: property.financial_snapshot.sqft, unitCode: 'FTK' }
+            : undefined,
+        yearBuilt: raw.year_built || undefined,
+        datePosted: property.created_at,
+    };
+}
 
 export default function PropertyPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -53,9 +87,11 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
     const { address = '', listing_price = 0, estimated_rent = 0, status = 'watch', images = [], raw_data: rawData = {} } = property;
     const listingUrl = rawData?.property_url || rawData?.url || null;
     const { isOnePercentRule, monthlyCashflow, capRate, cashOnCash } = calculatePropertyMetrics(listing_price, estimated_rent);
+    const schemaData = buildSchemaData(property, id);
 
     return (
         <div className="min-h-screen bg-gray-50 pb-12">
+            {schemaData && <Schema kind="RealEstateListing" data={schemaData} />}
             <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
                 <PropertyReport ref={reportRef} property={property} />
             </div>

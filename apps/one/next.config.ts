@@ -2,12 +2,21 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  transpilePackages: ["@oper/primitives"],
   images: {
+    // Explicit allowlist replaces the previous `hostname: "**"` wildcard.
+    // Add new origin patterns here as scrapers add new sources; the Wave 7
+    // media-health crawler will surface any blocked hosts via 4xx in
+    // listings.media_url_status.
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "**",
-      },
+      { protocol: "https", hostname: "*.realtor.com" },
+      { protocol: "https", hostname: "*.rdcpix.com" },
+      { protocol: "https", hostname: "*.zillowstatic.com" },
+      { protocol: "https", hostname: "*.zillow.com" },
+      { protocol: "https", hostname: "*.redfin.com" },
+      { protocol: "https", hostname: "*.ssl.cdn-redfin.com" },
+      { protocol: "https", hostname: "ssl.cdn-redfin.com" },
+      { protocol: "https", hostname: "media.octavo.press" },
     ],
   },
   experimental: {
