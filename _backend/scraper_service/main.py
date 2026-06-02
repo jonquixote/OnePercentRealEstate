@@ -239,7 +239,7 @@ def scrape_listings(req: ScrapeRequest):
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,
                         bedrooms, bathrooms, sqft, year_built, get_property_type(row),
-                        req.listing_type, images, Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
+                        req.listing_type, Json(images), Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
                         'watch', DEFAULT_USER_ID
                     ))
                     result = cursor.fetchone()
