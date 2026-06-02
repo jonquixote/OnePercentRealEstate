@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { MapPin, Coffee, Utensils, School, TreePine, Dumbbell, ShoppingBag, Bus, Stethoscope, Store } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { CompsStrip } from '@/components/property/CompsStrip';
 
 const MarketCharts = dynamic(() => import('@/components/charts/MarketCharts'), {
     ssr: false,
@@ -23,6 +24,8 @@ export function PropertyMarketTab({ property, benchmark }: PropertyMarketTabProp
     return (
         <div id="tabpanel-market" role="tabpanel" aria-labelledby="tab-market" className="space-y-8 animate-in fade-in duration-300">
             <MarketCharts property={property} benchmark={benchmark} />
+
+            <CompsStrip propertyId={property.id} />
 
             {raw_data?.neighborhood_stats && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -6,12 +6,13 @@ import { Loader2 } from 'lucide-react';
 import { Schema, type RealEstateListingData } from '@oper/primitives';
 import { PropertyReport } from '@/components/PropertyReport';
 import { calculatePropertyMetrics } from '@/lib/calculators';
-import { PropertyHero } from '@/components/PropertyHero';
+import { PhotoGallery } from '@/components/property/PhotoGallery';
 import { PropertyTabs } from '@/components/PropertyTabs';
 import { PropertyHeader } from '@/components/property/PropertyHeader';
 import { PropertyOverviewTab } from '@/components/property/PropertyOverviewTab';
 import { PropertyFinancialsTab } from '@/components/property/PropertyFinancialsTab';
 import { PropertyMarketTab } from '@/components/property/PropertyMarketTab';
+import { PropertyScorecardTab } from '@/components/property/PropertyScorecardTab';
 import { useToast } from '@/components/ui/toast';
 import { usePropertyExport } from '@/hooks/usePropertyExport';
 
@@ -53,7 +54,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
     const [property, setProperty] = useState<any>(null);
     const [benchmark, setBenchmark] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState('scorecard');
     const { reportRef, exporting, exportPdf } = usePropertyExport();
     const { showToast, ToastView } = useToast();
 
@@ -103,9 +104,10 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                 exporting={exporting}
             />
             <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-                <PropertyHero images={images} address={address} />
+                <PhotoGallery images={images} address={address} />
                 <PropertyTabs activeTab={activeTab} onTabChange={setActiveTab} />
                 <div className="min-h-[500px]">
+                    {activeTab === 'scorecard' && <PropertyScorecardTab property={property} />}
                     {activeTab === 'overview' && <PropertyOverviewTab property={property} estCashflow={monthlyCashflow} capRate={capRate} cashOnCash={cashOnCash} />}
                     {activeTab === 'financials' && <PropertyFinancialsTab property={property} isOnePercentRule={isOnePercentRule} />}
                     {activeTab === 'market' && <PropertyMarketTab property={property} benchmark={benchmark} />}
