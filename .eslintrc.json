@@ -1,0 +1,21 @@
+{
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "rules": {
+    "no-console": ["error", { "allow": ["error", "warn"] }],
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "@next/next/no-img-element": "warn",
+    "react-hooks/purity": "off",
+    "react-hooks/set-state-in-effect": "warn",
+    "react-hooks/set-state-in-render": "warn",
+    "react-hooks/refs": "warn",
+    "react-hooks/error-boundaries": "warn",
+    "react-hooks/static-components": "warn",
+    "react-hooks/component-hook-factories": "warn",
+    "react-hooks/globals": "warn",
+    "react-hooks/incompatible-library": "warn",
+    "jsx-a11y/alt-text": "error",
+    "jsx-a11y/anchor-is-valid": "warn"
+  },
+  "ignorePatterns": ["node_modules/", ".next/", "out/"]
+}

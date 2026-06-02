@@ -7,10 +7,21 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:fix": "eslint --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "migrate": "tsx src/scripts/migrate.ts",
-    "migrate:status": "tsx src/scripts/migrate-status.ts"
+    "migrate:status": "tsx src/scripts/migrate-status.ts",
+    "precommit": "npm run lint:fix && npm run format"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

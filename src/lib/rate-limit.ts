@@ -15,6 +15,10 @@ export const scrapeLimiter = makeLimiter(1, 30, 'rl:scrape');
 export const fetchRentalsLimiter = makeLimiter(1, 30, 'rl:fetch');
 export const checkoutLimiter = makeLimiter(5, 60, 'rl:checkout');
 export const viewportLimiter = makeLimiter(100, 60, 'rl:viewport');
+export const estimateRentLimiter = makeLimiter(10, 60, 'rl:estimate-rent');
+export const clustersLimiter = makeLimiter(30, 60, 'rl:clusters');
+export const propertiesLimiter = makeLimiter(60, 60, 'rl:properties');
+export const seedLimiter = makeLimiter(5, 60, 'rl:seed');
 
 export async function checkRateLimit(
   limiter: RateLimiterRedis,

@@ -7,7 +7,7 @@ from psycopg2.extras import RealDictCursor
 DB_HOST = "infrastructure-postgres-1"
 DB_NAME = "postgres"
 DB_USER = "postgres"
-DB_PASS = os.environ.get("POSTGRES_PASSWORD", "root_password_change_me_please")
+DB_PASS = os.environ["POSTGRES_PASSWORD"]
 
 def get_db_connection():
     return psycopg2.connect(

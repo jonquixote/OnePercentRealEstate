@@ -1,6 +1,6 @@
 'use client';
 
-import { Bed, Bath, Square, Calendar, Home, DollarSign, TrendingUp, MapPin, School } from 'lucide-react';
+import { Bed, Bath, Square, Calendar, Home, DollarSign, TrendingUp, MapPin, School, Percent, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 const formatCurrency = (val: number) =>
@@ -11,9 +11,11 @@ const formatNumber = (val: number) => new Intl.NumberFormat('en-US').format(val)
 interface PropertyOverviewTabProps {
     property: any;
     estCashflow: number;
+    capRate: number;
+    cashOnCash: number;
 }
 
-export function PropertyOverviewTab({ property, estCashflow }: PropertyOverviewTabProps) {
+export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash }: PropertyOverviewTabProps) {
     const {
         address = '',
         listing_price = 0,
@@ -85,6 +87,39 @@ export function PropertyOverviewTab({ property, estCashflow }: PropertyOverviewT
                     </CardContent>
                 </Card>
             </div>
+
+            {estimated_rent > 0 && listing_price > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card>
+                        <CardContent className="p-6">
+                            <div className="flex items-center gap-2 text-gray-500 mb-2">
+                                <Percent className="h-4 w-4" />
+                                <span className="text-sm font-medium">Cap Rate</span>
+                            </div>
+                            <p className={`text-3xl font-bold ${capRate >= 6 ? 'text-green-600' : capRate >= 4 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {capRate.toFixed(2)}%
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                                Unlevered annual yield on price
+                            </p>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="p-6">
+                            <div className="flex items-center gap-2 text-gray-500 mb-2">
+                                <TrendingUp className="h-4 w-4" />
+                                <span className="text-sm font-medium">Cash-on-Cash</span>
+                            </div>
+                            <p className={`text-3xl font-bold ${cashOnCash >= 8 ? 'text-green-600' : cashOnCash >= 4 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {cashOnCash.toFixed(2)}%
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                                Annual cashflow / cash invested
+                            </p>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">

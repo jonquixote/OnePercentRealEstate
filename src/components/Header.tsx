@@ -21,7 +21,7 @@ export default function Header() {
                 <div className="hidden lg:flex lg:gap-x-12">
                     <Link href="/search" className="text-sm font-semibold leading-6 text-gray-300 hover:text-white flex items-center gap-2 transition-colors">
                         <Search className="h-4 w-4" />
-                        Acquire Data
+                        Import Listings
                     </Link>
                     <Link href="/analytics" className="text-sm font-semibold leading-6 text-gray-300 hover:text-white flex items-center gap-2 transition-colors">
                         <BarChart3 className="h-4 w-4" />
@@ -59,7 +59,7 @@ export default function Header() {
                             className="block rounded-md px-3 py-2 text-base font-semibold leading-7 text-gray-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
                         >
                             <Search className="h-4 w-4" />
-                            Acquire Data
+                            Import Listings
                         </Link>
                         <Link
                             href="/analytics"

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { ImageIcon } from 'lucide-react';
+import { ImageIcon, X } from 'lucide-react';
 
 interface PropertyHeroProps {
     images: string[];
@@ -12,6 +12,22 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
     const mainImage = images?.[0];
     const secondaryImages = images?.slice(1, 3);
     const remainingCount = Math.max(0, (images?.length || 0) - 3);
+
+    const closeLightbox = useCallback(() => setShowAll(false), []);
+
+    useEffect(() => {
+        if (!showAll) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') closeLightbox();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [showAll, closeLightbox]);
 
     if (!images || images.length === 0) {
         return (
@@ -92,19 +108,27 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
                 View {images.length} Photos
             </button>
 
-            {/* Simple Lightbox Modal (Placeholder for now) */}
+            {/* Lightbox Modal */}
             {showAll && (
-                <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4" onClick={() => setShowAll(false)}>
-                    <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`All photos of ${address}`}
+                    className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4"
+                    onClick={closeLightbox}
+                >
+                    <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 p-4" onClick={(e) => e.stopPropagation()}>
                         {images.map((img, idx) => (
                             <img key={idx} src={img} alt={`${address} photo ${idx + 1}`} className="w-full rounded-lg" loading="lazy" decoding="async" />
                         ))}
                     </div>
                     <button
-                        className="absolute top-4 right-4 text-white p-2 hover:bg-white/10 rounded-full"
-                        onClick={(e) => { e.stopPropagation(); setShowAll(false); }}
+                        aria-label="Close photo gallery (Escape key)"
+                        className="absolute top-4 right-4 text-white p-2 hover:bg-white/10 rounded-full inline-flex items-center gap-2"
+                        onClick={closeLightbox}
                     >
-                        Close
+                        <X className="h-5 w-5" />
+                        <span className="text-sm">Close</span>
                     </button>
                 </div>
             )}

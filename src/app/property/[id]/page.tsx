@@ -50,8 +50,9 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
         return <div className="flex h-screen items-center justify-center"><p className="text-gray-500">Property not found.</p></div>;
     }
 
-    const { address = '', listing_price = 0, estimated_rent = 0, status = 'watch', images = [] } = property;
-    const { isOnePercentRule, monthlyCashflow } = calculatePropertyMetrics(listing_price, estimated_rent);
+    const { address = '', listing_price = 0, estimated_rent = 0, status = 'watch', images = [], raw_data: rawData = {} } = property;
+    const listingUrl = rawData?.property_url || rawData?.url || null;
+    const { isOnePercentRule, monthlyCashflow, capRate, cashOnCash } = calculatePropertyMetrics(listing_price, estimated_rent);
 
     return (
         <div className="min-h-screen bg-gray-50 pb-12">
@@ -61,6 +62,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
             <PropertyHeader
                 address={address}
                 status={status}
+                listingUrl={listingUrl}
                 onExportPdf={() => exportPdf(address, showToast)}
                 exporting={exporting}
             />
@@ -68,7 +70,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                 <PropertyHero images={images} address={address} />
                 <PropertyTabs activeTab={activeTab} onTabChange={setActiveTab} />
                 <div className="min-h-[500px]">
-                    {activeTab === 'overview' && <PropertyOverviewTab property={property} estCashflow={monthlyCashflow} />}
+                    {activeTab === 'overview' && <PropertyOverviewTab property={property} estCashflow={monthlyCashflow} capRate={capRate} cashOnCash={cashOnCash} />}
                     {activeTab === 'financials' && <PropertyFinancialsTab property={property} isOnePercentRule={isOnePercentRule} />}
                     {activeTab === 'market' && <PropertyMarketTab property={property} benchmark={benchmark} />}
                 </div>

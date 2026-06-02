@@ -1,6 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import Link from 'next/link';
+import { CheckCircle, Loader2 } from 'lucide-react';
 import { calculatePropertyMetrics } from '@/lib/calculators';
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -44,12 +45,13 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
     return (
         <div className="relative group block h-full">
             {onSelect && (
-                <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200" title="Select to Compare">
+                <div className="absolute top-4 right-4 z-20 md:opacity-0 md:group-hover:opacity-100 opacity-90 transition-opacity duration-200 bg-white/90 rounded-md p-0.5 shadow-sm" title="Select to Compare">
                     <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={handleToggle}
-                        className="h-5 w-5 rounded-md border-gray-300 text-slate-900 focus:ring-slate-900 cursor-pointer shadow-sm transition-colors"
+                        aria-label={`Select ${address} for compare`}
+                        className="h-5 w-5 rounded-md border-gray-300 text-slate-900 focus:ring-slate-900 cursor-pointer transition-colors"
                     />
                 </div>
             )}
@@ -81,18 +83,20 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                         {hasRent ? (
                             <div className="flex items-center space-x-2">
                                 <span className={cn(
-                                    "flex h-2.5 w-2.5 rounded-full",
-                                    isOnePercentRule ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-amber-400"
-                                )} />
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                    {isOnePercentRule ? 'STRONG' : 'REVIEW'}
+                                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide",
+                                    isOnePercentRule
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-amber-100 text-amber-800"
+                                )}>
+                                    <CheckCircle className={cn("h-3 w-3", isOnePercentRule ? "text-emerald-600" : "text-amber-600")} />
+                                    {isOnePercentRule ? 'Strong Deal' : 'Review'}
                                 </span>
                             </div>
                         ) : (
                             <div className="flex items-center space-x-2">
-                                <span className="flex h-2.5 w-2.5 rounded-full bg-blue-400 animate-pulse" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                    CALCULATING...
+                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide bg-blue-100 text-blue-800">
+                                    <Loader2 className="h-3 w-3 text-blue-600 animate-spin" />
+                                    Calculating...
                                 </span>
                             </div>
                         )}
@@ -131,22 +135,22 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
 
                         <div className="grid grid-cols-2 gap-6 pt-6 border-t border-gray-50">
                             <div>
-                                <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-1">List Price</p>
+                                <p className="text-xs uppercase tracking-wider font-semibold text-gray-600 mb-1">List Price</p>
                                 <p className="text-lg font-bold text-gray-900 tracking-tight">{listing_price > 0 ? currencyFormatter.format(listing_price) : '—'}</p>
                             </div>
                             <div>
-                                <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-1 flex items-center gap-1">
+                                <p className="text-xs uppercase tracking-wider font-semibold text-gray-600 mb-1 flex items-center gap-1">
                                     Est. Rent
-                                    <span className="inline-block w-3 h-3 rounded-full bg-blue-100 text-blue-600 text-[8px] font-bold flex items-center justify-center cursor-help" title="Smart estimate based on nearby rentals and HUD data">?</span>
+                                    <span className="inline-block w-3 h-3 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center cursor-help" title="Smart estimate based on nearby rentals and HUD data" aria-label="More info">?</span>
                                 </p>
                                 <div className="flex items-baseline space-x-1">
                                     {hasRent ? (
                                         <>
                                             <p className="text-lg font-bold text-gray-900 tracking-tight">{currencyFormatter.format(estimated_rent)}</p>
-                                            <span className="text-xs text-gray-400 font-medium">/mo</span>
+                                            <span className="text-xs text-gray-500 font-medium">/mo</span>
                                         </>
                                     ) : (
-                                        <p className="text-sm font-medium text-gray-400 italic">Pending...</p>
+                                        <p className="text-sm font-medium text-gray-500 italic">Pending...</p>
                                     )}
                                 </div>
                             </div>
