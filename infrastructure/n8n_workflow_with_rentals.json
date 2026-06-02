@@ -106,7 +106,7 @@
         {
             "parameters": {
                 "operation": "executeQuery",
-                "query": "={{ \"UPDATE crawl_jobs SET status = 'completed', completed_at = NOW(), items_found = \" + (($items(\"Scrape For Sale\")[0].json.count || 0) + ($json.count || 0)) + \", items_inserted = \" + (($items(\"Scrape For Sale\")[0].json.inserted || 0) + ($json.inserted || 0)) + \" WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
+                "query": "={{ \"UPDATE crawl_jobs SET status = 'completed', finished_at = NOW(), listings_found = \" + (($items(\"Scrape For Sale\")[0].json.inserted || 0) + ($json.inserted || 0)) + \" WHERE id = '\" + $items(\"Get Next Job\")[0].json.id + \"';\" }}",
                 "additionalFields": {}
             },
             "name": "Mark Complete",
