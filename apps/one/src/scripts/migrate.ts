@@ -22,9 +22,23 @@ function loadEnvFile(filePath: string): void {
   }
 }
 
-loadEnvFile(path.join(process.cwd(), '.env'));
+// walk up from this file until we find infrastructure/migrations/ — works
+// whether invoked from apps/one or from the repo root.
+function findRepoRoot(start: string): string {
+  let dir = start;
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, 'infrastructure', 'migrations'))) return dir;
+    dir = path.dirname(dir);
+  }
+  throw new Error('Could not locate infrastructure/migrations/ above ' + start);
+}
 
-const MIGRATIONS_DIR = path.join(process.cwd(), 'infrastructure', 'migrations');
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = findRepoRoot(SCRIPT_DIR);
+
+loadEnvFile(path.join(REPO_ROOT, '.env'));
+
+const MIGRATIONS_DIR = path.join(REPO_ROOT, 'infrastructure', 'migrations');
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
