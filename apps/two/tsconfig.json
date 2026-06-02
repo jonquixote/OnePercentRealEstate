@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@oper/primitives": [
+        "../../packages/primitives/src/index.ts"
+      ],
+      "@oper/primitives/*": [
+        "../../packages/primitives/src/*"
       ]
     }
   },
@@ -33,13 +39,10 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "backend",
-    "venv",
-    "Planning+Research"
+    ".next"
   ]
 }
