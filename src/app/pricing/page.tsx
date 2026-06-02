@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import stripePromise from '@/lib/stripe';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useToast } from '@/components/ui/toast';
 
 const tiers = [
     {
@@ -62,6 +63,7 @@ const tiers = [
 
 export default function PricingPage() {
     const [loading, setLoading] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
     const handleCheckout = async (tierId: string) => {
@@ -108,7 +110,7 @@ export default function PricingPage() {
             }
         } catch (err: any) {
             console.error('Checkout error:', err);
-            alert('Checkout failed. Please ensure you are logged in and config is set.');
+            setError('Checkout failed. Please ensure you are logged in and config is set.');
         } finally {
             setLoading(null);
         }
@@ -116,6 +118,11 @@ export default function PricingPage() {
 
     return (
         <div className="bg-slate-900 min-h-screen py-24 sm:py-32">
+            {error && (
+                <div role="alert" className="mx-auto max-w-3xl mb-6 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {error}
+                </div>
+            )}
             <div className="mx-auto max-w-7xl px-6 lg:px-8">
                 <div className="mx-auto max-w-4xl text-center">
                     <h2 className="text-base font-semibold leading-7 text-emerald-400">Pricing</h2>

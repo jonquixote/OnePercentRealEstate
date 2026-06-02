@@ -13,6 +13,7 @@ import { calculatePropertyMetrics } from '@/lib/calculators';
 import { PropertyHero } from '@/components/PropertyHero';
 import { PropertyTabs } from '@/components/PropertyTabs';
 import { Card, CardContent } from '@/components/ui/card';
+import { useToast } from '@/components/ui/toast';
 
 const MarketCharts = dynamic(() => import('@/components/charts/MarketCharts'), {
     ssr: false,
@@ -27,6 +28,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
     const [exporting, setExporting] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
     const reportRef = useRef<HTMLDivElement>(null);
+    const { showToast, ToastView } = useToast();
 
     useEffect(() => {
         async function fetchProperty() {
@@ -83,7 +85,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
             pdf.save(`property-report-${property.address.replace(/\s+/g, '-').toLowerCase()}.pdf`);
         } catch (err) {
             console.error("PDF Export failed:", err);
-            alert("Failed to generate PDF. Please try again.");
+            showToast("Failed to generate PDF. Please try again.");
         } finally {
             setExporting(false);
         }
@@ -159,7 +161,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                 {/* Tab Content */}
                 <div className="min-h-[500px]">
                     {activeTab === 'overview' && (
-                        <div className="space-y-8 animate-in fade-in duration-300">
+                        <div id="tabpanel-overview" role="tabpanel" aria-labelledby="tab-overview" className="space-y-8 animate-in fade-in duration-300">
                             {/* Prominent Financial Cards */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <Card>
@@ -428,7 +430,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                     )}
 
                     {activeTab === 'financials' && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-300">
+                        <div id="tabpanel-financials" role="tabpanel" aria-labelledby="tab-financials" className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-300">
                             <div className="lg:col-span-1 space-y-6">
                                 <AdvancedRentEstimator
                                     property={property}
@@ -451,7 +453,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                     )}
 
                     {activeTab === 'market' && (
-                        <div className="space-y-8 animate-in fade-in duration-300">
+                        <div id="tabpanel-market" role="tabpanel" aria-labelledby="tab-market" className="space-y-8 animate-in fade-in duration-300">
 
                             {/* Charts Section */}
                             <MarketCharts property={property} benchmark={benchmark} />
@@ -589,6 +591,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                     )}
                 </div>
             </main>
+            {ToastView}
         </div>
     );
 }

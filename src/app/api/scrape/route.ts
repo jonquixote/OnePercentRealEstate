@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { z } from 'zod';
 import { env } from '@/lib/env';
+import { checkRateLimit, scrapeLimiter } from '@/lib/rate-limit';
 
 const scrapeSchema = z.object({
   location: z.string().min(1).max(100),
@@ -20,6 +21,15 @@ function validateApiKey(req: Request): boolean {
 export async function POST(req: Request) {
   if (!validateApiKey(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+  const limit = await checkRateLimit(scrapeLimiter, ip);
+  if (!limit.allowed) {
+    return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+      status: 429,
+      headers: { 'Retry-After': String(limit.retryAfter || 30) },
+    });
   }
 
   try {

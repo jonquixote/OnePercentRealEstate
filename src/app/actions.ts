@@ -38,6 +38,9 @@ export async function getProperties(
         minBeds?: number;
         minBaths?: number;
         onlyOnePercentRule?: boolean;
+        minCapRate?: number;
+        minCashOnCash?: number;
+        propertyType?: string;
     },
     cursor: string | null = null
 ) {
@@ -87,6 +90,18 @@ export async function getProperties(
         }
         if (filters?.onlyOnePercentRule) {
             whereClauses.push(`(estimated_rent / NULLIF(price, 0)) >= 0.01`);
+        }
+        if (filters?.minCapRate && filters.minCapRate > 0) {
+            const capRate = (filters.minCapRate / 100).toFixed(4);
+            whereClauses.push(`((estimated_rent * 12) / NULLIF(price, 0)) >= ${capRate}`);
+        }
+        if (filters?.minCashOnCash && filters.minCashOnCash > 0) {
+            const cashOnCash = (filters.minCashOnCash / 100).toFixed(4);
+            whereClauses.push(`((estimated_rent * 12 * 0.75 - (price * 0.2 * 0.06)) / NULLIF(price * 0.2, 0)) >= ${cashOnCash}`);
+        }
+        if (filters?.propertyType && filters.propertyType !== '') {
+            whereClauses.push(`LOWER(raw_data->>'style') = LOWER($${paramIndex++})`);
+            params.push(filters.propertyType);
         }
 
         if (useCursor) {

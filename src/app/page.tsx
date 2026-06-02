@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { PropertyMap } from '@/components/PropertyMap';
 import { PropertyFilters, FilterState } from '@/components/PropertyFilters';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
 
 interface Property {
   id: string;
@@ -44,10 +45,14 @@ export default function Dashboard() {
     maxPrice: 2000000,
     minBeds: 0,
     minBaths: 0,
-    onlyOnePercentRule: false
+    onlyOnePercentRule: false,
+    minCapRate: 0,
+    minCashOnCash: 0,
+    propertyType: ''
   });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { showToast, ToastView } = useToast();
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -69,7 +74,10 @@ export default function Dashboard() {
         maxPrice: filters.maxPrice,
         minBeds: filters.minBeds,
         minBaths: filters.minBaths,
-        onlyOnePercentRule: filters.onlyOnePercentRule
+        onlyOnePercentRule: filters.onlyOnePercentRule,
+        minCapRate: filters.minCapRate,
+        minCashOnCash: filters.minCashOnCash,
+        propertyType: filters.propertyType
       });
 
       const items = data.items;
@@ -102,16 +110,14 @@ export default function Dashboard() {
         next.delete(id);
       } else {
         if (next.size >= 3) {
-          if (typeof window !== 'undefined') {
-            window.alert("You can compare up to 3 properties at a time.");
-          }
+          showToast("You can compare up to 3 properties at a time.");
           return prev;
         }
         next.add(id);
       }
       return next;
     });
-  }, []);
+  }, [showToast]);
 
   // Client-side filtering is now minimal - server handles price/beds/baths/1% rule
   // We only filter showSold client-side (status check)
@@ -244,6 +250,7 @@ export default function Dashboard() {
             onClick={() => setShowMap(!showMap)}
             className="absolute top-4 left-4 z-10 bg-white p-2 rounded-md shadow-md border border-gray-200 hover:bg-gray-50 hidden lg:block"
             title={showMap ? "Hide Map" : "Show Map"}
+            aria-label={showMap ? "Hide Map" : "Show Map"}
           >
             {showMap ? <ArrowRight className="h-4 w-4" /> : <MapIcon className="h-4 w-4" />}
           </button>
@@ -269,10 +276,11 @@ export default function Dashboard() {
               {selectedProperties.size}
             </span>
             <span className="font-medium">Compare Selected</span>
-            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </Link>
+          <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </Link>
         </div>
       )}
+      {ToastView}
     </div>
   );
 }

@@ -12,6 +12,9 @@ export interface FilterState {
     minBeds: number;
     minBaths: number;
     onlyOnePercentRule: boolean;
+    minCapRate: number;
+    minCashOnCash: number;
+    propertyType: string;
 }
 
 interface PropertyFiltersProps {
@@ -109,6 +112,57 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                             }`}
                                     >
                                         {num}+
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Investor Metrics */}
+                        <div className="space-y-2">
+                            <Label>Min Cap Rate: {filters.minCapRate}%</Label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="15"
+                                step="0.5"
+                                value={filters.minCapRate}
+                                onChange={(e) => setFilters({ ...filters, minCapRate: Number(e.target.value) })}
+                                className="w-full"
+                                aria-label="Minimum cap rate"
+                            />
+                            <Label className="block pt-2">Min Cash-on-Cash: {filters.minCashOnCash}%</Label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="20"
+                                step="0.5"
+                                value={filters.minCashOnCash}
+                                onChange={(e) => setFilters({ ...filters, minCashOnCash: Number(e.target.value) })}
+                                className="w-full"
+                                aria-label="Minimum cash-on-cash return"
+                            />
+                        </div>
+
+                        {/* Property Type */}
+                        <div className="space-y-2 md:col-span-4">
+                            <Label>Property Type</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { value: '', label: 'Any' },
+                                    { value: 'single_family', label: 'Single Family' },
+                                    { value: 'multi_family', label: 'Multi-Family' },
+                                    { value: 'condo', label: 'Condo' },
+                                    { value: 'townhouse', label: 'Townhouse' },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value || 'any'}
+                                        onClick={() => setFilters({ ...filters, propertyType: opt.value })}
+                                        className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${filters.propertyType === opt.value
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        {opt.label}
                                     </button>
                                 ))}
                             </div>

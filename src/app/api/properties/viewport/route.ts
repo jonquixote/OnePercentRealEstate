@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import pool from '@/lib/db';
 import redis from '@/lib/redis';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { checkRateLimit, viewportLimiter } from '@/lib/rate-limit';
 
 // Validation Schema
 const ViewportSchema = z.object({
@@ -29,8 +29,11 @@ export async function GET(request: NextRequest) {
 
     // Rate Limiting
     try {
-        if (ip !== 'unknown' && !(await checkRateLimit(ip))) {
-            return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
+        if (ip !== 'unknown') {
+            const limit = await checkRateLimit(viewportLimiter, ip);
+            if (!limit.allowed) {
+                return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
+            }
         }
     } catch (e) {
         // Fail open on rate limiter error
