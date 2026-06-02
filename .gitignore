@@ -43,3 +43,9 @@ backend/venv
 venv
 __pycache__
 *.pyc
+
+# deploy scripts with plaintext passwords
+*.exp
+
+# infrastructure secrets
+infrastructure/.env

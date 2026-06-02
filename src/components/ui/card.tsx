@@ -3,6 +3,12 @@ import { cn } from "@/lib/utils"
 import Link from 'next/link';
 import { calculatePropertyMetrics } from '@/lib/calculators';
 
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+});
+
 const Card = React.forwardRef<
     HTMLDivElement,
     React.HTMLAttributes<HTMLDivElement>
@@ -24,16 +30,16 @@ interface PropertyCardProps {
     onSelect?: (id: string) => void;
 }
 
-export function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {
+export const PropertyCard = React.memo(function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {
     const { address, listing_price, estimated_rent, financial_snapshot, status } = property;
 
-    // Calculate Metrics
     const { isOnePercentRule, monthlyCashflow } = calculatePropertyMetrics(listing_price, estimated_rent);
     const hasRent = estimated_rent && estimated_rent > 0;
 
-    // Format currency
-    const formatCurrency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
+    const handleToggle = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        e.stopPropagation();
+        onSelect?.(property.id);
+    }, [onSelect, property.id]);
 
     return (
         <div className="relative group block h-full">
@@ -42,10 +48,7 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
                     <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={(e) => {
-                            e.stopPropagation();
-                            onSelect(property.id);
-                        }}
+                        onChange={handleToggle}
                         className="h-5 w-5 rounded-md border-gray-300 text-slate-900 focus:ring-slate-900 cursor-pointer shadow-sm transition-colors"
                     />
                 </div>
@@ -61,6 +64,8 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
                             <img
                                 src={property.images[0]}
                                 alt={address}
+                                loading="lazy"
+                                decoding="async"
                                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
                             />
                         ) : (
@@ -127,7 +132,7 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
                         <div className="grid grid-cols-2 gap-6 pt-6 border-t border-gray-50">
                             <div>
                                 <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-1">List Price</p>
-                                <p className="text-lg font-bold text-gray-900 tracking-tight">{formatCurrency(listing_price)}</p>
+                                <p className="text-lg font-bold text-gray-900 tracking-tight">{listing_price > 0 ? currencyFormatter.format(listing_price) : '—'}</p>
                             </div>
                             <div>
                                 <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-1 flex items-center gap-1">
@@ -137,7 +142,7 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
                                 <div className="flex items-baseline space-x-1">
                                     {hasRent ? (
                                         <>
-                                            <p className="text-lg font-bold text-gray-900 tracking-tight">{formatCurrency(estimated_rent)}</p>
+                                            <p className="text-lg font-bold text-gray-900 tracking-tight">{currencyFormatter.format(estimated_rent)}</p>
                                             <span className="text-xs text-gray-400 font-medium">/mo</span>
                                         </>
                                     ) : (
@@ -158,7 +163,7 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
                                 "text-lg font-black tracking-tight",
                                 hasRent ? (isOnePercentRule ? "text-emerald-600" : "text-amber-600") : "text-gray-300"
                             )}>
-                                {hasRent ? ((estimated_rent / listing_price) * 100).toFixed(2) + '%' : '—'}
+                                {hasRent && listing_price > 0 ? ((estimated_rent / listing_price) * 100).toFixed(2) + '%' : '—'}
                             </span>
                         </div>
                     </div>
@@ -166,7 +171,7 @@ export function PropertyCard({ property, isSelected, onSelect }: PropertyCardPro
             </Link>
         </div>
     );
-}
+});
 
 const CardHeader = React.forwardRef<
     HTMLDivElement,

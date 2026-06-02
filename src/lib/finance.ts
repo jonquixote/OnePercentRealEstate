@@ -83,8 +83,8 @@ export function calculateRequiredRent(
   );
   
   const variableExpenseRate = financials.vacancyRate + financials.managementRate;
-  
-  // Formula: (DebtService * DSCR + FixedCosts) / (1 - VariableExpenseRate)
+
+  if (variableExpenseRate >= 0.95) return Infinity;
   const requiredAnnualRent = (annualDebtService * targetDSCR + fixedCosts) / (1 - variableExpenseRate);
   
   return requiredAnnualRent / 12; // Monthly
@@ -105,21 +105,13 @@ export function calculateDealScore(actualRent: number, requiredRent: number): nu
   // Linear interpolation between 0.8 (0) and 1.2 (100)
   // Slope = 100 / (1.2 - 0.8) = 100 / 0.4 = 250
   // Score = 250 * (ratio - 0.8)
-  return Math.round(250 * (ratio - 0.8));
+  return Math.min(100, Math.max(0, Math.round(250 * (ratio - 0.8))));
 }
 
 /**
  * Performs a full analysis of the deal.
  */
 export function analyzeDeal(financials: PropertyFinancials): DealAnalysis {
-  const requiredMonthlyRent = calculateRequiredRent(financials);
-  const actualRatio = (financials.rent / financials.price) * 100;
-  const requiredRatio = (requiredMonthlyRent / financials.price) * 100;
-  
-  const loanAmount = financials.price * financials.ltv;
-  const mortgageConstant = calculateMortgageConstant(financials.interestRate, financials.loanTermYears);
-  const annualDebtService = loanAmount * mortgageConstant;
-  
   const fixedCosts = calculateFixedCostFloor(
     financials.price,
     financials.sqft,
@@ -127,8 +119,24 @@ export function analyzeDeal(financials: PropertyFinancials): DealAnalysis {
     financials.insuranceRate,
     financials.conditionCostPerSqft
   );
-  
-  const variableCosts = financials.rent * 12 * (financials.vacancyRate + financials.managementRate);
+
+  const loanAmount = financials.price * financials.ltv;
+  const mortgageConstant = calculateMortgageConstant(financials.interestRate, financials.loanTermYears);
+  const annualDebtService = loanAmount * mortgageConstant;
+
+  const variableExpenseRate = financials.vacancyRate + financials.managementRate;
+  let requiredMonthlyRent: number;
+  if (variableExpenseRate >= 0.95) {
+    requiredMonthlyRent = Infinity;
+  } else {
+    const requiredAnnualRent = (annualDebtService * 1.25 + fixedCosts) / (1 - variableExpenseRate);
+    requiredMonthlyRent = requiredAnnualRent / 12;
+  }
+
+  const actualRatio = (financials.rent / financials.price) * 100;
+  const requiredRatio = (requiredMonthlyRent / financials.price) * 100;
+
+  const variableCosts = financials.rent * 12 * variableExpenseRate;
   const annualNOI = (financials.rent * 12) - fixedCosts - variableCosts;
   const annualCashFlow = annualNOI - annualDebtService;
   

@@ -1,7 +1,23 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { safeErrorResponse } from '@/lib/api-error';
+import { timingSafeEqual } from 'crypto';
+
+function isAdmin(req: Request): boolean {
+  const provided = req.headers.get('x-api-key') || req.headers.get('x-admin-key');
+  const expected = process.env.ADMIN_API_KEY;
+  if (!provided || !expected) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 export async function POST(req: Request) {
+    if (!isAdmin(req)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const client = await pool.connect();
     try {
         // Reset jobs that have been 'processing' for more than 5 minutes
@@ -19,9 +35,7 @@ export async function POST(req: Request) {
             jobs: result.rows
         });
 
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    } finally {
-        client.release();
-    }
+} catch (error: any) {
+    return safeErrorResponse(error, 500);
+  }
 }

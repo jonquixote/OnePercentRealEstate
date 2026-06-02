@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { safeErrorResponse } from '@/lib/api-error';
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
@@ -32,8 +33,8 @@ export async function GET(req: Request) {
             type: 'FeatureCollection',
             features: features
         });
-    } catch (error: any) {
-        console.error('Cluster API Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
-    }
+} catch (error: any) {
+    console.error('Cluster API Error:', error);
+    return safeErrorResponse(error, 500);
+  }
 }

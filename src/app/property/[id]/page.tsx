@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, use, useState, useEffect } from 'react';
+import { useRef, use, useState, useEffect, useCallback } from 'react';
 import { getProperty, getHudBenchmark } from '@/app/actions';
 import { Loader2, ArrowLeft, Download, MapPin, Bed, Bath, Square, Calendar, Home, DollarSign, TrendingUp, Coffee, Utensils, School, TreePine, Dumbbell, ShoppingBag, Bus, Stethoscope, Store, Info } from 'lucide-react';
 import Link from 'next/link';
@@ -12,8 +12,6 @@ import { calculatePropertyMetrics } from '@/lib/calculators';
 import { PropertyHero } from '@/components/PropertyHero';
 import { PropertyTabs } from '@/components/PropertyTabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell
 } from 'recharts';
@@ -55,6 +53,11 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
         setExporting(true);
 
         try {
+            const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+                import('html2canvas'),
+                import('jspdf'),
+            ]);
+
             const element = reportRef.current;
             element.style.display = 'block';
 
@@ -162,9 +165,11 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                                             <DollarSign className="h-4 w-4" />
                                             <span className="text-sm font-medium">Listing Price</span>
                                         </div>
-                                        <p className="text-3xl font-bold text-gray-900">{formatCurrency(listing_price)}</p>
+                                        <p className="text-3xl font-bold text-gray-900">{listing_price > 0 ? formatCurrency(listing_price) : 'Price unavailable'}</p>
                                         <p className="text-sm text-gray-500 mt-1">
-                                            ${Math.round(listing_price / (raw_data?.sqft || 1)).toLocaleString()}/sqft
+                                            {raw_data?.sqft > 0
+                                                ? `$${Math.round(listing_price / raw_data.sqft).toLocaleString()}/sqft`
+                                                : 'N/A'}
                                         </p>
                                     </CardContent>
                                 </Card>

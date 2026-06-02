@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { PropertyCard } from '@/components/ui/card';
 import Header from '@/components/Header';
 import { Loader2, TrendingUp, Search, BarChart3, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
@@ -47,9 +47,17 @@ export default function Dashboard() {
     onlyOnePercentRule: false
   });
 
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    loadProperties(1);
-  }, [sortBy, filters]); // Reload when sort OR filters change
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      loadProperties(1);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [sortBy, filters]);
 
   async function loadProperties(pageNum: number) {
     try {
@@ -89,29 +97,32 @@ export default function Dashboard() {
     loadProperties(page + 1);
   };
 
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedProperties(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        if (next.size >= 3) {
+          if (typeof window !== 'undefined') {
+            window.alert("You can compare up to 3 properties at a time.");
+          }
+          return prev;
+        }
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   // Client-side filtering is now minimal - server handles price/beds/baths/1% rule
   // We only filter showSold client-side (status check)
   const filteredProperties = useMemo(() => {
     return properties.filter(p => {
-      // Status (Hide Sold) - only client-side filter remaining
       if (!filters.showSold && (p.status === 'sold' || p.listing_price === null)) return false;
       return true;
     });
   }, [properties, filters.showSold]);
-
-  const toggleSelection = (id: string) => {
-    const newSelected = new Set(selectedProperties);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      if (newSelected.size >= 3) {
-        alert("You can compare up to 3 properties at a time.");
-        return;
-      }
-      newSelected.add(id);
-    }
-    setSelectedProperties(newSelected);
-  };
 
   if (loading && page === 1) {
     return (

@@ -23,7 +23,7 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 const clusterLayer: any = {
     id: 'clusters',
     type: 'circle',
-    source: 'properties',
+    source: 'listings-source',
     filter: ['>', ['get', 'count'], 1],
     paint: {
         'circle-color': ['step', ['get', 'count'], '#51bbd6', 10, '#f1f075', 100, '#f28cb1'],
@@ -34,7 +34,7 @@ const clusterLayer: any = {
 const clusterCountLayer: any = {
     id: 'cluster-count',
     type: 'symbol',
-    source: 'properties',
+    source: 'listings-source',
     filter: ['>', ['get', 'count'], 1],
     layout: {
         'text-field': '{count}',
@@ -46,7 +46,7 @@ const clusterCountLayer: any = {
 const unclusteredPointLayer: any = {
     id: 'unclustered-point',
     type: 'circle',
-    source: 'properties',
+    source: 'listings-source',
     filter: ['==', ['get', 'count'], 1],
     paint: {
         'circle-color': '#11b4da',
@@ -59,7 +59,7 @@ const unclusteredPointLayer: any = {
 const unclusteredLabelLayer: any = {
     id: 'unclustered-label',
     type: 'symbol',
-    source: 'properties',
+    source: 'listings-source',
     filter: ['==', ['get', 'count'], 1],
     layout: {
         'text-field': [

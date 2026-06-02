@@ -1,55 +1,71 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import path from 'path';
+import { execFile } from 'child_process';
+import { z } from 'zod';
+
+const scrapeSchema = z.object({
+  location: z.string().min(1).max(100),
+  minPrice: z.number().min(0).optional(),
+  maxPrice: z.number().min(0).optional(),
+  beds: z.number().int().min(0).max(20).optional(),
+  baths: z.number().int().min(0).max(20).optional(),
+  limit: z.number().int().min(1).max(1000).optional(),
+});
+
+function validateApiKey(req: Request): boolean {
+  const apiKey = req.headers.get('x-api-key');
+  return !!apiKey && apiKey === process.env.ADMIN_API_KEY;
+}
 
 export async function POST(req: Request) {
-    try {
-        const body = await req.json();
-        const { location, minPrice, maxPrice, beds, baths, limit } = body;
+  if (!validateApiKey(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-        if (!location) {
-            return NextResponse.json({ error: 'Location is required' }, { status: 400 });
+  try {
+    const body = await req.json();
+    const parsed = scrapeSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const { location, minPrice, maxPrice, beds, baths, limit } = parsed.data;
+
+    const backendDir = process.cwd() + '/_backend';
+    const args = ['scraper.py', '--location', location];
+
+    if (minPrice !== undefined) args.push('--min_price', String(minPrice));
+    if (maxPrice !== undefined) args.push('--max_price', String(maxPrice));
+    if (beds !== undefined) args.push('--beds', String(beds));
+    if (baths !== undefined) args.push('--baths', String(baths));
+    if (limit !== undefined) args.push('--limit', String(limit));
+
+    return new Promise<NextResponse>((resolve) => {
+      execFile('python', args, {
+        cwd: backendDir,
+        timeout: 60000,
+        env: {
+          ...process.env,
+          VIRTUAL_ENV: backendDir + '/venv',
+          PATH: backendDir + '/venv/bin:' + process.env.PATH
+        }
+      }, (error, stdout, stderr) => {
+        if (error) {
+          console.error('Scraper execution failed:', error.message);
+          resolve(NextResponse.json({ error: 'Scraping failed' }, { status: 500 }));
+          return;
         }
 
-        // Construct command arguments
-        let args = `--location "${location}"`;
-        if (minPrice) args += ` --min_price ${minPrice}`;
-        if (maxPrice) args += ` --max_price ${maxPrice}`;
-        if (beds) args += ` --beds ${beds}`;
-        if (baths) args += ` --baths ${baths}`;
-        if (limit !== undefined) args += ` --limit ${limit}`;
-
-        // Path to backend directory
-        const backendDir = process.cwd() + '/_backend';
-
-        // Use activation script and relative script name
-        const command = `cd "${backendDir}" && source venv/bin/activate && python scraper.py ${args}`;
-
-        console.log(`Executing: ${command}`);
-
-        return new Promise<NextResponse>((resolve) => {
-            exec(command, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`Exec error: ${error}`);
-                    console.error(`Stderr: ${stderr}`);
-                    resolve(NextResponse.json({ error: 'Scraping failed', details: stderr }, { status: 500 }));
-                    return;
-                }
-
-                try {
-                    // Parse the JSON output from the python script
-                    // The script might print other things, so we look for the last line or try to parse stdout
-                    const result = JSON.parse(stdout.trim());
-                    resolve(NextResponse.json(result));
-                } catch (parseError) {
-                    console.error(`Parse error: ${parseError}`);
-                    console.log(`Stdout: ${stdout}`);
-                    resolve(NextResponse.json({ error: 'Invalid response from scraper', output: stdout }, { status: 500 }));
-                }
-            });
-        });
-
-    } catch (e) {
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-    }
+        try {
+          const result = JSON.parse(stdout.trim());
+          resolve(NextResponse.json(result));
+        } catch (parseError) {
+          console.error('Scraper output parse error:', parseError);
+          resolve(NextResponse.json({ error: 'Invalid response from scraper' }, { status: 500 }));
+        }
+      });
+    });
+  } catch (e) {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }

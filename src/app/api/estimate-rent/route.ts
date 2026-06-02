@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { safeErrorResponse } from '@/lib/api-error';
 
 export async function POST(req: Request) {
     try {
@@ -59,8 +60,8 @@ export async function POST(req: Request) {
 
         return NextResponse.json(responseData);
 
-    } catch (e: any) {
-        console.error('Estimate rent error:', e);
-        return NextResponse.json({ error: 'Internal Server Error', details: e.message }, { status: 500 });
-    }
+} catch (e: any) {
+  console.error('Estimate rent error:', e);
+  return safeErrorResponse(e, 500);
+}
 }

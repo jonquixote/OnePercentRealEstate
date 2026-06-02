@@ -1,47 +1,76 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { z } from 'zod';
+import { safeErrorResponse } from '@/lib/api-error';
 
-// Simplified checkout route without Supabase auth
-// Authentication check removed - all users have access
+const VALID_PRICE_IDS: Record<string, string | undefined> = {
+  monthly: process.env.STRIPE_PRICE_MONTHLY,
+  annual: process.env.STRIPE_PRICE_ANNUAL,
+};
+
+const checkoutSchema = z.object({
+  plan: z.enum(['monthly', 'annual']).optional(),
+  priceId: z.string().startsWith('price_').max(200).optional(),
+  propertyId: z.string().max(200).optional(),
+  userId: z.string().max(200).optional(),
+  email: z.string().email().max(320).optional(),
+}).refine(
+  (data) => Boolean(data.plan) !== Boolean(data.priceId),
+  { message: 'Provide either plan or priceId, not both' }
+);
+
 export async function POST(req: Request) {
-    if (!process.env.STRIPE_SECRET_KEY) {
-        console.error('STRIPE_SECRET_KEY is missing');
-        return NextResponse.json({ error: 'Internal Server Configuration Error' }, { status: 500 });
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.error('STRIPE_SECRET_KEY is missing');
+    return NextResponse.json({ error: 'Internal Server Configuration Error' }, { status: 500 });
+  }
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: '2025-11-17.clover',
+  });
+
+  try {
+    const raw = await req.json();
+    const body = checkoutSchema.parse(raw);
+
+    const resolvedPriceId = body.plan
+      ? VALID_PRICE_IDS[body.plan]
+      : body.priceId;
+
+    if (!resolvedPriceId) {
+      return NextResponse.json(
+        { error: 'Invalid or missing price configuration' },
+        { status: 400 }
+      );
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-        apiVersion: '2025-11-17.clover',
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      customer_email: body.email || undefined,
+      line_items: [
+        {
+          price: resolvedPriceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${req.headers.get('origin')}/?upgrade_success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.get('origin')}/pricing?canceled=true`,
+      metadata: {
+        propertyId: body.propertyId || '',
+        ...(body.userId ? { userId: body.userId } : {}),
+      },
     });
 
-    try {
-        const body = await req.json();
-        const { priceId, propertyId, userId, email } = body;
-
-        if (!priceId) {
-            return NextResponse.json({ error: 'Missing priceId' }, { status: 400 });
-        }
-
-        const session = await stripe.checkout.sessions.create({
-            mode: 'subscription',
-            payment_method_types: ['card'],
-            customer_email: email || undefined,
-            line_items: [
-                {
-                    price: priceId,
-                    quantity: 1,
-                },
-            ],
-            success_url: `${req.headers.get('origin')}/?upgrade_success=true&session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${req.headers.get('origin')}/pricing?canceled=true`,
-            metadata: {
-                propertyId: propertyId || '',
-                userId: userId || '',
-            },
-        });
-
-        return NextResponse.json({ sessionId: session.id });
-    } catch (err: any) {
-        console.error('Stripe Checkout Error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ sessionId: session.id });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Invalid request', details: err.flatten() },
+        { status: 400 }
+      );
     }
+    console.error('Stripe Checkout Error:', err);
+    return safeErrorResponse(err, 500);
+  }
 }
