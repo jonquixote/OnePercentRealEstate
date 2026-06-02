@@ -250,8 +250,6 @@ export async function getProperty(id: string) {
         COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
         raw_data,
         listing_status as status,
-        url,
-        property_url,
         created_at
       FROM listings
       WHERE id = $1

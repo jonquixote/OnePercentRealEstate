@@ -4,15 +4,22 @@ import { useEffect, useState, use } from 'react';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
+interface PropertySpecs {
+    bedrooms: number | null;
+    bathrooms: number | null;
+    sqft: number | null;
+    year_built: number | null;
+    hoa_fee: number | null;
+}
+
 interface Property {
     id: string;
     address: string;
     listing_price: number;
     estimated_rent: number;
-    financial_snapshot: any;
+    specs: PropertySpecs;
     status: string;
     images: string[];
-    raw_data: any;
 }
 
 export default function ComparePage({ searchParams }: { searchParams: Promise<{ ids: string }> }) {
@@ -152,25 +159,25 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                             <tr>
                                 <td className="p-4 font-medium text-gray-700">Bedrooms</td>
                                 {properties.map(p => (
-                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.financial_snapshot?.bedrooms || '-'}</td>
+                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.specs?.bedrooms || '-'}</td>
                                 ))}
                             </tr>
                             <tr>
                                 <td className="p-4 font-medium text-gray-700">Bathrooms</td>
                                 {properties.map(p => (
-                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.financial_snapshot?.bathrooms || '-'}</td>
+                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.specs?.bathrooms || '-'}</td>
                                 ))}
                             </tr>
                             <tr>
                                 <td className="p-4 font-medium text-gray-700">Sqft</td>
                                 {properties.map(p => (
-                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.financial_snapshot?.sqft?.toLocaleString() || '-'}</td>
+                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.specs?.sqft?.toLocaleString() || '-'}</td>
                                 ))}
                             </tr>
                             <tr>
                                 <td className="p-4 font-medium text-gray-700">Year Built</td>
                                 {properties.map(p => (
-                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.financial_snapshot?.year_built || '-'}</td>
+                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.specs?.year_built || '-'}</td>
                                 ))}
                             </tr>
 
@@ -181,7 +188,7 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                             <tr>
                                 <td className="p-4 font-medium text-gray-700">HOA Fee</td>
                                 {properties.map(p => (
-                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.raw_data?.hoa_fee ? formatCurrency(p.raw_data.hoa_fee) : 'N/A'}</td>
+                                    <td key={p.id} className="p-4 border-l border-gray-100">{p.specs?.hoa_fee != null ? formatCurrency(p.specs.hoa_fee) : 'N/A'}</td>
                                 ))}
                             </tr>
                             <tr>

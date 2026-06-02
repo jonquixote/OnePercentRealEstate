@@ -132,19 +132,19 @@ export async function GET(request: NextRequest) {
             // Individual Properties Query (High Zoom)
             // Limit to 2000 to prevent browser crash
             const query = `
-        SELECT 
-          id, 
-          address, 
-          price, 
-          bedrooms, 
-          bathrooms, 
-          sqft, 
-          image_url,
+        SELECT
+          id,
+          address,
+          price,
+          bedrooms,
+          bathrooms,
+          sqft,
+          primary_photo,
           listing_type as status,
           ST_Y(geom) as latitude,
           ST_X(geom) as longitude
         FROM listings
-        WHERE 
+        WHERE
           geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
           ${clause}
         LIMIT 2000
