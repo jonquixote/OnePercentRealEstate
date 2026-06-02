@@ -4,31 +4,13 @@ import Link from 'next/link';
 import { ArrowLeft, TrendingUp, Building, Wallet, MapPin } from 'lucide-react';
 import { PropertyCard } from '@/components/ui/card';
 
-// Force static generation for these pages
-export const dynamic = 'force-static';
-// Revalidate every 24 hours
+// Render at request time so we don't need DB access during `next build`.
+// On Vercel this also lets ISR cache each zip individually; the previous
+// force-static + generateStaticParams setup tried to pre-render every zip
+// it found in the DB at build time, which fails when the build env has
+// no DB or doesn't include all rows.
+export const dynamic = 'force-dynamic';
 export const revalidate = 86400;
-
-// 1. Generate Static Params: Build pages for all known zips at build time
-export async function generateStaticParams() {
-    try {
-        const client = await pool.connect();
-        const result = await client.query(`
-            SELECT DISTINCT raw_data->>'zip_code' as zip_code 
-            FROM listings 
-            WHERE raw_data->>'zip_code' IS NOT NULL
-            LIMIT 500
-        `);
-        client.release();
-
-        return result.rows
-            .filter(row => row.zip_code && /^\d{5}$/.test(row.zip_code))
-            .map(row => ({ zipcode: row.zip_code }));
-    } catch (error) {
-        console.error('Failed to generate static params:', error);
-        return [];
-    }
-}
 
 // 2. Generate Metadata for SEO
 export async function generateMetadata({ params }: { params: Promise<{ zipcode: string }> }) {
