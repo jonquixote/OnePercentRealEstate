@@ -97,7 +97,7 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
                 <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4" onClick={() => setShowAll(false)}>
                     <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
                         {images.map((img, idx) => (
-                            <img key={idx} src={img} className="w-full rounded-lg" loading="lazy" decoding="async" />
+                            <img key={idx} src={img} alt={`${address} photo ${idx + 1}`} className="w-full rounded-lg" loading="lazy" decoding="async" />
                         ))}
                     </div>
                     <button

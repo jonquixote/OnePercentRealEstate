@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { safeErrorResponse } from '@/lib/api-error';
+import { checkRateLimit, checkoutLimiter } from '@/lib/rate-limit';
 
 const VALID_PRICE_IDS: Record<string, string | undefined> = {
   monthly: process.env.STRIPE_PRICE_MONTHLY,
@@ -23,6 +24,15 @@ export async function POST(req: Request) {
   if (!process.env.STRIPE_SECRET_KEY) {
     console.error('STRIPE_SECRET_KEY is missing');
     return NextResponse.json({ error: 'Internal Server Configuration Error' }, { status: 500 });
+  }
+
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+  const limit = await checkRateLimit(checkoutLimiter, ip);
+  if (!limit.allowed) {
+    return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+      status: 429,
+      headers: { 'Retry-After': String(limit.retryAfter || 60) },
+    });
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
