@@ -1,9 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import {
+    useQueryStates,
+    parseAsInteger,
+    parseAsFloat,
+    parseAsBoolean,
+    parseAsString,
+} from 'nuqs';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Filter, X } from 'lucide-react';
+import { Filter } from 'lucide-react';
 
 export interface FilterState {
     showSold: boolean;
@@ -17,16 +24,69 @@ export interface FilterState {
     propertyType: string;
 }
 
-interface PropertyFiltersProps {
-    filters: FilterState;
-    setFilters: (filters: FilterState) => void;
+/**
+ * Shared nuqs parser map for the property filter URL state.
+ *
+ * Exported so the parent page can read/write the exact same query-param keys
+ * via `useQueryStates(propertyFilterParsers)` without duplicating definitions.
+ *
+ * Default values intentionally match the previous local-state defaults so the
+ * initial render is unchanged when no query params are present.
+ */
+export const propertyFilterParsers = {
+    sold: parseAsBoolean.withDefault(false),
+    pmin: parseAsInteger.withDefault(0),
+    pmax: parseAsInteger.withDefault(2000000),
+    beds: parseAsInteger.withDefault(0),
+    baths: parseAsFloat.withDefault(0),
+    op: parseAsBoolean.withDefault(false),
+    cap: parseAsFloat.withDefault(0),
+    coc: parseAsFloat.withDefault(0),
+    type: parseAsString.withDefault(''),
+};
+
+/**
+ * Convert the nuqs URL-state shape to the legacy `FilterState` shape consumed
+ * by the dashboard and downstream components.
+ */
+export function toFilterState(qs: {
+    sold: boolean;
+    pmin: number;
+    pmax: number;
+    beds: number;
+    baths: number;
+    op: boolean;
+    cap: number;
+    coc: number;
+    type: string;
+}): FilterState {
+    return {
+        showSold: qs.sold,
+        minPrice: qs.pmin,
+        maxPrice: qs.pmax,
+        minBeds: qs.beds,
+        minBaths: qs.baths,
+        onlyOnePercentRule: qs.op,
+        minCapRate: qs.cap,
+        minCashOnCash: qs.coc,
+        propertyType: qs.type,
+    };
 }
 
-export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
+export function PropertyFilters() {
     const [isOpen, setIsOpen] = useState(false);
 
-    // Debounce or local state might be needed for sliders if costly
-    // For now, direct update.
+    // URL-synced filter state. Writes are throttled (debounced at the URL level)
+    // so dragging a slider doesn't flood `history.replaceState`. The 300ms value
+    // matches the previously local-debounce timing on the parent's data fetch.
+    const [qs, setQs] = useQueryStates(propertyFilterParsers, {
+        history: 'replace',
+        shallow: true,
+        throttleMs: 300,
+        clearOnDefault: true,
+    });
+
+    const filters = toFilterState(qs);
 
     return (
         <div className="bg-white border-b border-gray-200">
@@ -45,7 +105,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 <input
                                     type="checkbox"
                                     checked={filters.showSold}
-                                    onChange={(e) => setFilters({ ...filters, showSold: e.target.checked })}
+                                    onChange={(e) => setQs({ sold: e.target.checked })}
                                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                 />
                             </label>
@@ -54,7 +114,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 <input
                                     type="checkbox"
                                     checked={filters.onlyOnePercentRule}
-                                    onChange={(e) => setFilters({ ...filters, onlyOnePercentRule: e.target.checked })}
+                                    onChange={(e) => setQs({ op: e.target.checked })}
                                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
                                 />
                             </label>
@@ -74,7 +134,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 max="2000000"
                                 step="50000"
                                 value={filters.maxPrice}
-                                onChange={(e) => setFilters({ ...filters, maxPrice: Number(e.target.value) })}
+                                onChange={(e) => setQs({ pmax: Number(e.target.value) })}
                                 className="w-full"
                             />
                         </div>
@@ -86,7 +146,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 {[0, 1, 2, 3, 4].map(num => (
                                     <button
                                         key={num}
-                                        onClick={() => setFilters({ ...filters, minBeds: num })}
+                                        onClick={() => setQs({ beds: num })}
                                         className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${filters.minBeds === num
                                             ? 'bg-blue-600 text-white'
                                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -105,7 +165,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 {[1, 1.5, 2, 2.5, 3].map(num => (
                                     <button
                                         key={num}
-                                        onClick={() => setFilters({ ...filters, minBaths: num })}
+                                        onClick={() => setQs({ baths: num })}
                                         className={`px-2 h-8 rounded-full text-sm font-medium transition-colors ${filters.minBaths === num
                                             ? 'bg-blue-600 text-white'
                                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -126,7 +186,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 max="15"
                                 step="0.5"
                                 value={filters.minCapRate}
-                                onChange={(e) => setFilters({ ...filters, minCapRate: Number(e.target.value) })}
+                                onChange={(e) => setQs({ cap: Number(e.target.value) })}
                                 className="w-full"
                                 aria-label="Minimum cap rate"
                             />
@@ -137,7 +197,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 max="20"
                                 step="0.5"
                                 value={filters.minCashOnCash}
-                                onChange={(e) => setFilters({ ...filters, minCashOnCash: Number(e.target.value) })}
+                                onChange={(e) => setQs({ coc: Number(e.target.value) })}
                                 className="w-full"
                                 aria-label="Minimum cash-on-cash return"
                             />
@@ -156,7 +216,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 ].map(opt => (
                                     <button
                                         key={opt.value || 'any'}
-                                        onClick={() => setFilters({ ...filters, propertyType: opt.value })}
+                                        onClick={() => setQs({ type: opt.value })}
                                         className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${filters.propertyType === opt.value
                                             ? 'bg-blue-600 text-white'
                                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -174,7 +234,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 <input
                                     type="checkbox"
                                     checked={filters.showSold}
-                                    onChange={(e) => setFilters({ ...filters, showSold: e.target.checked })}
+                                    onChange={(e) => setQs({ sold: e.target.checked })}
                                     className="rounded border-gray-300"
                                 />
                                 <span className="text-gray-600">Show Sold Listings</span>
@@ -183,7 +243,7 @@ export function PropertyFilters({ filters, setFilters }: PropertyFiltersProps) {
                                 <input
                                     type="checkbox"
                                     checked={filters.onlyOnePercentRule}
-                                    onChange={(e) => setFilters({ ...filters, onlyOnePercentRule: e.target.checked })}
+                                    onChange={(e) => setQs({ op: e.target.checked })}
                                     className="rounded border-gray-300"
                                 />
                                 <span className="font-medium text-green-600">1% Rule Deals Only</span>

@@ -6,7 +6,12 @@ import Header from '@/components/Header';
 import { Loader2, TrendingUp, Search, BarChart3, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
 import Link from 'next/link';
 import { PropertyMap } from '@/components/PropertyMap';
-import { PropertyFilters, FilterState } from '@/components/PropertyFilters';
+import {
+  PropertyFilters,
+  propertyFilterParsers,
+  toFilterState,
+} from '@/components/PropertyFilters';
+import { useQueryStates } from 'nuqs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 
@@ -38,18 +43,11 @@ export default function Dashboard() {
   const [showMap, setShowMap] = useState(true);
   const [sortBy, setSortBy] = useState('newest');
 
-  // Filter State
-  const [filters, setFilters] = useState<FilterState>({
-    showSold: false,
-    minPrice: 0,
-    maxPrice: 2000000,
-    minBeds: 0,
-    minBaths: 0,
-    onlyOnePercentRule: false,
-    minCapRate: 0,
-    minCashOnCash: 0,
-    propertyType: ''
-  });
+  // Filter state lives in the URL via nuqs (see PropertyFilters.tsx for the
+  // shared parser map). Reading here means the dashboard's data fetch stays in
+  // sync with the URL on shareable / SSR-hydrated loads.
+  const [qs] = useQueryStates(propertyFilterParsers);
+  const filters = useMemo(() => toFilterState(qs), [qs]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast, ToastView } = useToast();
@@ -62,7 +60,22 @@ export default function Dashboard() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [sortBy, filters]);
+    // Depend on the primitive nuqs values rather than the derived `filters`
+    // object so we don't re-fire just because `useQueryStates` returned a new
+    // object identity with the same contents.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sortBy,
+    qs.sold,
+    qs.pmin,
+    qs.pmax,
+    qs.beds,
+    qs.baths,
+    qs.op,
+    qs.cap,
+    qs.coc,
+    qs.type,
+  ]);
 
   async function loadProperties(pageNum: number) {
     try {
@@ -145,7 +158,7 @@ export default function Dashboard() {
 
       {/* Sticky Filters */}
       <div className="sticky top-0 z-20 bg-white shadow-sm">
-        <PropertyFilters filters={filters} setFilters={setFilters} />
+        <PropertyFilters />
       </div>
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-140px)]">

@@ -1,58 +1,19 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { use } from 'react';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { useProperties, type PropertyListItem } from '@oper/api-client';
 
-interface PropertySpecs {
-    bedrooms: number | null;
-    bathrooms: number | null;
-    sqft: number | null;
-    year_built: number | null;
-    hoa_fee: number | null;
-}
-
-interface Property {
-    id: string;
-    address: string;
-    listing_price: number;
-    estimated_rent: number;
-    specs: PropertySpecs;
-    status: string;
-    images: string[];
-}
+type Property = PropertyListItem;
 
 export default function ComparePage({ searchParams }: { searchParams: Promise<{ ids: string }> }) {
     const params = use(searchParams);
-    const [loading, setLoading] = useState(true);
-    const [properties, setProperties] = useState<Property[]>([]);
+    const ids = params.ids ? params.ids.split(',').filter(Boolean) : [];
+    const { data, isLoading } = useProperties(ids);
+    const properties: Property[] = data ?? [];
 
-    useEffect(() => {
-        async function fetchProperties() {
-            if (!params.ids) {
-                setLoading(false);
-                return;
-            }
-
-            const ids = params.ids.split(',');
-
-            try {
-                // Fetch properties via API endpoint
-                const response = await fetch(`/api/properties?ids=${ids.join(',')}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    setProperties(data || []);
-                }
-            } catch (error) {
-                console.error('Error fetching properties:', error);
-            }
-            setLoading(false);
-        }
-
-        fetchProperties();
-    }, [params.ids]);
-
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -71,9 +32,11 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
         );
     }
 
-    // Helper to format currency
-    const formatCurrency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
+    // Helper to format currency (treats null/undefined as "—")
+    const formatCurrency = (val: number | null | undefined) =>
+        val == null
+            ? '—'
+            : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
 
     // Helper to format percent
     const formatPercent = (val: number) =>
@@ -134,10 +97,12 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                             <tr>
                                 <td className="p-4 font-medium text-gray-700">1% Rule Ratio</td>
                                 {properties.map(p => {
-                                    const ratio = (p.estimated_rent / p.listing_price);
+                                    const rent = p.estimated_rent ?? 0;
+                                    const price = p.listing_price ?? 0;
+                                    const ratio = price > 0 ? rent / price : 0;
                                     return (
                                         <td key={p.id} className={`p-4 border-l border-gray-100 font-bold ${ratio >= 0.01 ? 'text-green-600' : 'text-yellow-600'}`}>
-                                            {formatPercent(ratio)}
+                                            {price > 0 ? formatPercent(ratio) : '—'}
                                         </td>
                                     );
                                 })}
@@ -145,9 +110,11 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                             <tr>
                                 <td className="p-4 font-medium text-gray-700">Gross Yield</td>
                                 {properties.map(p => {
-                                    const yieldVal = (p.estimated_rent * 12) / p.listing_price;
+                                    const rent = p.estimated_rent ?? 0;
+                                    const price = p.listing_price ?? 0;
+                                    const yieldVal = price > 0 ? (rent * 12) / price : 0;
                                     return (
-                                        <td key={p.id} className="p-4 border-l border-gray-100">{formatPercent(yieldVal)}</td>
+                                        <td key={p.id} className="p-4 border-l border-gray-100">{price > 0 ? formatPercent(yieldVal) : '—'}</td>
                                     )
                                 })}
                             </tr>
