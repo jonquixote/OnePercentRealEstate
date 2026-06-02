@@ -55,7 +55,6 @@ async function insertJobs(locations: string[]) {
     const successfulLocations: string[] = [];
 
     try {
-        console.log(`Seed Jobs: Processing ${locations.length} locations...`);
 
         for (const loc of locations) {
             // Per-item validation
@@ -86,7 +85,6 @@ async function insertJobs(locations: string[]) {
                     successCount++;
                     successfulLocations.push(loc);
                 } else {
-                    console.log(`Seed Jobs: Location already pending/processing: ${loc}`);
                     // We don't count existing as 'fail', just not 'newly seeded'
                 }
             } catch (dbErr: any) {
@@ -95,8 +93,6 @@ async function insertJobs(locations: string[]) {
                 errors.push({ location: loc, error: dbErr.message });
             }
         }
-
-        console.log(`Seed Jobs Complete. Added: ${successCount}, Failed: ${failCount}`);
 
         return NextResponse.json({
             success: true,

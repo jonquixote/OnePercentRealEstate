@@ -72,16 +72,14 @@ export default function Dashboard() {
         onlyOnePercentRule: filters.onlyOnePercentRule
       });
 
-      // @ts-ignore
-      if (data.length < 100) setHasMore(false);
+      const items = data.items;
+      if (items.length < 100) setHasMore(false);
       else setHasMore(true);
 
       if (pageNum === 1) {
-        // @ts-ignore
-        setProperties(data);
+        setProperties(items);
       } else {
-        // @ts-ignore
-        setProperties(prev => [...prev, ...data]);
+        setProperties(prev => [...prev, ...items]);
       }
 
       setPage(pageNum);

@@ -2,8 +2,9 @@
 
 import { useRef, use, useState, useEffect, useCallback } from 'react';
 import { getProperty, getHudBenchmark } from '@/app/actions';
-import { Loader2, ArrowLeft, Download, MapPin, Bed, Bath, Square, Calendar, Home, DollarSign, TrendingUp, Coffee, Utensils, School, TreePine, Dumbbell, ShoppingBag, Bus, Stethoscope, Store, Info } from 'lucide-react';
+import { Loader2, ArrowLeft, Download, MapPin, Bed, Bath, Square, Calendar, Home, DollarSign, TrendingUp, Coffee, Utensils, School, TreePine, Dumbbell, ShoppingBag, Bus, Stethoscope, Store } from 'lucide-react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Badge } from '@/components/ui/badge';
 import { PropertyReport } from '@/components/PropertyReport';
 import { AdvancedRentEstimator } from '@/components/AdvancedRentEstimator';
@@ -11,10 +12,12 @@ import { CashflowCalculator } from '@/components/CashflowCalculator';
 import { calculatePropertyMetrics } from '@/lib/calculators';
 import { PropertyHero } from '@/components/PropertyHero';
 import { PropertyTabs } from '@/components/PropertyTabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell
-} from 'recharts';
+import { Card, CardContent } from '@/components/ui/card';
+
+const MarketCharts = dynamic(() => import('@/components/charts/MarketCharts'), {
+    ssr: false,
+    loading: () => <div className="h-[300px] w-full bg-gray-50 animate-pulse rounded" />
+});
 
 export default function PropertyPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -451,96 +454,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                         <div className="space-y-8 animate-in fade-in duration-300">
 
                             {/* Charts Section */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                {/* Rent vs HUD FMR Chart */}
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Rent vs. HUD Fair Market Rent</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {benchmark?.safmr_data ? (
-                                            <>
-                                                <div className="h-[300px] w-full min-h-[300px] min-w-0">
-                                                    <ResponsiveContainer width="100%" height="100%">
-                                                        <BarChart
-                                                            data={[
-                                                                {
-                                                                    name: 'Rent Comparison',
-                                                                    'Estimated Rent': property.estimated_rent,
-                                                                    'HUD FMR': benchmark?.safmr_data?.[`${property.financial_snapshot?.bedrooms || 3}br`] || 0
-                                                                }
-                                                            ]}
-                                                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                                                        >
-                                                            <CartesianGrid strokeDasharray="3 3" />
-                                                            <XAxis dataKey="name" />
-                                                            <YAxis />
-                                                            <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                                                            <Legend />
-                                                            <Bar dataKey="Estimated Rent" fill="#8884d8" name="Est. Rent" />
-                                                            <Bar dataKey="HUD FMR" fill="#82ca9d" name={`HUD FMR (${property.financial_snapshot?.bedrooms || 3}BR)`} />
-                                                        </BarChart>
-                                                    </ResponsiveContainer>
-                                                </div>
-                                                <p className="text-xs text-gray-500 mt-4">
-                                                    Comparison of this property's estimated rent against the HUD Small Area Fair Market Rent (SAFMR) for {property.raw_data?.zip_code}.
-                                                </p>
-                                            </>
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center h-[200px] text-gray-500">
-                                                <Info className="h-8 w-8 mb-2 opacity-40" />
-                                                <p className="text-sm font-medium">HUD Fair Market Rent data unavailable</p>
-                                                <p className="text-xs text-gray-400 mt-1">Using smart estimate based on nearby rental comps instead</p>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-
-                                {/* Deal Economics Waterfall */}
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Monthly Deal Economics</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="h-[300px] w-full min-h-[300px] min-w-0">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    data={(() => {
-                                                        const rent = property.estimated_rent || 0;
-                                                        const price = property.listing_price || 0;
-                                                        const vacancy = rent * 0.05;
-                                                        const maintenance = rent * 0.05;
-                                                        const management = rent * 0.10;
-                                                        const taxes = (price * 0.02) / 12;
-                                                        const insurance = (price * 0.005) / 12;
-                                                        const cashFlow = rent - (vacancy + maintenance + management + taxes + insurance);
-
-                                                        return [
-                                                            { name: 'Gross Rent', value: Math.round(rent), fill: '#4ade80' },
-                                                            { name: 'Expenses', value: -Math.round(vacancy + maintenance + management + taxes + insurance), fill: '#f87171' },
-                                                            { name: 'Net Flow', value: Math.round(cashFlow), fill: '#60a5fa' },
-                                                        ];
-                                                    })()}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                                                >
-                                                    <CartesianGrid strokeDasharray="3 3" />
-                                                    <XAxis dataKey="name" />
-                                                    <YAxis />
-                                                    <Tooltip formatter={(value) => formatCurrency(Math.abs(Number(value)))} />
-                                                    <Bar dataKey="value">
-                                                        {
-                                                            // Cells are handled by data fill property
-                                                        }
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-4">
-                                            Simplified breakdown: Gross Rent minus estimated expenses (Vacancy 5%, Maint 5%, Mgmt 10%, Taxes ~2%, Ins ~0.5%). Excludes mortgage.
-                                        </p>
-                                    </CardContent>
-                                </Card>
-                            </div>
+                            <MarketCharts property={property} benchmark={benchmark} />
 
                             {/* Neighborhood Analytics */}
                             {raw_data?.neighborhood_stats && (

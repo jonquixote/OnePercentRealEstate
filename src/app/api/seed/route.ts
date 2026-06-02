@@ -11,7 +11,6 @@ export async function GET(request: Request) {
         // 1. Call Scraper Service
         // In Docker, the scraper service is at "http://scraper:8000"
         const scraperUrl = process.env.SCRAPER_URL || 'http://scraper:8000/scrape';
-        console.log(`Seeding data from ${scraperUrl} for ${location}...`);
 
         const scraperResponse = await fetch(scraperUrl, {
             method: 'POST',
@@ -29,7 +28,6 @@ export async function GET(request: Request) {
         }
 
         const responseText = await scraperResponse.text();
-        console.log('Scraper raw response:', responseText.substring(0, 500)); // Log first 500 chars
 
         let properties;
         try {
@@ -52,13 +50,6 @@ export async function GET(request: Request) {
             throw new Error('Scraper response is not an array. Received type: ' + typeof properties);
         }
 
-        console.log(`Fetched ${properties.length} properties.`);
-        if (properties.length > 0) {
-            console.log('First property keys:', Object.keys(properties[0]));
-            console.log('First property sample:', JSON.stringify(properties[0]));
-        }
-        console.log('Inserting into DB...');
-
         // 2. Insert into Postgres
         const client = await pool.connect();
         let insertedCount = 0;
@@ -79,10 +70,6 @@ export async function GET(request: Request) {
                 const listing_type = 'for_sale';
                 const raw_data = JSON.stringify(p);
                 const url = p.property_url || p.url || null;
-
-                // DEBUG LOG
-                console.log(`Preparing insert for ${address}: Price=${price}, Beds=${beds}, Baths=${baths}, Lat=${lat}, Lon=${lon}`);
-
 
                 // Upsert query
                 const query = `

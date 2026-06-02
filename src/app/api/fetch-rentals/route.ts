@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { z } from 'zod';
+import { env } from '@/lib/env';
 
 const fetchSchema = z.object({
   location: z.string().min(1).max(100),
@@ -9,7 +10,7 @@ const fetchSchema = z.object({
 
 function validateApiKey(req: Request): boolean {
   const apiKey = req.headers.get('x-api-key');
-  return !!apiKey && apiKey === process.env.ADMIN_API_KEY;
+  return !!apiKey && apiKey === env.ADMIN_API_KEY;
 }
 
 export async function POST(req: Request) {
