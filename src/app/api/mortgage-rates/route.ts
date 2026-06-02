@@ -26,13 +26,11 @@ export async function GET() {
 
             if (hoursDiff < CACHE_DURATION_HOURS && cachedData.safmr_data?.rate) {
                 client.release();
-                console.log("Returning cached mortgage rate");
                 return NextResponse.json({ rate: cachedData.safmr_data.rate, cached: true });
             }
         }
 
         // 2. Fetch from FRED
-        console.log("Fetching fresh mortgage rate from FRED...");
         const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${SERIES_ID}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
 
         const response = await fetch(url);

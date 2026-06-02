@@ -1,28 +1,12 @@
 import { Pool, QueryResult } from 'pg';
+import { env } from '@/lib/env';
 
-if (!process.env.DATABASE_URL && !process.env.POSTGRES_HOST) {
-  throw new Error('DATABASE_URL or POSTGRES_HOST environment variable is required');
-}
-
-const pool = new Pool(
-  process.env.DATABASE_URL
-    ? {
-        connectionString: process.env.DATABASE_URL,
-        max: 50,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
-      }
-    : {
-        user: process.env.POSTGRES_USER || 'postgres',
-        password: process.env.POSTGRES_PASSWORD,
-        host: process.env.POSTGRES_HOST || 'localhost',
-        port: parseInt(process.env.POSTGRES_PORT || '5432'),
-        database: process.env.POSTGRES_DB || 'postgres',
-        max: 50,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
-      }
-);
+const pool = new Pool({
+  connectionString: env.DATABASE_URL,
+  max: 50,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 
 const originalQuery = pool.query.bind(pool);
 

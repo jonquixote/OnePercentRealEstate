@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Image from 'next/image';
 import { ImageIcon } from 'lucide-react';
 
 interface PropertyHeroProps {
@@ -28,10 +29,12 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
             <div className="grid grid-cols-1 md:grid-cols-3 h-full gap-1">
                 {/* Main Large Image */}
                 <div className="md:col-span-2 relative h-full">
-                    <img
+                    <Image
                         src={mainImage}
                         alt={`Main view of ${address}`}
-                        className="w-full h-full object-cover hover:opacity-95 transition-opacity cursor-pointer"
+                        fill
+                        sizes="(max-width: 768px) 100vw, 66vw"
+                        className="object-cover hover:opacity-95 transition-opacity cursor-pointer"
                         onClick={() => setShowAll(true)}
                     />
                 </div>
@@ -40,10 +43,12 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
                 <div className="hidden md:grid grid-rows-2 gap-1 h-full">
                     {secondaryImages?.[0] ? (
                         <div className="relative h-full">
-                            <img
+                            <Image
                                 src={secondaryImages[0]}
                                 alt="Property view"
-                                className="w-full h-full object-cover hover:opacity-95 transition-opacity cursor-pointer"
+                                fill
+                                sizes="(max-width: 768px) 100vw, 33vw"
+                                className="object-cover hover:opacity-95 transition-opacity cursor-pointer"
                                 onClick={() => setShowAll(true)}
                             />
                         </div>
@@ -53,10 +58,12 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
 
                     {secondaryImages?.[1] ? (
                         <div className="relative h-full">
-                            <img
+                            <Image
                                 src={secondaryImages[1]}
                                 alt="Property view"
-                                className="w-full h-full object-cover hover:opacity-95 transition-opacity cursor-pointer"
+                                fill
+                                sizes="(max-width: 768px) 100vw, 33vw"
+                                className="object-cover hover:opacity-95 transition-opacity cursor-pointer"
                                 onClick={() => setShowAll(true)}
                             />
                             {remainingCount > 0 && (
@@ -90,7 +97,7 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
                 <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4" onClick={() => setShowAll(false)}>
                     <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
                         {images.map((img, idx) => (
-                            <img key={idx} src={img} className="w-full rounded-lg" loading="lazy" />
+                            <img key={idx} src={img} className="w-full rounded-lg" loading="lazy" decoding="async" />
                         ))}
                     </div>
                     <button

@@ -1,6 +1,32 @@
 'use server';
 
 import pool from '@/lib/db';
+import redis from '@/lib/redis';
+
+const PROPERTY_CACHE_TTL = 60;
+const HUD_CACHE_TTL = 86400;
+const CACHE_VERSION_KEY = 'props:version';
+
+async function getCacheVersion(): Promise<string> {
+    try {
+        let v = await redis.get(CACHE_VERSION_KEY);
+        if (!v) {
+            await redis.set(CACHE_VERSION_KEY, '1');
+            v = '1';
+        }
+        return v;
+    } catch {
+        return '0';
+    }
+}
+
+async function bumpCacheVersion(): Promise<void> {
+    try {
+        await redis.incr(CACHE_VERSION_KEY);
+    } catch (err) {
+        console.warn('Redis cache version bump failed:', err);
+    }
+}
 
 export async function getProperties(
     page = 1,
@@ -12,9 +38,20 @@ export async function getProperties(
         minBeds?: number;
         minBaths?: number;
         onlyOnePercentRule?: boolean;
-    }
+    },
+    cursor: string | null = null
 ) {
     try {
+        const version = await getCacheVersion();
+        const cacheKey = `properties:v${version}:p${page}:l${limit}:s${sortBy}:${JSON.stringify(filters || {})}:c${cursor || 'null'}`;
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached) return JSON.parse(cached);
+        } catch (err) {
+            console.warn('Redis cache read failed:', err);
+        }
+
+        const useCursor = cursor !== null;
         const offset = (page - 1) * limit;
 
   const SORT_COLUMNS: Record<string, string> = {
@@ -25,6 +62,7 @@ export async function getProperties(
     one_percent_low: '(estimated_rent / NULLIF(price, 0)) ASC NULLS LAST',
   };
   const orderBy = SORT_COLUMNS[sortBy] ?? 'created_at DESC';
+  const isDesc = orderBy.includes('DESC');
 
         // Build WHERE clauses dynamically
         const whereClauses = ["listing_type = 'for_sale'"];
@@ -51,34 +89,54 @@ export async function getProperties(
             whereClauses.push(`(estimated_rent / NULLIF(price, 0)) >= 0.01`);
         }
 
-        // Map 'listings' table to the 'Property' interface shape expected by the frontend
-  const query = `
-  SELECT
-  id,
-  address,
-  COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
-  COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
-  COALESCE(bedrooms, (raw_data->>'beds')::numeric) as bedrooms,
-  COALESCE(bathrooms, (raw_data->>'full_baths')::numeric) as bathrooms,
-  COALESCE(sqft, (raw_data->>'sqft')::numeric) as sqft,
-  COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
-  COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
-  listing_status as status,
-  primary_photo,
-  created_at
-      FROM listings
-      WHERE ${whereClauses.join(' AND ')}
-      ORDER BY ${orderBy}
-      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
-    `;
+        if (useCursor) {
+            whereClauses.push(`id ${isDesc ? '<' : '>'} $${paramIndex++}`);
+            params.push(cursor);
+        }
 
-        params.push(limit, offset);
+        // Map 'listings' table to the 'Property' interface shape expected by the frontend
+        const selectClause = `
+            id,
+            address,
+            COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
+            COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
+            COALESCE(bedrooms, (raw_data->>'beds')::numeric) as bedrooms,
+            COALESCE(bathrooms, (raw_data->>'full_baths')::numeric) as bathrooms,
+            COALESCE(sqft, (raw_data->>'sqft')::numeric) as sqft,
+            COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
+            COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
+            listing_status as status,
+            primary_photo,
+            created_at
+        `;
+
+        let query: string;
+        if (useCursor) {
+            const finalOrderBy = `${orderBy}, id ${isDesc ? 'DESC' : 'ASC'}`;
+            query = `
+                SELECT ${selectClause}
+                FROM listings
+                WHERE ${whereClauses.join(' AND ')}
+                ORDER BY ${finalOrderBy}
+                LIMIT $${paramIndex++}
+            `;
+            params.push(limit);
+        } else {
+            query = `
+                SELECT ${selectClause}
+                FROM listings
+                WHERE ${whereClauses.join(' AND ')}
+                ORDER BY ${orderBy}
+                LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+            `;
+            params.push(limit, offset);
+        }
 
 const client = await pool.connect();
   try {
     const result = await client.query(query, params);
 
-    return result.rows.map((row: any) => {
+    const items = result.rows.map((row: any) => {
       let rent = Number(row.estimated_rent);
       if (!rent || rent === 0) {
         const beds = Number(row.bedrooms) || 3;
@@ -102,26 +160,52 @@ const client = await pool.connect();
         raw_data: {},
       };
     });
+
+    const response = {
+      items,
+      nextCursor: items.length === limit ? items[items.length - 1].id : null,
+    };
+
+    try {
+      await redis.set(cacheKey, JSON.stringify(response), 'EX', PROPERTY_CACHE_TTL);
+    } catch (err) {
+      console.warn('Redis cache write failed:', err);
+    }
+
+    return response;
   } finally {
     client.release();
   }
 
     } catch (error) {
         console.error('Database fetch error:', error);
-        return [];
+        return { items: [], nextCursor: null };
     }
 }
 
 export async function getHudBenchmark(zipCode: string) {
     try {
+        const cacheKey = `hud:${zipCode}`;
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached) return JSON.parse(cached);
+        } catch (err) {
+            console.warn('Redis cache read failed:', err);
+        }
+
 const client = await pool.connect();
     try {
       const cacheQuery = 'SELECT safmr_data, last_updated FROM market_benchmarks WHERE zip_code = $1';
       const cacheRes = await client.query(cacheQuery, [zipCode]);
 
       if (cacheRes.rows.length > 0) {
-        const cached = cacheRes.rows[0];
-        return cached.safmr_data;
+        const cached = cacheRes.rows[0].safmr_data;
+        try {
+          await redis.set(cacheKey, JSON.stringify(cached), 'EX', HUD_CACHE_TTL);
+        } catch (err) {
+          console.warn('Redis cache write failed:', err);
+        }
+        return cached;
       }
 
       console.log(`No HUD SAFMR data available for ${zipCode}`);
@@ -139,7 +223,7 @@ const client = await pool.connect();
 export async function getProperty(id: string) {
     try {
         const query = `
-      SELECT 
+      SELECT
         id,
         address,
         COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
@@ -243,6 +327,7 @@ const client = await pool.connect();
         WHERE id = $2`,
         [Math.round(rent), id]
       );
+      await bumpCacheVersion();
       return { success: true };
     } finally {
       client.release();
