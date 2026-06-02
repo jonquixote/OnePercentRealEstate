@@ -58,6 +58,7 @@ services:
         condition: service_healthy
     networks:
       - frontend
+      - backend
     deploy:
       resources:
         limits:
