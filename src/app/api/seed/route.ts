@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { safeErrorResponse } from '@/lib/api-error';
+import { seedLimiter, checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: Request) {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rl = await checkRateLimit(seedLimiter, ip);
+    if (!rl.allowed) {
+        return NextResponse.json(
+            { error: 'Rate limit exceeded' },
+            { status: 429, headers: { 'Retry-After': String(rl.retryAfter || 60) } }
+        );
+    }
+
     try {
         const { searchParams } = new URL(request.url);
         const location = searchParams.get('location') || '10001';

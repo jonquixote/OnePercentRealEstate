@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { safeErrorResponse } from '@/lib/api-error';
+import { estimateRentLimiter, checkRateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: Request) {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rl = await checkRateLimit(estimateRentLimiter, ip);
+    if (!rl.allowed) {
+        return NextResponse.json(
+            { error: 'Rate limit exceeded' },
+            { status: 429, headers: { 'Retry-After': String(rl.retryAfter || 60) } }
+        );
+    }
+
     try {
         const body = await req.json();
         const { lat, lon, beds, baths, sqft, zip_code, property_type } = body;

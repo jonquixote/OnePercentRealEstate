@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { safeErrorResponse } from '@/lib/api-error';
+import { clustersLimiter, checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
@@ -14,13 +15,22 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'Missing bounds or zoom' }, { status: 400 });
     }
 
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rl = await checkRateLimit(clustersLimiter, ip);
+    if (!rl.allowed) {
+        return NextResponse.json(
+            { error: 'Rate limit exceeded' },
+            { status: 429, headers: { 'Retry-After': String(rl.retryAfter || 60) } }
+        );
+    }
+
     try {
         const sql = `
             SELECT get_property_clusters(
-                $1::numeric, 
-                $2::numeric, 
-                $3::numeric, 
-                $4::numeric, 
+                $1::numeric,
+                $2::numeric,
+                $3::numeric,
+                $4::numeric,
                 $5::integer
             ) as clusters
         `;
