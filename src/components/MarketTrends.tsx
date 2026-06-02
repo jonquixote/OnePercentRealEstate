@@ -65,7 +65,7 @@ export default function MarketTrends({ data }: { data: MarketTrendData }) {
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     labelFormatter={(label) => new Date(label).toLocaleDateString()}
-                                    formatter={(value: number) => [`${value}%`, "Rate"]}
+                                    formatter={(value) => [`${value}%`, "Rate"] as [string, string]}
                                 />
                                 <Line
                                     type="monotone"
