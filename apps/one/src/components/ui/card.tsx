@@ -1,7 +1,9 @@
 import * as React from "react"
-import { cn } from "@/lib/utils"
 import Link from 'next/link';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import { LazyMotion, domAnimation, m } from 'motion/react';
+import { ArrowDownRight, ArrowUpRight, Loader2 } from 'lucide-react';
+import { Media } from '@oper/primitives';
+import { cn } from "@/lib/utils"
 import { calculatePropertyMetrics } from '@/lib/calculators';
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -9,6 +11,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
     currency: 'USD',
     maximumFractionDigits: 0,
 });
+
+const numberFormatter = new Intl.NumberFormat('en-US');
 
 const Card = React.forwardRef<
     HTMLDivElement,
@@ -31,151 +35,262 @@ interface PropertyCardProps {
     onSelect?: (id: string) => void;
 }
 
+/**
+ * Map raw status values to a display label + tone. The dataset emits
+ * `for_sale | pending | sold | watch | ...` — we normalize down for the pill.
+ */
+function getStatusBadge(status: string | null | undefined): { label: string; tone: 'active' | 'pending' | 'sold' | 'watch' | 'neutral' } {
+    const s = (status ?? '').toLowerCase();
+    if (s === 'for_sale' || s === 'active' || s === 'forsale' || s === 'for sale') return { label: 'Active', tone: 'active' };
+    if (s === 'pending' || s === 'contingent' || s === 'under_contract') return { label: 'Pending', tone: 'pending' };
+    if (s === 'sold' || s === 'closed') return { label: 'Sold', tone: 'sold' };
+    if (s === 'watch') return { label: 'Watching', tone: 'watch' };
+    if (!s) return { label: '—', tone: 'neutral' };
+    return { label: s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()), tone: 'neutral' };
+}
+
+const statusToneClasses: Record<'active' | 'pending' | 'sold' | 'watch' | 'neutral', string> = {
+    active: 'text-emerald-700 dark:text-emerald-300',
+    pending: 'text-amber-700 dark:text-amber-300',
+    sold: 'text-zinc-600 dark:text-zinc-300',
+    watch: 'text-blue-700 dark:text-blue-300',
+    neutral: 'text-zinc-600 dark:text-zinc-300',
+};
+
 export const PropertyCard = React.memo(function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {
     const { address, listing_price, estimated_rent, financial_snapshot, status } = property;
 
     const { isOnePercentRule, monthlyCashflow } = calculatePropertyMetrics(listing_price, estimated_rent);
-    const hasRent = estimated_rent && estimated_rent > 0;
+    const hasRent = !!estimated_rent && estimated_rent > 0;
+    const hasPrice = !!listing_price && listing_price > 0;
+
+    const ratioPct = hasRent && hasPrice ? (estimated_rent / listing_price) * 100 : null;
+
+    // Tier the 1% chip: emerald >= 1, amber 0.85–1, zinc below.
+    const ratioTone: 'emerald' | 'amber' | 'zinc' = (() => {
+        if (ratioPct == null) return 'zinc';
+        if (ratioPct >= 1) return 'emerald';
+        if (ratioPct >= 0.85) return 'amber';
+        return 'zinc';
+    })();
+
+    const ratioBg: Record<typeof ratioTone, string> = {
+        emerald: 'bg-emerald-600',
+        amber: 'bg-amber-500',
+        zinc: 'bg-zinc-700/90',
+    } as const;
+
+    const statusBadge = getStatusBadge(status);
 
     const handleToggle = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         e.stopPropagation();
         onSelect?.(property.id);
     }, [onSelect, property.id]);
 
+    const primaryPhoto: string | null = Array.isArray(property.images) && property.images.length > 0 ? property.images[0] : null;
+    const media = { primary_photo: primaryPhoto, media_blur: property.media_blur ?? null };
+
+    const beds = financial_snapshot?.bedrooms;
+    const baths = financial_snapshot?.bathrooms;
+    const sqft = financial_snapshot?.sqft;
+
+    const cashflowPositive = monthlyCashflow >= 0;
+    const cashflowAbs = Math.abs(Math.round(monthlyCashflow));
+
     return (
-        <div className="relative group block h-full">
-            {onSelect && (
-                <div className="absolute top-4 right-4 z-20 md:opacity-0 md:group-hover:opacity-100 opacity-90 transition-opacity duration-200 bg-white/90 rounded-md p-0.5 shadow-sm" title="Select to Compare">
-                    <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={handleToggle}
-                        aria-label={`Select ${address} for compare`}
-                        className="h-5 w-5 rounded-md border-gray-300 text-slate-900 focus:ring-slate-900 cursor-pointer transition-colors"
-                    />
-                </div>
-            )}
-            <Link href={`/property/${property.id}`} className="block h-full">
-                <div className={cn(
-                    "flex flex-col h-full overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
-                    isSelected ? "ring-2 ring-slate-900 ring-offset-2" : ""
-                )}>
-                    {/* Main Image */}
-                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
-                        {property.images && property.images.length > 0 ? (
-                            <img
-                                src={property.images[0]}
-                                alt={address}
-                                loading="lazy"
-                                decoding="async"
-                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            />
-                        ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-gray-100 text-gray-400">
-                                <span className="text-xs">No Image</span>
-                            </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <LazyMotion features={domAnimation} strict>
+            <m.div
+                initial={{ opacity: 0, y: 8 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '0px 0px -40px 0px' }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="relative group block h-full"
+            >
+                {onSelect && (
+                    <div
+                        className="absolute top-3 right-3 z-30 md:opacity-0 md:group-hover:opacity-100 opacity-90 transition-opacity duration-200 bg-white/90 dark:bg-zinc-900/80 backdrop-blur-sm rounded-md p-0.5 shadow-sm"
+                        title="Select to Compare"
+                    >
+                        <input
+                            type="checkbox"
+                            checked={!!isSelected}
+                            onChange={handleToggle}
+                            aria-label={`Select ${address} for compare`}
+                            className="h-5 w-5 rounded-md border-gray-300 dark:border-zinc-700 text-slate-900 focus:ring-slate-900 cursor-pointer transition-colors"
+                        />
                     </div>
+                )}
+                <Link
+                    href={`/property/${property.id}`}
+                    aria-label={address}
+                    className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 dark:focus-visible:ring-zinc-100 rounded-2xl"
+                >
+                    <article
+                        className={cn(
+                            "relative flex flex-col h-full overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 shadow-sm transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1 group-hover:border-zinc-300 dark:group-hover:border-zinc-700",
+                            isSelected && "ring-2 ring-slate-900 dark:ring-zinc-100 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950"
+                        )}
+                    >
+                        {/* Hero image (16:9) */}
+                        <div className="relative aspect-[16/9] w-full overflow-hidden rounded-t-2xl bg-zinc-100 dark:bg-zinc-800">
+                            {primaryPhoto ? (
+                                <div className="absolute inset-0 transition-transform duration-300 ease-out group-hover:scale-[1.03]">
+                                    <Media
+                                        media={media}
+                                        alt={address}
+                                        fill
+                                        sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                                        className="object-cover"
+                                    />
+                                </div>
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500">
+                                    <span className="text-xs">No Image</span>
+                                </div>
+                            )}
 
-                    {/* Status Bar */}
-                    <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between bg-white relative">
-                        {hasRent ? (
-                            <div className="flex items-center space-x-2">
-                                <span className={cn(
-                                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide",
-                                    isOnePercentRule
-                                        ? "bg-emerald-100 text-emerald-800"
-                                        : "bg-amber-100 text-amber-800"
-                                )}>
-                                    <CheckCircle className={cn("h-3 w-3", isOnePercentRule ? "text-emerald-600" : "text-amber-600")} />
-                                    {isOnePercentRule ? 'Strong Deal' : 'Review'}
+                            {/* Bottom gradient for legibility under chip on bright photos */}
+                            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/25 to-transparent" />
+
+                            {/* Status pill (top-left) */}
+                            <div className="absolute top-3 left-3 z-10">
+                                <span
+                                    className={cn(
+                                        "inline-flex items-center gap-1.5 rounded-full bg-white/85 dark:bg-zinc-900/80 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold tracking-wide shadow-sm",
+                                        statusToneClasses[statusBadge.tone]
+                                    )}
+                                >
+                                    <span
+                                        className={cn(
+                                            "h-1.5 w-1.5 rounded-full",
+                                            statusBadge.tone === 'active' && 'bg-emerald-500',
+                                            statusBadge.tone === 'pending' && 'bg-amber-500',
+                                            statusBadge.tone === 'sold' && 'bg-zinc-400',
+                                            statusBadge.tone === 'watch' && 'bg-blue-500',
+                                            statusBadge.tone === 'neutral' && 'bg-zinc-400',
+                                        )}
+                                    />
+                                    {statusBadge.label}
                                 </span>
                             </div>
-                        ) : (
-                            <div className="flex items-center space-x-2">
-                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide bg-blue-100 text-blue-800">
-                                    <Loader2 className="h-3 w-3 text-blue-600 animate-spin" />
-                                    Calculating...
-                                </span>
-                            </div>
-                        )}
-                        <span className={cn(
-                            "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
-                            status === 'watch'
-                                ? "bg-blue-50 text-blue-700 border border-blue-100"
-                                : "bg-gray-50 text-gray-600 border border-gray-100"
-                        )}>
-                            {status}
-                        </span>
-                    </div>
 
-                    <div className="p-6 flex-1 flex flex-col">
-                        <div className="mb-6 flex-1">
-                            <h3 className="text-xl font-bold leading-tight text-gray-900 group-hover:text-slate-700 transition-colors line-clamp-2">
+                            {/* 1% Rule chip (top-right) */}
+                            <div className="absolute top-3 right-3 z-10" style={{ marginRight: onSelect ? '2.25rem' : 0 }}>
+                                {hasRent && ratioPct != null ? (
+                                    <span
+                                        className={cn(
+                                            "inline-flex items-center rounded-full px-3 py-1.5 text-base font-bold tracking-tight text-white shadow-[0_2px_8px_rgba(0,0,0,0.25)]",
+                                            ratioBg[ratioTone]
+                                        )}
+                                        aria-label={`${ratioPct.toFixed(2)} percent of price`}
+                                    >
+                                        {ratioPct.toFixed(2)}%
+                                    </span>
+                                ) : (
+                                    <span
+                                        className="inline-flex items-center gap-1.5 rounded-full bg-zinc-200/90 dark:bg-zinc-800/90 backdrop-blur-sm px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300 shadow-sm animate-pulse"
+                                        aria-label="Calculating one percent rule"
+                                    >
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        Calculating…
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex flex-1 flex-col p-5">
+                            {/* Price */}
+                            <div className="flex items-baseline justify-between gap-3">
+                                <p className="text-2xl font-semibold tracking-tight tabular-nums text-zinc-900 dark:text-zinc-50">
+                                    {hasPrice ? currencyFormatter.format(listing_price) : '—'}
+                                </p>
+                                {hasRent ? (
+                                    <span className="text-xs font-medium tabular-nums text-zinc-500 dark:text-zinc-400">
+                                        {currencyFormatter.format(estimated_rent)}<span className="text-zinc-400 dark:text-zinc-500">/mo rent</span>
+                                    </span>
+                                ) : null}
+                            </div>
+
+                            {/* Address */}
+                            <h3 className="mt-1 line-clamp-1 text-sm font-medium text-zinc-600 dark:text-zinc-300">
                                 {address}
                             </h3>
-                            <div className="mt-3 flex items-center space-x-4 text-sm text-gray-500 font-medium">
-                                <span className="flex items-center">
-                                    <span className="text-gray-900 font-bold mr-1">{financial_snapshot?.bedrooms || '-'}</span>
-                                    <span className="text-xs uppercase tracking-wide">Beds</span>
-                                </span>
-                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                <span className="flex items-center">
-                                    <span className="text-gray-900 font-bold mr-1">{financial_snapshot?.bathrooms || '-'}</span>
-                                    <span className="text-xs uppercase tracking-wide">Baths</span>
-                                </span>
-                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                <span className="flex items-center">
-                                    <span className="text-gray-900 font-bold mr-1">{financial_snapshot?.sqft || '-'}</span>
-                                    <span className="text-xs uppercase tracking-wide">SqFt</span>
-                                </span>
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-6 pt-6 border-t border-gray-50">
-                            <div>
-                                <p className="text-xs uppercase tracking-wider font-semibold text-gray-600 mb-1">List Price</p>
-                                <p className="text-lg font-bold text-gray-900 tracking-tight">{listing_price > 0 ? currencyFormatter.format(listing_price) : '—'}</p>
+                            {/* Spec strip */}
+                            <div className="mt-3 flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 tabular-nums">
+                                <span>{beds || '—'} bd</span>
+                                <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                                <span>{baths || '—'} ba</span>
+                                <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                                <span>{sqft ? numberFormatter.format(sqft) : '—'} sqft</span>
                             </div>
-                            <div>
-                                <p className="text-xs uppercase tracking-wider font-semibold text-gray-600 mb-1 flex items-center gap-1">
-                                    Est. Rent
-                                    <span className="inline-block w-3 h-3 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center cursor-help" title="Smart estimate based on nearby rentals and HUD data" aria-label="More info">?</span>
-                                </p>
-                                <div className="flex items-baseline space-x-1">
-                                    {hasRent ? (
-                                        <>
-                                            <p className="text-lg font-bold text-gray-900 tracking-tight">{currencyFormatter.format(estimated_rent)}</p>
-                                            <span className="text-xs text-gray-500 font-medium">/mo</span>
-                                        </>
-                                    ) : (
-                                        <p className="text-sm font-medium text-gray-500 italic">Pending...</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div className={cn(
-                        "px-6 py-4 flex items-center justify-between",
-                        hasRent && isOnePercentRule ? "bg-emerald-50/50" : (hasRent ? "bg-amber-50/50" : "bg-gray-50")
-                    )}>
-                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">1% Rule</span>
-                        <div className="flex items-center">
-                            <span className={cn(
-                                "text-lg font-black tracking-tight",
-                                hasRent ? (isOnePercentRule ? "text-emerald-600" : "text-amber-600") : "text-gray-300"
-                            )}>
-                                {hasRent && listing_price > 0 ? ((estimated_rent / listing_price) * 100).toFixed(2) + '%' : '—'}
-                            </span>
+                            {/* Bottom row: monthly cashflow */}
+                            <div className="mt-auto pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 mt-4">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                    Est. Cashflow
+                                </span>
+                                {hasRent ? (
+                                    <span
+                                        className={cn(
+                                            "inline-flex items-center gap-1 text-sm font-semibold tabular-nums",
+                                            cashflowPositive
+                                                ? 'text-emerald-600 dark:text-emerald-400'
+                                                : 'text-rose-600 dark:text-rose-400'
+                                        )}
+                                    >
+                                        {cashflowPositive ? (
+                                            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                        ) : (
+                                            <ArrowDownRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                        )}
+                                        {cashflowPositive ? '+' : '−'}{currencyFormatter.format(cashflowAbs)}/mo
+                                    </span>
+                                ) : (
+                                    <span className="text-sm font-medium italic text-zinc-400 dark:text-zinc-500">
+                                        Pending…
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </Link>
-        </div>
+                    </article>
+                </Link>
+            </m.div>
+        </LazyMotion>
     );
 });
+
+/**
+ * Skeleton that matches PropertyCard layout dimensions. Pulses while data
+ * is loading. Safe to render in a grid where PropertyCard would be.
+ */
+export function PropertyCardSkeleton() {
+    return (
+        <div className="relative h-full">
+            <div className="flex flex-col h-full overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 shadow-sm animate-pulse">
+                {/* Image area */}
+                <div className="relative aspect-[16/9] w-full bg-zinc-200 dark:bg-zinc-800">
+                    <div className="absolute top-3 left-3 h-6 w-16 rounded-full bg-zinc-300/70 dark:bg-zinc-700" />
+                    <div className="absolute top-3 right-3 h-7 w-16 rounded-full bg-zinc-300/70 dark:bg-zinc-700" />
+                </div>
+                {/* Body */}
+                <div className="flex flex-1 flex-col p-5">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <div className="h-7 w-28 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+                        <div className="h-3 w-20 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+                    </div>
+                    <div className="mt-2 h-4 w-3/4 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+                    <div className="mt-3 h-4 w-40 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+                    <div className="mt-auto pt-4 mt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800">
+                        <div className="h-3 w-24 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+                        <div className="h-4 w-20 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 const CardHeader = React.forwardRef<
     HTMLDivElement,
