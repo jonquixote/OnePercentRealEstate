@@ -55,7 +55,8 @@ export const DEFAULT_EXPENSE_OPTIONS: ExpenseOptions = {
  * Calculates monthly mortgage payment (PI)
  */
 export function calculateMortgage(principal: number, annualRate: number, years: number): number {
-    if (principal <= 0 || annualRate <= 0 || years <= 0) return 0;
+    if (principal <= 0 || years <= 0) return 0;
+  if (annualRate <= 0) return principal / (years * 12);
 
     const monthlyRate = annualRate / 12;
     const numPayments = years * 12;
@@ -118,11 +119,13 @@ export function calculatePropertyMetrics(
 
     // Cash on Cash Return = Annual Cashflow / Initial Investment (Down Payment + Closing Costs usually, simplifying to Down Payment)
     // TODO: Add closing costs to initial investment calculation for more accuracy
-    const cashOnCash = downPayment > 0 ? (annualCashflow / downPayment) * 100 : 0;
+    const closingCosts = price * 0.03;
+  const totalCashInvested = downPayment + closingCosts;
+  const cashOnCash = totalCashInvested > 0 ? (annualCashflow / totalCashInvested) * 100 : 0;
 
     // 1% Rule
     // Monthly Rent >= 1% of Purchase Price
-    const isOnePercentRule = price > 0 && (rent / price) >= 0.01;
+    const isOnePercentRule = price > 0 && (rent / price) >= 0.0099;
 
     return {
         monthlyMortgage,

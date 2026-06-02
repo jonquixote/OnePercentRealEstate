@@ -16,6 +16,12 @@ This diary captures specific, "finer" technical details and unexpected issues en
 - **Fix**: Use `restart_services.exp`.
 - **Rule**: Never restart `ollama` during maintenance unless explicitly needed; it consumes ~6GB VRAM/RAM immediately upon loading models.
 
+### 3. Missing .dockerignore (Dirty Context)
+
+- **Issue**: Deployments were slow or resulted in old code persisting because `COPY . .` included the host's `.next` and `node_modules` folders.
+- **Fix**: Added `.dockerignore` to exclude `.next`, `node_modules`, and `.git`.
+- **Takeaway**: Always use `.dockerignore` for Node.js apps to prevent "dirty" build contexts.
+
 ## 🛣️ API & Routing
 
 ### 1. The Cache Header Secret

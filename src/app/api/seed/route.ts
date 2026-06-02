@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { safeErrorResponse } from '@/lib/api-error';
 
 export async function GET(request: Request) {
     try {
@@ -128,11 +129,8 @@ export async function GET(request: Request) {
             debug_first_property: properties.length > 0 ? properties[0] : null
         });
 
-    } catch (error: any) {
-        console.error('Seed error:', error);
-        return NextResponse.json(
-            { success: false, error: error.message },
-            { status: 500 }
-        );
-    }
+} catch (error: any) {
+  console.error('Seed error:', error);
+  return safeErrorResponse(error, 500);
+}
 }
