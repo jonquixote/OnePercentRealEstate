@@ -1,0 +1,80 @@
+# Alertmanager config for OnePercentRealEstate.
+#
+# Routing:
+#   * default (warn)  -> email
+#   * severity=crit   -> email + slack
+#
+# Secrets are read from env vars at startup. Set them via the
+# `environment:` block on the alertmanager service in docker-compose.yml:
+#
+#   ALERTMANAGER_SMTP_HOST=smtp.fastmail.com:465
+#   ALERTMANAGER_SMTP_FROM=alerts@octavo.press
+#   ALERTMANAGER_SMTP_USER=alerts@octavo.press
+#   ALERTMANAGER_SMTP_PASSWORD=<app password>
+#   ALERTMANAGER_SMTP_TO=ops@octavo.press
+#   ALERTMANAGER_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...   # optional
+#
+# Alertmanager expands `$VAR` syntax in values — not Go template
+# substitution. So we hardcode the templated fields and read secrets
+# from `--config.file` reload after env injection. For now we keep the
+# secret tokens in this file as placeholders; replace before deploy.
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: smtp.example.com:465
+  smtp_from: alerts@octavo.press
+  smtp_auth_username: alerts@octavo.press
+  smtp_auth_password: REPLACE_WITH_APP_PASSWORD
+  smtp_require_tls: false        # using SMTPS on 465; not STARTTLS on 587
+  smtp_hello: octavo.press
+
+# Route tree: every alert hits the default route; severity=crit also
+# gets the slack receiver via a child route.
+route:
+  receiver: email-default
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "crit"
+      receiver: crit-fanout
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: false
+
+receivers:
+  - name: email-default
+    email_configs:
+      - to: ops@octavo.press
+        send_resolved: true
+        headers:
+          Subject: '[onepercent {{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+
+  - name: crit-fanout
+    email_configs:
+      - to: ops@octavo.press
+        send_resolved: true
+        headers:
+          Subject: '[onepercent CRIT {{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+    slack_configs:
+      - api_url: REPLACE_WITH_SLACK_WEBHOOK_URL
+        channel: "#onepercent-alerts"
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        text: |
+          *Severity:* {{ .CommonLabels.severity }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          {{ if .CommonAnnotations.runbook_url }}*Runbook:* {{ .CommonAnnotations.runbook_url }}{{ end }}
+
+inhibit_rules:
+  # If a service is down (crit), don't also page about high error rate
+  # / latency on that service — they're caused by the down-ness.
+  - source_matchers:
+      - severity = "crit"
+      - alertname =~ "PostgresDown|RedisDown"
+    target_matchers:
+      - severity = "warn"
+    equal: ["host"]

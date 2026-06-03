@@ -20,6 +20,16 @@ export const clustersLimiter = makeLimiter(30, 60, 'rl:clusters');
 export const propertiesLimiter = makeLimiter(60, 60, 'rl:properties');
 export const seedLimiter = makeLimiter(5, 60, 'rl:seed');
 
+// Auth brute-force defence: 5 attempts / minute / IP, then a 5-minute lockout.
+export const loginLimiter = new RateLimiterRedis({
+  storeClient: redis,
+  keyPrefix: 'rl:login',
+  points: 5,
+  duration: 60,
+  blockDuration: 300,
+  inMemoryBlockOnConsumed: 6,
+});
+
 export async function checkRateLimit(
   limiter: RateLimiterRedis,
   key: string

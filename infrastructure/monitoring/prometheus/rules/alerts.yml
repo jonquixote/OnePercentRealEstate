@@ -1,0 +1,148 @@
+# Prometheus alert rules for OnePercentRealEstate production.
+#
+# Severities:
+#   warn  - notify, no pager
+#   crit  - pager (when on-call exists; today routes to extra Slack chan)
+#
+# Each rule includes a runbook_url annotation pointing at
+# documentation/operations/. Fill those in as runbooks are written.
+
+groups:
+  - name: host
+    interval: 30s
+    rules:
+      - alert: HighCPU
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "CPU > 90% for 5m on {{ $labels.instance }}"
+          description: "Sustained high CPU. Identify the hot container via cadvisor."
+          runbook_url: "https://github.com/<OWNER>/OnePercentRealEstate/blob/main/documentation/operations/troubleshooting.md"
+
+      - alert: HighMemory
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Memory > 90% for 5m on {{ $labels.instance }}"
+          description: "Available memory below 10%. Check the largest container via cadvisor; consider raising limits or restarting."
+
+      - alert: DiskWarn
+        expr: |
+          (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100 > 85
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Disk > 85% on {{ $labels.mountpoint }}"
+          description: "Free space dropping. Rotate logs or expand the volume before it hits crit."
+
+      - alert: DiskCrit
+        expr: |
+          (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100 > 95
+        for: 5m
+        labels:
+          severity: crit
+        annotations:
+          summary: "Disk > 95% on {{ $labels.mountpoint }}"
+          description: "Filesystem nearly full. Postgres will start refusing writes. Expand or evict NOW."
+
+  - name: services
+    interval: 30s
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: crit
+        annotations:
+          summary: "Postgres is unreachable"
+          description: "postgres-exporter cannot connect. Check `docker ps` and `docker logs infrastructure-postgres-1`."
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: crit
+        annotations:
+          summary: "Redis is unreachable"
+          description: "redis-exporter cannot connect. Rate limiting and session caches are unavailable."
+
+  - name: http
+    interval: 30s
+    rules:
+      # These rules assume the Next.js apps expose prom-client metrics
+      # at /api/metrics with labels `app`, `route`, `status`. They will
+      # not fire until those metrics exist; they're scaffolded now so
+      # we don't lose the design.
+      - alert: HttpHighErrorRate
+        expr: |
+          (
+            sum by (app) (rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum by (app) (rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "5xx rate > 5% on {{ $labels.app }} for 5m"
+          description: "Check app logs: `docker logs infrastructure-app-1 --tail 200`."
+
+      - alert: HttpHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (app, le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "p95 latency > 500ms on {{ $labels.app }} for 5m"
+          description: "Inspect slow endpoints via Grafana 'HTTP latency by route'."
+
+  - name: scraper
+    interval: 60s
+    rules:
+      # ScraperBacklog uses a custom postgres-exporter query. The query
+      # must be defined in postgres-exporter's queries.yml; see the
+      # snippet at the bottom of this file.
+      - alert: ScraperBacklog
+        expr: crawl_jobs_pending > 100
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Scraper backlog: {{ $value }} pending jobs for 10m"
+          description: "The crawl_jobs table has > 100 pending rows. Either the scraper is down or upstream is throttling."
+
+# ---------------------------------------------------------------------------
+# postgres-exporter custom query (paste into postgres-exporter's
+# queries.yml; do NOT put this inside the Prometheus rules file).
+# ---------------------------------------------------------------------------
+#
+# crawl_jobs:
+#   query: |
+#     SELECT
+#       count(*) FILTER (WHERE status = 'pending') AS pending,
+#       count(*) FILTER (WHERE status = 'running') AS running,
+#       count(*) FILTER (WHERE status = 'failed' AND updated_at > now() - interval '1 hour') AS failed_recent
+#     FROM crawl_jobs
+#   metrics:
+#     - pending:
+#         usage: "GAUGE"
+#         description: "Pending crawl jobs"
+#     - running:
+#         usage: "GAUGE"
+#         description: "Currently running crawl jobs"
+#     - failed_recent:
+#         usage: "GAUGE"
+#         description: "Crawl jobs that failed in the last hour"
+#
+# This becomes the metric `crawl_jobs_pending` etc. referenced above.
