@@ -1,0 +1,53 @@
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import { Providers } from "./providers";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: {
+    default: 'OnePercent — Find Rental Properties That Cash Flow',
+    template: '%s | OnePercent',
+  },
+  description: 'Discover 1% rule rental properties nationwide. Smart rent estimates, market analytics, and deal scoring for real estate investors.',
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    siteName: 'OnePercent',
+    title: 'OnePercent — Find Rental Properties That Cash Flow',
+    description: 'Smart rental property analysis for serious investors.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'OnePercent — Find Rental Properties That Cash Flow',
+    description: 'Smart rental property analysis for serious investors.',
+  },
+  robots: { index: true, follow: true },
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning
+      >
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}

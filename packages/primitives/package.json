@@ -1,0 +1,37 @@
+{
+  "name": "@oper/primitives",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./button": "./src/button.tsx",
+    "./cn": "./src/cn.ts",
+    "./media": "./src/media.tsx",
+    "./schema": "./src/schema.tsx",
+    "./theme": "./src/theme.tsx",
+    "./hotkeys": "./src/hotkeys.tsx"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.555.0",
+    "next-themes": "^0.4.6",
+    "tailwind-merge": "^3.4.0"
+  },
+  "peerDependencies": {
+    "next": "^16.1.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

@@ -1,5 +1,7 @@
 node_modules
+**/node_modules
 .next
+**/.next
 .git
 .env*
 *.exp
@@ -7,3 +9,5 @@ venv
 __pycache__
 .DS_Store
 plans
+_backend
+documentation
