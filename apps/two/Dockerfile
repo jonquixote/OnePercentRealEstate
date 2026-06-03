@@ -37,8 +37,8 @@ RUN apk add --no-cache wget && \
   addgroup --system --gid 1001 nodejs && \
   adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/apps/two/public ./public
-RUN mkdir .next && chown nextjs:nodejs .next
+RUN mkdir -p public .next && chown nextjs:nodejs .next
+COPY --from=builder /app/apps/two/public ./public/
 COPY --from=builder --chown=nextjs:nodejs /app/apps/two/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/two/.next/static ./apps/two/.next/static
 
