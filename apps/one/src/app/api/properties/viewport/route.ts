@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
         WHERE 
           geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
           ${clause}
-        GROUP BY ST_SnapToGrid(geom, $${values.length + 1})
+        GROUP BY ST_SnapToGrid(geom, $${values.length + 5})
       `;
 
             const res = await pool.query(query, [
