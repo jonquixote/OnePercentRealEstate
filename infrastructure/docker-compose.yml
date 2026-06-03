@@ -169,6 +169,38 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  two:
+    build:
+      context: ../
+      dockerfile: apps/two/Dockerfile
+    restart: always
+    ports:
+      - "3002:3000"
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   pg_tileserv:
     image: pramsey/pg_tileserv:latest
     restart: always
