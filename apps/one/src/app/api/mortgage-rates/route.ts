@@ -3,12 +3,22 @@ import pool from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-const FRED_API_KEY = process.env.FRED_API_KEY || '95f42f356f5131f13257eac54897e96a';
 const SERIES_ID = 'MORTGAGE30US';
 const CACHE_KEY = 'GLOBAL_MORTGAGE_RATE';
 const CACHE_DURATION_HOURS = 24;
 
 export async function GET() {
+    const FRED_API_KEY = process.env.FRED_API_KEY;
+    if (!FRED_API_KEY) {
+        // Fail closed: don't fall back to a hard-coded key — the previous
+        // literal leaked publicly via git history and must be considered
+        // compromised. Rotate it in the FRED account before redeploying.
+        return NextResponse.json(
+            { error: 'FRED_API_KEY not configured' },
+            { status: 500 }
+        );
+    }
+
     try {
         const client = await pool.connect();
 
@@ -31,7 +41,7 @@ export async function GET() {
         }
 
         // 2. Fetch from FRED
-        const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${SERIES_ID}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
+        const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${SERIES_ID}&api_key=${encodeURIComponent(FRED_API_KEY)}&file_type=json&sort_order=desc&limit=1`;
 
         const response = await fetch(url);
         if (!response.ok) {
