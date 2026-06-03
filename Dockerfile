@@ -9,6 +9,7 @@ COPY turbo.json ./
 COPY apps/one/package.json ./apps/one/
 COPY apps/two/package.json ./apps/two/
 COPY packages/primitives/package.json ./packages/primitives/
+COPY packages/api-client/package.json ./packages/api-client/
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
@@ -17,6 +18,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/one/node_modules ./apps/one/node_modules
 COPY --from=deps /app/apps/two/node_modules ./apps/two/node_modules
 COPY --from=deps /app/packages/primitives/node_modules ./packages/primitives/node_modules
+COPY --from=deps /app/packages/api-client/node_modules ./packages/api-client/node_modules
 COPY . .
 
 # .env* is in .dockerignore, so we pass the only NEXT_PUBLIC_ var we
@@ -30,6 +32,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=postgresql://placeholder:placeholder@db:5432/db
 ENV REDIS_URL=redis://:placeholder@redis:6379
 ENV ADMIN_API_KEY=placeholder_must_be_at_least_16_chars_long
+# Stripe SDK initializes at module load in /api/checkout and /api/webhooks.
+# Placeholders satisfy the build; runtime reads real values from compose env_file.
+ENV STRIPE_SECRET_KEY=sk_test_placeholder
+ENV STRIPE_WEBHOOK_SECRET=whsec_placeholder
+ENV STRIPE_PRICE_PRO_MONTHLY=price_placeholder
+ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_placeholder
 
 RUN pnpm --filter=@oper/one build
 
