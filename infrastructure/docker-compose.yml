@@ -306,8 +306,10 @@ services:
   # (legacy math) + stamps active rent_models version onto each prediction.
   ml:
     build:
-      context: ../services/ml
-      dockerfile: Dockerfile
+      # Dockerfile copies services/rent_estimator_v2.py and services/ml/ —
+      # context must be the repo root so those paths resolve.
+      context: ../
+      dockerfile: services/ml/Dockerfile
     restart: always
     env_file:
       - ../.env
