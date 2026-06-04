@@ -1,0 +1,26 @@
+{
+  "name": "@oper/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start:crawl": "node dist/crawl.js",
+    "start:refresh": "node dist/refresh-clusters.js",
+    "dev:crawl": "tsx src/crawl.ts",
+    "dev:refresh": "tsx src/refresh-clusters.ts",
+    "lint": "eslint src --max-warnings=0"
+  },
+  "dependencies": {
+    "pg": "^8.17.2",
+    "pino": "^9.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.16.0",
+    "eslint": "^9",
+    "tsx": "^4.22.4",
+    "typescript": "^5"
+  }
+}

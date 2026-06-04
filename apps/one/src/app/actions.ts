@@ -54,9 +54,6 @@ export async function getProperties(
             console.warn('Redis cache read failed:', err);
         }
 
-        const useCursor = cursor !== null;
-        const offset = (page - 1) * limit;
-
   const SORT_COLUMNS: Record<string, string> = {
     newest: 'created_at DESC',
     price_high: 'price DESC NULLS LAST',
@@ -66,6 +63,17 @@ export async function getProperties(
   };
   const orderBy = SORT_COLUMNS[sortBy] ?? 'created_at DESC';
   const isDesc = orderBy.includes('DESC');
+
+  // Wave 2 audit: cursor pagination is only correct for `newest` because
+  // id (BIGSERIAL) is monotonically issued and tracks created_at order
+  // closely enough for stable keyset traversal. For price/ratio sorts
+  // the cursor can't be just `id` — those columns don't correlate with
+  // id, so filtering `id < cursor` would skip valid rows. Fall back to
+  // OFFSET on the non-newest sorts; revisit when we move to a
+  // typed-cursor encoding (encoded payload of {col_value, id}).
+  const cursorCompatible = sortBy === 'newest';
+  const useCursor = cursor !== null && cursorCompatible;
+  const offset = (page - 1) * limit;
 
         // Build WHERE clauses dynamically
         const whereClauses = ["listing_type = 'for_sale'"];
@@ -178,7 +186,13 @@ const client = await pool.connect();
 
     const response = {
       items,
-      nextCursor: items.length === limit ? items[items.length - 1].id : null,
+      // Only emit a cursor on sorts where the cursor itself is valid
+      // for the next page (see cursorCompatible above). On OFFSET sorts
+      // the caller should re-issue with `page + 1` instead.
+      nextCursor:
+        cursorCompatible && items.length === limit
+          ? items[items.length - 1].id
+          : null,
     };
 
     try {
