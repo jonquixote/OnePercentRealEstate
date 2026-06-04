@@ -281,7 +281,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
-      - ML_URL=http://ml:8100
+      - ML_URL=http://ml:8000
       - RENT_BACKFILL_BATCH=50
       - RENT_WORKER_CONCURRENCY=4
       - LOG_LEVEL=info
@@ -315,9 +315,9 @@ services:
       - ../.env
     environment:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
-      - ML_PORT=8100
+      - ML_PORT=8000
     expose:
-      - "8100"
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
