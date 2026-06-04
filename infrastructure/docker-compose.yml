@@ -118,7 +118,7 @@ services:
         max-file: "3"
 
   scraper:
-    build: ../_backend/scraper_service
+    build: ../services/scraper_service
     restart: always
     ports:
       - "127.0.0.1:8001:8000"
