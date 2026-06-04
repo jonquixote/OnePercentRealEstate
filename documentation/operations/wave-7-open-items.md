@@ -9,6 +9,17 @@ Track here, not in code comments — that way a single grep for
 
 ## Owner actions (you)
 
+- [ ] **URGENT — Rotate the `n8n` Postgres password** (committed in plaintext at commit `d2d24dc` in `infrastructure/n8n_credentials/postgres.json`; removed from index 2026-06-03 but the value remains in git history). Steps:
+  1. In the postgres container: `ALTER USER n8n PASSWORD '<NEW>';`
+  2. Update `/opt/onepercent/.env` `N8N_DB_PASSWORD=<NEW>`.
+  3. Recreate the n8n service: `docker compose -f infrastructure/docker-compose.yml up -d --no-deps n8n`.
+  4. Optionally purge git history (see `infrastructure/n8n_credentials/README.md` → "Optional: purge history").
+
+- [ ] **URGENT — Rotate the FRED API key** (`95f42f356f5131f13257eac54897e96a` was committed at the previous fallback in `apps/one/src/app/api/mortgage-rates/route.ts`; the fallback was removed and the key now fails closed if `FRED_API_KEY` is unset). Steps:
+  1. FRED account → Account → API keys → rotate.
+  2. Update `/opt/onepercent/.env` `FRED_API_KEY=<NEW>`.
+  3. Restart app: `docker compose -f infrastructure/docker-compose.yml up -d --no-deps app`.
+
 - [ ] Rotate server root password
   - Where: Linode dashboard → onepercent-prod → Settings → Reset Root Password
   - Why: was pasted in chat before the VPS guide existed
