@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { withSpan } from '@/lib/tracing';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,24 +25,29 @@ export async function GET(req: Request) {
 
     const client = await pool.connect();
     try {
-      const result = await client.query(
-        `
-        SELECT
-          id::text AS id,
-          address,
-          price AS listing_price,
-          estimated_rent,
-          listing_status AS status,
-          primary_photo,
-          bedrooms,
-          bathrooms,
-          sqft,
-          year_built,
-          hoa_fee
-        FROM listings
-        WHERE id IN (${placeholders})
-        `,
-        idArray
+      const result = await withSpan(
+        'properties.by_ids',
+        () =>
+          client.query(
+            `
+            SELECT
+              id::text AS id,
+              address,
+              price AS listing_price,
+              estimated_rent,
+              listing_status AS status,
+              primary_photo,
+              bedrooms,
+              bathrooms,
+              sqft,
+              year_built,
+              hoa_fee
+            FROM listings
+            WHERE id IN (${placeholders})
+            `,
+            idArray
+          ),
+        { 'ids.count': idArray.length },
       );
 
       const rows = result.rows.map((row: any) => ({
