@@ -54,7 +54,7 @@ interface PredictResponse {
 
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
-  max: Math.max(env.WORKER_CONCURRENCY + 2, 4),
+  max: Math.max(env.RENT_WORKER_CONCURRENCY + 2, 4),
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
 });
@@ -96,7 +96,7 @@ class Semaphore {
   }
 }
 
-const semaphore = new Semaphore(env.WORKER_CONCURRENCY);
+const semaphore = new Semaphore(env.RENT_WORKER_CONCURRENCY);
 let inFlight = 0;
 let shuttingDown = false;
 
@@ -442,7 +442,7 @@ process.on('unhandledRejection', (reason) => {
 async function main(): Promise<void> {
   log.info(
     {
-      concurrency: env.WORKER_CONCURRENCY,
+      concurrency: env.RENT_WORKER_CONCURRENCY,
       ml: env.ML_URL,
       backfill_batch: env.RENT_BACKFILL_BATCH,
     },
