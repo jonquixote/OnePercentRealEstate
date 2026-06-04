@@ -1,0 +1,56 @@
+# Custom Postgres metrics for postgres-exporter. The default metric set
+# covers core server stats; this file adds OnePercentRealEstate-specific
+# gauges that the alert rules reference.
+#
+# Mounted into postgres-exporter via the compose snippet in
+# infrastructure/monitoring/README.md.
+
+crawl_jobs_status:
+  query: |
+    SELECT
+      status,
+      COUNT(*)::float AS count
+    FROM crawl_jobs
+    GROUP BY status
+  master: true
+  metrics:
+    - status:
+        usage: "LABEL"
+        description: "Crawl job status (pending|processing|completed|failed)"
+    - count:
+        usage: "GAUGE"
+        description: "Number of crawl jobs in the given status"
+
+rent_calc_status:
+  query: |
+    SELECT
+      rent_calc_status AS status,
+      COUNT(*)::float AS count
+    FROM listings
+    GROUP BY rent_calc_status
+  master: true
+  metrics:
+    - status:
+        usage: "LABEL"
+        description: "Async rent calc status (pending|done|failed)"
+    - count:
+        usage: "GAUGE"
+        description: "Number of listings in the given rent_calc_status"
+
+listings_total:
+  query: "SELECT COUNT(*)::float AS count FROM listings"
+  master: true
+  metrics:
+    - count:
+        usage: "GAUGE"
+        description: "Total rows in the listings table"
+
+mv_cluster_tiles_age_seconds:
+  query: |
+    SELECT EXTRACT(EPOCH FROM (now() - MAX(refreshed_at)))::float AS age_seconds
+    FROM mv_cluster_tiles_meta
+  master: true
+  metrics:
+    - age_seconds:
+        usage: "GAUGE"
+        description: "Seconds since mv_cluster_tiles last refresh"
