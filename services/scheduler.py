@@ -93,14 +93,14 @@ def run_scraper_for_target(target):
     # Use the same python executable
     cmd = [
         sys.executable, 
-        "_backend/scraper.py", # Path relative to root if run from root, or absolute
+        "services/scraper.py", # Path relative to root if run from root, or absolute
         "--location", location, 
         "--listing_type", l_type,
         "--limit", "100" 
     ]
     
-    # Adjust path if running from inside _backend
-    if os.getcwd().endswith("_backend"):
+    # Adjust path if running from inside services/
+    if os.getcwd().endswith("services"):
         cmd[1] = "scraper.py"
 
     try:

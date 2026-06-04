@@ -8,8 +8,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start:crawl": "node dist/crawl.js",
     "start:refresh": "node dist/refresh-clusters.js",
+    "start:rent-estimator": "node dist/rent-estimator.js",
     "dev:crawl": "tsx src/crawl.ts",
     "dev:refresh": "tsx src/refresh-clusters.ts",
+    "dev:rent-estimator": "tsx src/rent-estimator.ts",
     "lint": "eslint src --max-warnings=0"
   },
   "dependencies": {

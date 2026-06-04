@@ -1,0 +1,326 @@
+// Crawl-job worker. Replaces n8n's 30s polling loop with PG NOTIFY + a
+// drain-on-connect catch-up sweep so jobs enqueued while the worker was
+// down still get picked up. Pickup latency for live jobs drops from
+// ~15s avg to <1s.
+//
+// Lifecycle
+// ---------
+// 1. Connect to Postgres (dedicated client for LISTEN — the main pool
+//    handles the SELECT/UPDATE work).
+// 2. Drain the pending queue (already-enqueued rows from before our
+//    subscription started).
+// 3. LISTEN crawl_job_enqueued — defined by migration
+//    2026_06_03_crawl_jobs_notify.sql.
+// 4. On every notification: try to claim ONE row, process it. Honor
+//    WORKER_CONCURRENCY as a semaphore.
+// 5. On disconnect: reconnect with exponential backoff, then re-drain
+//    (notifications during the gap are lost — drain catches them).
+// 6. On SIGTERM/SIGINT: stop accepting new notifications, finish
+//    in-flight jobs, close pool, exit clean.
+//
+// Safety nets that still apply
+// ----------------------------
+// - recycle_stuck_jobs() in 000_base_schema.sql clears jobs stuck in
+//   'processing' for >5min.
+// - trigger_recycle_crawl_jobs (infrastructure/job_recycle_trigger.sql)
+//   re-queues completed jobs when no pending/processing remain (the
+//   "continuous cycle" pattern this project uses).
+import { Client, Pool } from 'pg';
+import { loadEnv } from './env.js';
+import { getLogger, newTraceId, withTrace } from './logger.js';
+const env = loadEnv();
+const log = getLogger(env.LOG_LEVEL);
+// ---------------------------------------------------------------------------
+// Pool for short-lived work queries. Single client for LISTEN is separate
+// (pg requires that — pooled clients can be returned mid-listen).
+// ---------------------------------------------------------------------------
+const pool = new Pool({
+    connectionString: env.DATABASE_URL,
+    max: Math.max(env.WORKER_CONCURRENCY + 2, 4),
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+});
+pool.on('error', (err) => {
+    // pg emits 'error' on the pool when an idle client gets terminated by
+    // the DB (restart, network blip). The next .query() call will get a
+    // fresh client; we just want to NOT crash the process here.
+    log.warn({ err: err.message }, 'pool idle client error');
+});
+// ---------------------------------------------------------------------------
+// Semaphore for WORKER_CONCURRENCY. Tiny FIFO of resolvers.
+// ---------------------------------------------------------------------------
+class Semaphore {
+    available;
+    waiters = [];
+    constructor(max) {
+        this.available = max;
+    }
+    async acquire() {
+        if (this.available > 0) {
+            this.available -= 1;
+            return;
+        }
+        await new Promise((resolve) => this.waiters.push(resolve));
+        // resolver was called by release(); slot already accounted for there
+    }
+    release() {
+        const next = this.waiters.shift();
+        if (next) {
+            // hand the slot directly to the next waiter
+            next();
+        }
+        else {
+            this.available += 1;
+        }
+    }
+}
+const semaphore = new Semaphore(env.WORKER_CONCURRENCY);
+let inFlight = 0;
+let shuttingDown = false;
+// ---------------------------------------------------------------------------
+// Claim + process a single job. Returns true if a job was processed,
+// false if no claimable row was available (race with another instance).
+// ---------------------------------------------------------------------------
+async function processJob(jobId, parentLog) {
+    const traceId = newTraceId();
+    const log = withTrace(parentLog, traceId, { job_id: jobId });
+    // Atomic claim: only updates if still pending. If another worker won
+    // the race, RETURNING yields zero rows.
+    const claim = await pool.query(`UPDATE crawl_jobs
+        SET status = 'processing', started_at = NOW()
+      WHERE id = $1 AND status = 'pending'
+      RETURNING id::text AS id, region_type, region_value`, [jobId]);
+    if (claim.rowCount === 0) {
+        log.debug('job already claimed by another worker');
+        return false;
+    }
+    const job = claim.rows[0];
+    const start = Date.now();
+    log.info({ region: job.region_value, region_type: job.region_type }, 'claimed crawl job');
+    try {
+        const result = await scrape(job, log);
+        await pool.query(`UPDATE crawl_jobs
+          SET status = 'completed',
+              finished_at = NOW(),
+              listings_found = $2,
+              error_message = NULL
+        WHERE id = $1`, [job.id, result.inserted]);
+        log.info({
+            duration_ms: Date.now() - start,
+            count: result.count,
+            inserted: result.inserted,
+            skipped: result.skipped,
+        }, 'crawl job completed');
+        return true;
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        // Best-effort failure mark — if the DB is down too, the
+        // recycle_stuck_jobs() function will re-pend after 5 min.
+        try {
+            await pool.query(`UPDATE crawl_jobs
+            SET status = 'failed',
+                finished_at = NOW(),
+                error_message = $2
+          WHERE id = $1`, [job.id, message.slice(0, 1000)]);
+        }
+        catch (markErr) {
+            log.error({ markErr: markErr.message }, 'failed to mark job as failed');
+        }
+        log.error({ err: message, duration_ms: Date.now() - start }, 'crawl job failed');
+        return true; // we DID process it (failed) — caller shouldn't retry the same id
+    }
+}
+async function scrape(job, log) {
+    const url = `${env.SCRAPER_URL.replace(/\/$/, '')}/scrape`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), env.SCRAPE_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                location: job.region_value,
+                listing_type: 'for_sale',
+                past_days: 30,
+            }),
+            signal: controller.signal,
+        });
+        if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            throw new Error(`scraper ${res.status}: ${body.slice(0, 200)}`);
+        }
+        const json = (await res.json());
+        return {
+            count: Number(json.count) || 0,
+            inserted: Number(json.inserted) || 0,
+            skipped: Number(json.skipped) || 0,
+        };
+    }
+    catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+            log.warn({ timeout_ms: env.SCRAPE_TIMEOUT_MS }, 'scrape request timed out');
+            throw new Error(`scrape timeout after ${env.SCRAPE_TIMEOUT_MS}ms`);
+        }
+        throw err;
+    }
+    finally {
+        clearTimeout(timer);
+    }
+}
+// ---------------------------------------------------------------------------
+// Bounded-concurrency runner. Called from drain AND from notification.
+// ---------------------------------------------------------------------------
+function runJob(jobId, parentLog) {
+    if (shuttingDown) {
+        parentLog.debug({ job_id: jobId }, 'skipping job during shutdown');
+        return;
+    }
+    // fire-and-track; we don't await here because the notification handler
+    // must return quickly to let pg deliver the next NOTIFY.
+    inFlight += 1;
+    semaphore
+        .acquire()
+        .then(async () => {
+        try {
+            await processJob(jobId, parentLog);
+        }
+        finally {
+            semaphore.release();
+            inFlight -= 1;
+        }
+    })
+        .catch((err) => {
+        // shouldn't happen — processJob handles its own errors — but
+        // belt-and-suspenders.
+        parentLog.error({ err: err.message, job_id: jobId }, 'unexpected runJob error');
+        semaphore.release();
+        inFlight -= 1;
+    });
+}
+// ---------------------------------------------------------------------------
+// Drain: pull pending ids, kick them off via the same runJob path.
+// Bounded fetch — we don't load 100k ids in one query.
+// ---------------------------------------------------------------------------
+const DRAIN_BATCH = 200;
+async function drain(parentLog) {
+    const res = await pool.query(`SELECT id::text AS id
+       FROM crawl_jobs
+      WHERE status = 'pending'
+      ORDER BY id
+      LIMIT $1`, [DRAIN_BATCH]);
+    if (res.rowCount === 0) {
+        parentLog.debug('drain: no pending jobs');
+        return 0;
+    }
+    parentLog.info({ count: res.rowCount }, 'drain: dispatching pending jobs');
+    for (const row of res.rows) {
+        runJob(row.id, parentLog);
+    }
+    return res.rowCount ?? 0;
+}
+// ---------------------------------------------------------------------------
+// LISTEN client with reconnect loop. The pg `Client` is dedicated to
+// LISTEN — we never use it for queries. On disconnect we backoff +
+// re-drain so we catch anything enqueued during the gap.
+// ---------------------------------------------------------------------------
+const CHANNEL = 'crawl_job_enqueued';
+async function listenLoop(parentLog) {
+    let backoff = 1_000; // 1s → 2s → 4s → ... capped
+    const MAX_BACKOFF = 60_000;
+    while (!shuttingDown) {
+        const client = new Client({ connectionString: env.DATABASE_URL });
+        let connected = false;
+        try {
+            await client.connect();
+            connected = true;
+            backoff = 1_000; // reset on successful connect
+            client.on('notification', (msg) => {
+                if (msg.channel !== CHANNEL || !msg.payload)
+                    return;
+                if (shuttingDown)
+                    return;
+                runJob(msg.payload, parentLog);
+            });
+            client.on('error', (err) => {
+                // The error event fires before the connection actually dies.
+                // We catch it and break the await below by ending the client.
+                parentLog.warn({ err: err.message }, 'LISTEN client error');
+                void client.end().catch(() => { });
+            });
+            await client.query(`LISTEN ${CHANNEL}`);
+            parentLog.info({ channel: CHANNEL }, 'subscribed to channel');
+            // After subscribing, drain again — this closes the race window
+            // between "jobs enqueued while we were down" and "LISTEN is now
+            // active". Order matters: subscribe FIRST so we don't miss
+            // notifications for jobs that land between drain and LISTEN.
+            await drain(parentLog);
+            // Block on connection lifetime. pg fires 'end' when the server
+            // closes the connection; we wait for that to trigger the
+            // reconnect path.
+            await new Promise((resolve) => {
+                client.once('end', () => resolve());
+                client.once('error', () => resolve()); // already logged above
+            });
+            parentLog.warn('LISTEN connection ended, will reconnect');
+        }
+        catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            parentLog.error({ err: msg, backoff_ms: backoff }, 'LISTEN loop error');
+        }
+        finally {
+            if (connected) {
+                await client.end().catch(() => { });
+            }
+        }
+        if (shuttingDown)
+            break;
+        await sleep(backoff);
+        backoff = Math.min(backoff * 2, MAX_BACKOFF);
+    }
+}
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+// ---------------------------------------------------------------------------
+// Graceful shutdown: stop new work, drain in-flight, close, exit.
+// ---------------------------------------------------------------------------
+async function shutdown(signal) {
+    if (shuttingDown)
+        return;
+    shuttingDown = true;
+    log.info({ signal, in_flight: inFlight }, 'shutdown initiated');
+    const deadline = Date.now() + 30_000;
+    while (inFlight > 0 && Date.now() < deadline) {
+        await sleep(250);
+    }
+    if (inFlight > 0) {
+        log.warn({ in_flight: inFlight }, 'in-flight jobs did not drain within 30s; exiting anyway');
+    }
+    await pool.end().catch(() => { });
+    log.info('shutdown complete');
+    process.exit(0);
+}
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('unhandledRejection', (reason) => {
+    log.error({ reason: String(reason) }, 'unhandledRejection');
+});
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+async function main() {
+    log.info({
+        concurrency: env.WORKER_CONCURRENCY,
+        scraper: env.SCRAPER_URL,
+    }, 'crawl worker starting');
+    // First-touch drain so any jobs enqueued before the listen loop subscribes
+    // get picked up. The listen loop drains again post-subscribe.
+    await drain(log).catch((err) => log.error({ err: err.message }, 'initial drain failed'));
+    await listenLoop(log);
+}
+void main().catch((err) => {
+    log.error({ err: err.message }, 'fatal: worker exiting');
+    process.exit(1);
+});
+//# sourceMappingURL=crawl.js.map

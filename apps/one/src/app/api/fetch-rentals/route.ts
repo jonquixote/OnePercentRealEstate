@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
     const { location, past_days } = parsed.data;
 
-    const backendDir = process.cwd() + '/_backend';
+    const backendDir = process.cwd() + '/services';
     const args = ['fetch_rental_comps.py', '--location', location];
 
     if (past_days !== undefined) args.push('--past_days', String(past_days));

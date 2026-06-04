@@ -14,6 +14,11 @@ export interface WorkerEnv {
   readonly CLUSTER_REFRESH_INTERVAL_MS: number;
   readonly LOG_LEVEL: string;
   readonly SCRAPE_TIMEOUT_MS: number;
+  // Wave 3 — rent estimator service
+  readonly ML_URL: string;
+  readonly RENT_TIMEOUT_MS: number;
+  readonly RENT_BACKFILL_BATCH: number;
+  readonly RENT_WORKER_CONCURRENCY: number;
 }
 
 function readString(name: string, fallback?: string): string {
@@ -46,5 +51,18 @@ export function loadEnv(): WorkerEnv {
     // recycle_stuck_jobs() safety net catches anything stuck longer
     // than 5 min anyway.
     SCRAPE_TIMEOUT_MS: readInt('SCRAPE_TIMEOUT_MS', 10 * 60 * 1000),
+    // Wave 3
+    ML_URL: readString('ML_URL', 'http://ml:8100'),
+    // 30s ceiling per prediction. The legacy in-DB trigger took 30–80 ms;
+    // the FastAPI shim re-wraps the same math + a DB lookup so a 30s budget
+    // is two orders of magnitude of headroom for tail latency.
+    RENT_TIMEOUT_MS: readInt('RENT_TIMEOUT_MS', 30 * 1000),
+    // Bound on the drain-on-boot batch. Set low so the worker isn't holding
+    // a giant SELECT FOR UPDATE while the rest of the system warms up.
+    RENT_BACKFILL_BATCH: readInt('RENT_BACKFILL_BATCH', 50),
+    // Separate from WORKER_CONCURRENCY so crawl and rent can be tuned
+    // independently — rent calls a downstream HTTP service while crawl
+    // spawns a heavy scrape, so their concurrency profiles differ.
+    RENT_WORKER_CONCURRENCY: readInt('RENT_WORKER_CONCURRENCY', 4),
   };
 }
