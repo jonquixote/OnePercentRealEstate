@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import redis from '@/lib/redis';
+import { withSpan } from '@/lib/tracing';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,12 +59,17 @@ export async function GET(
 
   try {
     // Confirm the base property exists (and has geom we can search around).
-    const baseRes = await pool.query(
-      `SELECT id, geom IS NOT NULL AS has_geom
-         FROM listings
-        WHERE id = $1
-        LIMIT 1`,
-      [id]
+    const baseRes = await withSpan(
+      'comps.base_lookup',
+      () =>
+        pool.query(
+          `SELECT id, geom IS NOT NULL AS has_geom
+             FROM listings
+            WHERE id = $1
+            LIMIT 1`,
+          [id]
+        ),
+      { 'listing.id': id },
     );
 
     if (baseRes.rowCount === 0) {
@@ -118,7 +124,11 @@ export async function GET(
       LIMIT 10;
     `;
 
-    const result = await pool.query(sql, [id]);
+    const result = await withSpan(
+      'comps.search',
+      () => pool.query(sql, [id]),
+      { 'listing.id': id },
+    );
 
     const items: CompItem[] = result.rows.map((row) => ({
       id: String(row.id),

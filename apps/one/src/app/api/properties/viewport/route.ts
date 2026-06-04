@@ -4,6 +4,7 @@ import { z } from 'zod';
 import pool from '@/lib/db';
 import redis from '@/lib/redis';
 import { checkRateLimit, viewportLimiter } from '@/lib/rate-limit';
+import { withSpan } from '@/lib/tracing';
 
 // Validation Schema
 const ViewportSchema = z.object({
@@ -86,23 +87,59 @@ export async function GET(request: NextRequest) {
         }
 
         const { clause, values } = buildFilterClause(params);
+        const filtersActive = hasNonDefaultFilters(params);
 
         // Determine query strategy based on zoom
         // Zoom 0-13: Clusters
         // Zoom 14+: Individual Properties
         let responseData;
+        let clusterSource: 'mv' | 'live' = 'live';
 
         if (params.zoom < 14) {
-            // Clustering Query
-            // We use a dynamic grid based on zoom level
-            // eps is the grid size in degrees
-            // Simple heuristic: 360 degrees / 2^zoom approx tile width. 
-            // We want grid cells to be roughly visual size.
-            // eps = 20 / 2^zoom is a rough starting point. 
-            const eps = 30 / Math.pow(2, params.zoom);
+            // Wave 2 fast-path: when the user has no filters active
+            // (default for_sale browse), serve clusters from
+            // mv_cluster_tiles instead of recomputing the centroid on
+            // every cache miss. The MV is refreshed every 10 min by
+            // the worker-refresh container.
+            //
+            // Filtered cluster queries fall through to the on-the-fly
+            // path — pre-baking every filter combination would blow up
+            // the MV row count.
+            if (!filtersActive) {
+                const mvQuery = `
+                  SELECT
+                    latitude,
+                    longitude,
+                    count,
+                    avg_price,
+                    min_price,
+                    max_price
+                  FROM mv_cluster_tiles
+                  WHERE zoom = $1
+                    AND geom && ST_MakeEnvelope($2, $3, $4, $5, 4326)
+                `;
+                const res = await withSpan(
+                    'viewport.mv_cluster_tiles',
+                    () =>
+                        pool.query(mvQuery, [
+                            params.zoom,
+                            params.west, params.south, params.east, params.north,
+                        ]),
+                    { 'db.zoom': params.zoom, 'cluster.source': 'mv' },
+                );
+                clusterSource = 'mv';
+                responseData = {
+                    type: 'clusters',
+                    data: res.rows,
+                    zoom: params.zoom,
+                };
+            } else {
+                // Original on-the-fly clustering path for filtered queries.
+                // eps mirrors mv_cluster_tiles' grid math: 30 / 2^zoom.
+                const eps = 30 / Math.pow(2, params.zoom);
 
-            const query = `
-        SELECT 
+                const query = `
+        SELECT
           ST_Y(ST_Centroid(ST_Collect(geom))) as latitude,
           ST_X(ST_Centroid(ST_Collect(geom))) as longitude,
           COUNT(*) as count,
@@ -110,23 +147,29 @@ export async function GET(request: NextRequest) {
           MIN(price) as min_price,
           MAX(price) as max_price
         FROM listings
-        WHERE 
+        WHERE
           geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
           ${clause}
         GROUP BY ST_SnapToGrid(geom, $${values.length + 5})
       `;
 
-            const res = await pool.query(query, [
-                params.west, params.south, params.east, params.north,
-                ...values,
-                eps
-            ]);
+                const res = await withSpan(
+                    'viewport.live_cluster',
+                    () =>
+                        pool.query(query, [
+                            params.west, params.south, params.east, params.north,
+                            ...values,
+                            eps
+                        ]),
+                    { 'db.zoom': params.zoom, 'cluster.source': 'live' },
+                );
 
-            responseData = {
-                type: 'clusters',
-                data: res.rows,
-                zoom: params.zoom
-            };
+                responseData = {
+                    type: 'clusters',
+                    data: res.rows,
+                    zoom: params.zoom
+                };
+            }
 
         } else {
             // Individual Properties Query (High Zoom)
@@ -150,10 +193,15 @@ export async function GET(request: NextRequest) {
         LIMIT 2000
       `;
 
-            const res = await pool.query(query, [
-                params.west, params.south, params.east, params.north,
-                ...values
-            ]);
+            const res = await withSpan(
+                'viewport.properties',
+                () =>
+                    pool.query(query, [
+                        params.west, params.south, params.east, params.north,
+                        ...values
+                    ]),
+                { 'db.zoom': params.zoom },
+            );
 
             responseData = {
                 type: 'properties',
@@ -166,7 +214,8 @@ export async function GET(request: NextRequest) {
             ...responseData,
             meta: {
                 time: Date.now() - startTime,
-                count: responseData.data.length
+                count: responseData.data.length,
+                cluster_source: params.zoom < 14 ? clusterSource : undefined
             }
         };
 
@@ -191,6 +240,21 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+// Wave 2: the MV fast-path can only serve queries that match its
+// baked-in WHERE (listing_type='for_sale' AND geom IS NOT NULL). Any
+// user-supplied filter — price, beds, baths, propertyType, or a non-
+// default status — disqualifies the request and we fall through to
+// the on-the-fly clustering query.
+function hasNonDefaultFilters(params: ViewportParams): boolean {
+    if (params.minPrice !== undefined) return true;
+    if (params.maxPrice !== undefined) return true;
+    if (params.beds !== undefined) return true;
+    if (params.baths !== undefined) return true;
+    if (params.propertyType !== undefined && params.propertyType !== '') return true;
+    if (params.status !== undefined && params.status !== 'for_sale') return true;
+    return false;
 }
 
 function buildFilterClause(params: ViewportParams) {

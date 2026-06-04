@@ -201,6 +201,73 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Wave 2: crawl-job worker. Subscribes to PG NOTIFY crawl_job_enqueued
+  # (trigger added in migration 2026_06_03_crawl_jobs_notify.sql) and
+  # processes claimed rows via the FastAPI scraper service. Replaces
+  # n8n's 30s polling Cron node; n8n owns scheduling, not draining.
+  worker:
+    build:
+      context: ../
+      dockerfile: apps/worker/Dockerfile
+    restart: always
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      - SCRAPER_URL=http://scraper:8000
+      - WORKER_CONCURRENCY=2
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Wave 2: cluster MV refresher. REFRESH MATERIALIZED VIEW CONCURRENTLY
+  # mv_cluster_tiles every 10 min. Same image as `worker`, different CMD.
+  worker-refresh:
+    build:
+      context: ../
+      dockerfile: apps/worker/Dockerfile
+    restart: always
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      - SCRAPER_URL=http://scraper:8000
+      - CLUSTER_REFRESH_INTERVAL_MS=600000
+      - LOG_LEVEL=info
+    command: ["node", "apps/worker/dist/refresh-clusters.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   pg_tileserv:
     image: pramsey/pg_tileserv:latest
     restart: always
