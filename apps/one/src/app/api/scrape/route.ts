@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
     const { location, minPrice, maxPrice, beds, baths, limit } = parsed.data;
 
-    const backendDir = process.cwd() + '/_backend';
+    const backendDir = process.cwd() + '/services';
     const args = ['scraper.py', '--location', location];
 
     if (minPrice !== undefined) args.push('--min_price', String(minPrice));
