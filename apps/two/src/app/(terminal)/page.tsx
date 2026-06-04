@@ -11,15 +11,16 @@ import { PropertyTable } from "@/components/PropertyTable";
 import { DENSITY_ROW_HEIGHT } from "@/lib/types";
 
 /**
- * Continental US bbox at zoom=14 — coarse enough to grab a healthy slice
- * of viewport rows for v1. The map control isn't part of the terminal yet;
- * real viewport sync arrives once the canvas pane lands.
+ * Eastern/central US bbox at zoom=14 — covers the densest listing regions
+ * (Florida triangle, Atlanta, DC/NY corridor, Chicago, Dallas, Houston).
+ * The span must fit within the viewport API's limit for zoom > 10
+ * ((latSpan > 50 || lonSpan > 50) && zoom > 10 is rejected).
  */
 const VIEWPORT = {
-  north: 49.5,
+  north: 42,
   south: 24.5,
   east: -66,
-  west: -125,
+  west: -106,
   zoom: 14,
 } as const;
 
