@@ -49,9 +49,8 @@ BEGIN
             SET status = 'pending',
                 error_message = NULL,
                 started_at = NULL,
-                completed_at = NULL,
-                items_found = 0,
-                items_inserted = 0;
+                finished_at = NULL,
+                listings_found = 0;
             
             RAISE NOTICE 'All crawl jobs recycled to pending status for next cycle';
         END IF;
@@ -95,9 +94,8 @@ BEGIN
         SET status = 'pending',
             error_message = NULL,
             started_at = NULL,
-            completed_at = NULL,
-            items_found = 0,
-            items_inserted = 0;
+            finished_at = NULL,
+            listings_found = 0;
         
         v_recycled := TRUE;
     END IF;

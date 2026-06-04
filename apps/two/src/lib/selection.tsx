@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { SelectionCtx } from "./selection-context";
+import type { SelectionState } from "./selection-context";
 import type { PropertyRow } from "./types";
 
 /**
@@ -9,13 +11,6 @@ import type { PropertyRow } from "./types";
  * state up to a global store. Anything more heavyweight (zustand etc) would
  * be over-engineering at this stage.
  */
-interface SelectionState {
-  selected: PropertyRow | null;
-  setSelected: (r: PropertyRow | null) => void;
-}
-
-const SelectionCtx = React.createContext<SelectionState | null>(null);
-
 export function SelectionProvider({ children }: { children: React.ReactNode }) {
   const [selected, setSelected] = React.useState<PropertyRow | null>(null);
   const value = React.useMemo(() => ({ selected, setSelected }), [selected]);
