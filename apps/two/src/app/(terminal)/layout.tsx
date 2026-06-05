@@ -9,7 +9,7 @@ import {
   Separator as PanelResizeHandle,
   type Layout,
 } from "react-resizable-panels";
-import { HelpCircle, Search } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import {
   HotkeyHelp,
   ThemeToggle,
@@ -18,6 +18,7 @@ import {
 import { SelectionProvider } from "@/lib/selection";
 import { FilterRail } from "@/components/FilterRail";
 import { PropertyInspector } from "@/components/PropertyInspector";
+import { FilterExpression } from "@/components/FilterExpression";
 
 /**
  * Three-pane terminal shell. The route group `(terminal)` owns the chrome
@@ -32,6 +33,7 @@ export default function TerminalLayout({
 }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [railCollapsed, setRailCollapsed] = React.useState(false);
+  const [filterValue, setFilterValue] = React.useState("");
   const pathname = usePathname();
   const portfolioActive = pathname?.startsWith("/portfolio") ?? false;
 
@@ -98,17 +100,18 @@ export default function TerminalLayout({
             </Link>
           </nav>
 
-          <div className="relative mx-auto flex w-full max-w-xl items-center">
-            <Search
-              className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-zinc-500"
-              aria-hidden
-            />
-            <input
-              id="terminal-search"
-              type="text"
-              aria-label="Search listings"
-              placeholder="/  search…"
-              className="h-7 w-full rounded-sm border border-zinc-800 bg-zinc-900/60 pl-7 pr-2 font-mono text-[12px] text-zinc-200 placeholder:text-zinc-500 outline-none focus:border-primary/60"
+          <div className="mx-auto w-full max-w-xl">
+            <FilterExpression
+              value={filterValue}
+              onChange={setFilterValue}
+              onValidChange={(expr) => {
+                // Notify the page beneath; it owns the data fetch.
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(
+                    new CustomEvent("two:filter-change", { detail: expr }),
+                  );
+                }
+              }}
             />
           </div>
 
