@@ -32,13 +32,16 @@ export async function GET() {
     const result = await withSpan('home.stats', async () => {
       const client = await pool.connect();
       try {
+        // estimated_rent can be 0 when ML returns no signal — those rows
+        // would skew the median to 0 and mask the real distribution.
+        // ratio is computed only when estimated_rent is positive.
         const sql = `
           WITH base AS (
             SELECT
               price,
               estimated_rent,
               state,
-              CASE WHEN price > 0 AND estimated_rent IS NOT NULL
+              CASE WHEN price > 0 AND estimated_rent IS NOT NULL AND estimated_rent > 0
                    THEN estimated_rent / price END AS ratio
             FROM listings
             WHERE listing_type = 'for_sale'
@@ -46,8 +49,12 @@ export async function GET() {
           SELECT
             count(*)::int AS total,
             count(*) FILTER (WHERE ratio >= 0.01)::int AS one_pct,
-            (percentile_cont(0.5) WITHIN GROUP (ORDER BY ratio) * 100)::numeric(8,3) AS median_ratio_pct,
-            count(DISTINCT state)::int AS markets
+            (
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY ratio)
+              FILTER (WHERE ratio IS NOT NULL)
+              * 100
+            )::numeric(8,3) AS median_ratio_pct,
+            count(DISTINCT state) FILTER (WHERE state IS NOT NULL)::int AS markets
           FROM base
         `;
         return client.query(sql);
