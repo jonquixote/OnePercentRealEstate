@@ -53,6 +53,20 @@ export function FilterExpression({
   const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidRef = React.useRef<string>(value);
 
+  // Stash callbacks in refs so the debounce effect doesn't depend on their
+  // identity. Inline parent callbacks (e.g. layout-level arrow function)
+  // would otherwise re-fire the effect every render, which combined with
+  // the localStorage hydrate effect below produced React error #185
+  // (max update depth) on the first client tick.
+  const onValidChangeRef = React.useRef(onValidChange);
+  const onChangeRef = React.useRef(onChange);
+  React.useEffect(() => {
+    onValidChangeRef.current = onValidChange;
+  }, [onValidChange]);
+  React.useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
   React.useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
@@ -67,25 +81,33 @@ export function FilterExpression({
             /* ignore */
           }
         }
-        onValidChange?.(value);
+        onValidChangeRef.current?.(value);
       }
     }, 300);
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-  }, [value, onValidChange]);
+  }, [value]);
 
+  // Hydrate from localStorage exactly once on mount. Gate with a ref so
+  // even if React StrictMode double-fires this effect we don't reset
+  // user input on the second pass.
+  const hydratedRef = React.useRef(false);
   React.useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
     if (value) return;
     if (typeof window === "undefined") return;
     try {
       const stored = window.localStorage.getItem(LS_KEY);
-      if (stored) onChange(stored);
+      if (stored) {
+        lastValidRef.current = stored;
+        onChangeRef.current(stored);
+      }
     } catch {
       /* ignore */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [value]);
 
   useHotkey(
     "/",
