@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { PropertyCard } from '@/components/ui/card';
 import Header from '@/components/Header';
-import { Loader2, TrendingUp, Search, BarChart3, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
+import { Loader2, Search, BarChart3, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
 import Link from 'next/link';
 import { PropertyMap } from '@/components/PropertyMap';
 import {
@@ -15,6 +15,9 @@ import { useQueryStates } from 'nuqs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { SavedSearches } from '@/components/SavedSearches';
+import { HomeHero } from '@/components/home/HomeHero';
+import { StatsStrip } from '@/components/home/StatsStrip';
+import { FeaturedDeals } from '@/components/home/FeaturedDeals';
 
 interface Property {
   id: string;
@@ -39,14 +42,15 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
-
-  // View State (for Mobile primarily, or specific toggle)
   const [showMap, setShowMap] = useState(true);
-  const [sortBy, setSortBy] = useState('newest');
+  const [sortBy, setSortBy] = useState('one_percent_high');
 
-  // Filter state lives in the URL via nuqs (see PropertyFilters.tsx for the
-  // shared parser map). Reading here means the dashboard's data fetch stays in
-  // sync with the URL on shareable / SSR-hydrated loads.
+  const opportunitiesRef = useRef<HTMLDivElement | null>(null);
+  const scrollToOpportunities = useCallback(() => {
+    opportunitiesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  // Filter state in URL via nuqs.
   const [qs] = useQueryStates(propertyFilterParsers);
   const filters = useMemo(() => toFilterState(qs), [qs]);
 
@@ -61,9 +65,6 @@ export default function Dashboard() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // Depend on the primitive nuqs values rather than the derived `filters`
-    // object so we don't re-fire just because `useQueryStates` returned a new
-    // object identity with the same contents.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     sortBy,
@@ -91,7 +92,7 @@ export default function Dashboard() {
         onlyOnePercentRule: filters.onlyOnePercentRule,
         minCapRate: filters.minCapRate,
         minCashOnCash: filters.minCashOnCash,
-        propertyType: filters.propertyType
+        propertyType: filters.propertyType,
       });
 
       const items = data.items;
@@ -101,7 +102,7 @@ export default function Dashboard() {
       if (pageNum === 1) {
         setProperties(items);
       } else {
-        setProperties(prev => [...prev, ...items]);
+        setProperties((prev) => [...prev, ...items]);
       }
 
       setPage(pageNum);
@@ -113,191 +114,242 @@ export default function Dashboard() {
     }
   }
 
-  const handleLoadMore = () => {
-    loadProperties(page + 1);
-  };
+  const handleLoadMore = () => loadProperties(page + 1);
 
-  const toggleSelection = useCallback((id: string) => {
-    setSelectedProperties(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        if (next.size >= 3) {
-          showToast("You can compare up to 3 properties at a time.");
-          return prev;
+  const toggleSelection = useCallback(
+    (id: string) => {
+      setSelectedProperties((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          if (next.size >= 3) {
+            showToast('You can compare up to 3 properties at a time.');
+            return prev;
+          }
+          next.add(id);
         }
-        next.add(id);
-      }
-      return next;
-    });
-  }, [showToast]);
+        return next;
+      });
+    },
+    [showToast]
+  );
 
-  // Client-side filtering is now minimal - server handles price/beds/baths/1% rule
-  // We only filter showSold client-side (status check)
+  // Client-side filter only for showSold (status check). Server handles the rest.
   const filteredProperties = useMemo(() => {
-    return properties.filter(p => {
+    return properties.filter((p) => {
       if (!filters.showSold && (p.status === 'sold' || p.listing_price === null)) return false;
       return true;
     });
   }, [properties, filters.showSold]);
 
-  if (loading && page === 1) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center space-y-4">
-          <Loader2 className="h-10 w-10 animate-spin text-slate-900" />
-          <p className="text-sm font-medium text-gray-500 animate-pulse">Loading market data...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-slate-900 flex flex-col">
+    <div className="min-h-screen bg-white font-sans text-slate-900">
       <Header />
+      <HomeHero onCtaClick={scrollToOpportunities} />
+      <StatsStrip />
+      <FeaturedDeals />
 
-      {/* Sticky Filters */}
-      <div className="sticky top-0 z-20 bg-white shadow-sm">
-        <PropertyFilters />
-      </div>
+      {/* Opportunities — the tool itself. Anchored target for hero CTA. */}
+      <section
+        id="opportunities"
+        ref={opportunitiesRef}
+        aria-labelledby="opp-headline"
+        className="border-t border-slate-200/70 bg-slate-50"
+      >
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-2 py-8 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
+                All opportunities
+              </p>
+              <h2
+                id="opp-headline"
+                className="mt-1 flex items-baseline gap-3 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl"
+              >
+                Browse the full feed
+                <span className="rounded-full bg-slate-900 px-3 py-1 font-mono text-[11px] font-semibold tabular-nums text-white">
+                  {filteredProperties.length} shown
+                </span>
+              </h2>
+            </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-140px)]">
-        {/* Use fixed height for map layout, subtract header/filter height approx */}
-
-        {/* List View (Scrollable) */}
-        <div className={`flex-1 overflow-y-auto p-6 transition-all duration-300
-          ${showMap ? 'hidden lg:block lg:w-[55%]' : 'w-full'} 
-        `}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-            <h2 className="text-xl font-bold flex items-center">
-              <BarChart3 className="mr-2 h-5 w-5 text-slate-500" />
-              Opportunities
-              <span className="ml-3 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                {filteredProperties.length} Found
-              </span>
-            </h2>
-
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="hidden sm:block">
                 <SavedSearches />
               </div>
-
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="h-9 rounded-md border border-slate-200 text-sm px-3 py-1 bg-white"
+                className="h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-sm focus:border-emerald-500 focus:outline-none"
               >
-                <option value="newest">Newest Listed</option>
-                <option value="one_percent_high">1% Rule: Best First</option>
-                <option value="one_percent_low">1% Rule: Worst First</option>
-                <option value="price_high">Price: High to Low</option>
-                <option value="price_low">Price: Low to High</option>
+                <option value="one_percent_high">1% rule · best</option>
+                <option value="one_percent_low">1% rule · worst</option>
+                <option value="newest">Newest listed</option>
+                <option value="price_high">Price · high to low</option>
+                <option value="price_low">Price · low to high</option>
               </select>
-
-              {/* Mobile Toggle */}
               <div className="lg:hidden">
                 <Button variant="outline" size="sm" onClick={() => setShowMap(!showMap)}>
-                  {showMap ? <ListIcon className="h-4 w-4 mr-2" /> : <MapIcon className="h-4 w-4 mr-2" />}
+                  {showMap ? <ListIcon className="mr-2 h-4 w-4" /> : <MapIcon className="mr-2 h-4 w-4" />}
                   {showMap ? 'List' : 'Map'}
                 </Button>
               </div>
             </div>
           </div>
 
-          {/* Grid */}
-          <div className={`grid gap-6 ${showMap ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
-            {filteredProperties.map((property, idx) => (
-              <div key={property.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
-                <PropertyCard
-                  property={property}
-                  isSelected={selectedProperties.has(property.id)}
-                  onSelect={toggleSelection}
-                />
+          {/* Sticky filters within the opportunities section */}
+          <div className="sticky top-[64px] z-20 -mx-4 border-y border-slate-200 bg-white px-4 shadow-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <PropertyFilters />
+          </div>
+        </div>
+
+        {/* Grid + Map */}
+        <div className="mx-auto flex max-w-7xl flex-col px-4 sm:px-6 lg:px-8 lg:flex-row">
+          <div
+            className={`flex-1 py-8 ${
+              showMap ? 'hidden lg:block lg:w-[55%]' : 'w-full'
+            }`}
+          >
+            {loading && page === 1 ? (
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                  >
+                    <div className="aspect-[16/10] animate-pulse bg-slate-100" />
+                    <div className="space-y-2 p-4">
+                      <div className="h-4 w-24 animate-pulse rounded bg-slate-100" />
+                      <div className="h-5 w-3/4 animate-pulse rounded bg-slate-100" />
+                      <div className="h-4 w-1/2 animate-pulse rounded bg-slate-100" />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div
+                className={`grid gap-6 ${
+                  showMap
+                    ? 'grid-cols-1 xl:grid-cols-2'
+                    : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+                }`}
+              >
+                {filteredProperties.map((property, idx) => (
+                  <div
+                    key={property.id}
+                    className="animate-in fade-in slide-in-from-bottom-2 duration-500"
+                    style={{ animationDelay: `${idx * 30}ms` }}
+                  >
+                    <PropertyCard
+                      property={property}
+                      isSelected={selectedProperties.has(property.id)}
+                      onSelect={toggleSelection}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!loading && filteredProperties.length === 0 && (
+              <div className="mt-12 rounded-2xl border-2 border-dashed border-slate-300 bg-white/50 p-12 text-center">
+                <Search className="mx-auto h-12 w-12 text-slate-400" />
+                <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                  No properties match your filters
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Try adjusting your price range or criteria.
+                </p>
+              </div>
+            )}
+
+            {hasMore && !loading && (
+              <div className="mt-8 text-center">
+                <Button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  variant="outline"
+                  className="w-full md:w-auto min-w-[200px]"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load more'
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
 
-          {filteredProperties.length === 0 && (
-            <div className="mt-12 rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center bg-white/50">
-              <Search className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-semibold text-gray-900">No properties match your filters</h3>
-              <p className="mt-1 text-sm text-gray-500">Try adjusting your price range or criteria.</p>
-            </div>
-          )}
-
-          {/* Load More */}
-          {hasMore && !loading && (
-            <div className="mt-8 text-center">
+          <div
+            className={`relative ${
+              showMap ? 'block h-[60vh] w-full' : 'hidden'
+            } lg:sticky lg:top-[140px] lg:block lg:h-[calc(100vh-160px)] lg:w-[45%] lg:border-l lg:border-slate-200`}
+          >
+            <PropertyMap
+              filters={{
+                minPrice: filters.minPrice,
+                maxPrice: filters.maxPrice,
+                minBeds: filters.minBeds,
+                minBaths: filters.minBaths,
+                status: filters.showSold ? 'sold' : 'for_sale',
+              }}
+            />
+            <button
+              onClick={() => setShowMap(!showMap)}
+              className="absolute left-4 top-4 z-10 hidden rounded-md border border-slate-200 bg-white p-2 shadow-md hover:bg-slate-50 lg:block"
+              title={showMap ? 'Hide Map' : 'Show Map'}
+              aria-label={showMap ? 'Hide Map' : 'Show Map'}
+            >
+              {showMap ? <ArrowRight className="h-4 w-4" /> : <MapIcon className="h-4 w-4" />}
+            </button>
+            <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 lg:hidden">
               <Button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                variant="outline"
-                className="w-full md:w-auto min-w-[200px]"
+                variant="default"
+                size="default"
+                className="rounded-full px-6 shadow-lg"
+                onClick={() => setShowMap(false)}
               >
-                {loadingMore ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  'Load More Properties'
-                )}
+                <ListIcon className="mr-2 h-4 w-4" />
+                Show list
               </Button>
             </div>
-          )}
-        </div>
-
-        {/* Map View */}
-        <div className={`
-          ${showMap ? 'block h-full w-full' : 'hidden'} 
-          lg:block lg:h-[calc(100vh-140px)] lg:w-[45%] lg:sticky lg:top-[140px]
-          relative border-l border-gray-200
-        `}>
-          <PropertyMap
-            filters={{
-              minPrice: filters.minPrice,
-              maxPrice: filters.maxPrice,
-              minBeds: filters.minBeds,
-              minBaths: filters.minBaths,
-              status: filters.showSold ? 'sold' : 'for_sale'
-            }}
-          />
-          {/* Toggle for Desktop */}
-          <button
-            onClick={() => setShowMap(!showMap)}
-            className="absolute top-4 left-4 z-10 bg-white p-2 rounded-md shadow-md border border-gray-200 hover:bg-gray-50 hidden lg:block"
-            title={showMap ? "Hide Map" : "Show Map"}
-            aria-label={showMap ? "Hide Map" : "Show Map"}
-          >
-            {showMap ? <ArrowRight className="h-4 w-4" /> : <MapIcon className="h-4 w-4" />}
-          </button>
-
-          {/* Mobile Floating Toggle (Visible only when Map is open) */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 lg:hidden">
-            <Button variant="default" size="default" className="shadow-lg rounded-full px-6" onClick={() => setShowMap(false)}>
-              <ListIcon className="h-4 w-4 mr-2" />
-              Show List
-            </Button>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Floating Compare Button */}
+      {/* Footer credit strip */}
+      <footer className="border-t border-slate-200/70 bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
+          <p className="text-center text-xs text-slate-500">
+            Rent estimates triangulated from{' '}
+            <span className="font-mono text-slate-700">HUD SAFMR</span>,{' '}
+            <span className="font-mono text-slate-700">scraped comps</span>, and{' '}
+            <span className="font-mono text-slate-700">ML</span>. Listing data
+            via partner MLS feeds, refreshed every 30 minutes.
+          </p>
+        </div>
+      </footer>
+
+      {/* Floating Compare CTA */}
       {selectedProperties.size > 0 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 transform z-50 animate-in slide-in-from-bottom-8 fade-in duration-300">
+        <div className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2 animate-in slide-in-from-bottom-8 fade-in duration-300">
           <Link
             href={`/compare?ids=${Array.from(selectedProperties).join(',')}`}
-            className="group flex items-center rounded-full bg-slate-900 pl-4 pr-6 py-3 text-white shadow-2xl hover:bg-slate-800 transition-all hover:scale-105 ring-4 ring-white"
+            className="group flex items-center rounded-full bg-slate-900 pl-4 pr-6 py-3 text-white shadow-2xl ring-4 ring-white transition-all hover:scale-105 hover:bg-slate-800"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold mr-3 shadow-inner group-hover:scale-110 transition-transform">
+            <span className="mr-3 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold shadow-inner transition-transform group-hover:scale-110">
               {selectedProperties.size}
             </span>
-            <span className="font-medium">Compare Selected</span>
-          <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Link>
+            <span className="font-medium">Compare selected</span>
+            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </Link>
         </div>
       )}
+
       {ToastView}
     </div>
   );
