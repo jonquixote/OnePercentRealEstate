@@ -28,27 +28,39 @@ export async function GET(req: Request) {
     const result = await withSpan('home.featured', async () => {
       const client = await pool.connect();
       try {
+        // Strategy: prefer rows with a real 1% pass; fall back to other
+        // photo-having listings sorted by ratio DESC then created_at DESC
+        // when not enough qualifying rows exist. This keeps the homepage
+        // strip populated during the rent-calc backfill window when most
+        // estimated_rent values are still NULL or 0.
         const sql = `
-          SELECT
-            id::text AS id,
-            address,
-            city,
-            state,
-            price,
-            estimated_rent,
-            bedrooms,
-            bathrooms,
-            sqft,
-            primary_photo,
-            CASE WHEN price > 0 AND estimated_rent IS NOT NULL
-                 THEN (estimated_rent / price * 100)::numeric(6,2) END AS ratio_pct
-          FROM listings
-          WHERE listing_type = 'for_sale'
-            AND price > 0
-            AND estimated_rent IS NOT NULL
-            AND primary_photo IS NOT NULL
-            AND (estimated_rent / price) >= 0.01
-          ORDER BY (estimated_rent / price) DESC NULLS LAST
+          WITH ranked AS (
+            SELECT
+              id::text AS id,
+              address,
+              city,
+              state,
+              price,
+              estimated_rent,
+              bedrooms,
+              bathrooms,
+              sqft,
+              primary_photo,
+              created_at,
+              CASE WHEN price > 0 AND estimated_rent IS NOT NULL AND estimated_rent > 0
+                   THEN (estimated_rent / price * 100)::numeric(6,2) END AS ratio_pct
+            FROM listings
+            WHERE listing_type = 'for_sale'
+              AND price > 0
+              AND primary_photo IS NOT NULL
+          )
+          SELECT id, address, city, state, price, estimated_rent,
+                 bedrooms, bathrooms, sqft, primary_photo, ratio_pct
+          FROM ranked
+          ORDER BY
+            (ratio_pct IS NOT NULL) DESC,
+            ratio_pct DESC NULLS LAST,
+            created_at DESC NULLS LAST
           LIMIT $1
         `;
         return client.query(sql, [limit]);
