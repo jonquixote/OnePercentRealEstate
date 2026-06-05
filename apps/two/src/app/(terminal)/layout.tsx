@@ -86,6 +86,7 @@ export default function TerminalLayout({
               aria-hidden
             />
             <input
+              id="terminal-search"
               type="text"
               aria-label="Search listings"
               placeholder="/  search…"

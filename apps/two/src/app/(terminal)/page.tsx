@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { useViewport } from "@oper/api-client";
 import { useHotkey } from "@oper/primitives";
 import { toRows } from "@/lib/coerce";
@@ -64,6 +65,59 @@ export default function TerminalPage() {
     group: "Navigation",
   });
 
+  // ---- Search focus (/) --------------------------------------------------
+  useHotkey(
+    "/",
+    () => {
+      const input = document.getElementById("terminal-search");
+      if (input instanceof HTMLInputElement) {
+        input.focus();
+      }
+    },
+    { description: "Focus search", group: "Navigation", preventDefault: true },
+  );
+
+  // ---- Portfolio navigation (g p) ----------------------------------------
+  const router = useRouter();
+  useHotkey(
+    "g p",
+    () => {
+      router.push("/portfolio");
+    },
+    { description: "Go to portfolio", group: "Navigation" },
+  );
+
+  // ---- Watchlist toggle (s) -----------------------------------------------
+  useHotkey(
+    "s",
+    () => {
+      if (selected?.id) {
+        // eslint-disable-next-line no-console
+        console.info("watchlist toggle stub:", selected.id);
+        showWatchlistToast();
+      }
+    },
+    { description: "Toggle watchlist for selected row", group: "Actions" },
+  );
+
+  // ---- Copy address to clipboard (c) --------------------------------------
+  useHotkey(
+    "c",
+    () => {
+      if (selected?.address) {
+        navigator.clipboard
+          .writeText(selected.address)
+          .then(() => {
+            showCopiedToast();
+          })
+          .catch(() => {
+            showErrorToast("Failed to copy");
+          });
+      }
+    },
+    { description: "Copy selected row address to clipboard", group: "Actions" },
+  );
+
   // ---- Top-bar status portal ------------------------------------------
   // Layout reserves a `#topbar-status` slot; we render the count + zoom into
   // it from here so the header chrome stays a layout-time concern and the
@@ -103,6 +157,31 @@ export default function TerminalPage() {
       ) : null}
     </div>
   );
+}
+
+/**
+ * Show a transient toast notification. Simple DOM-based; no external library.
+ */
+function showTransientToast(message: string, bgClass: string) {
+  const toast = document.createElement("div");
+  toast.className = `fixed bottom-4 right-4 px-4 py-2 rounded-sm font-mono text-[12px] text-white animate-pulse z-50 ${bgClass}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.remove();
+  }, 1500);
+}
+
+function showWatchlistToast() {
+  showTransientToast("Added to watchlist", "bg-blue-600");
+}
+
+function showCopiedToast() {
+  showTransientToast("Copied to clipboard", "bg-green-600");
+}
+
+function showErrorToast(message: string) {
+  showTransientToast(message, "bg-red-600");
 }
 
 /**

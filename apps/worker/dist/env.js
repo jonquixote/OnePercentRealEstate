@@ -24,6 +24,12 @@ function readInt(name, fallback) {
     }
     return n;
 }
+function readStringOpt(name) {
+    const v = process.env[name];
+    if (v && v.length > 0)
+        return v;
+    return null;
+}
 export function loadEnv() {
     return {
         DATABASE_URL: readString('DATABASE_URL'),
@@ -50,6 +56,16 @@ export function loadEnv() {
         // independently — rent calls a downstream HTTP service while crawl
         // spawns a heavy scrape, so their concurrency profiles differ.
         RENT_WORKER_CONCURRENCY: readInt('RENT_WORKER_CONCURRENCY', 4),
+        // Wave 7 — media health crawler. 8 concurrent URL checks; recheck every 5 min.
+        MEDIA_HEALTH_CONCURRENCY: readInt('MEDIA_HEALTH_CONCURRENCY', 8),
+        MEDIA_HEALTH_INTERVAL_MS: readInt('MEDIA_HEALTH_INTERVAL_MS', 5 * 60 * 1000),
+        // Wave 7 — ML scheduler webhook (optional). If set, alerts from drift/eval
+        // are POSTed here. Format: https://hooks.slack.com/... or similar.
+        OPS_WEBHOOK_URL: readStringOpt('OPS_WEBHOOK_URL'),
+        // Wave 6 — watchlist alerts
+        RESEND_API_KEY: readString('RESEND_API_KEY', 'dummy_key_for_dev'),
+        WATCHLIST_TICK_MS: readInt('WATCHLIST_TICK_MS', 15 * 60 * 1000), // 15 minutes default
+        WATCHLIST_FROM_EMAIL: readString('WATCHLIST_FROM_EMAIL', 'alerts@octavo.press'),
     };
 }
 //# sourceMappingURL=env.js.map
