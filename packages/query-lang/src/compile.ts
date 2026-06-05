@@ -36,9 +36,18 @@ const ALLOWED_COLUMNS = new Set([
 ]);
 
 export interface CompileResult {
+  /** Parameterized WHERE-clause fragment, e.g. `"price" < $1 AND "state" = $2`. */
   sql: string;
+  /** Alias for `sql` — the consumer-facing name. Both fields point to the same string. */
+  whereSql: string;
+  /** Positional parameter values (1-indexed by SQL convention). */
   params: any[];
+  /** Distinct column names referenced by the expression, in first-appearance order. */
+  usedColumns: string[];
 }
+
+/** Read-only view of the allowed columns. Useful for UI hint text. */
+export const ALLOWED_COLUMNS_LIST: readonly string[] = Array.from(ALLOWED_COLUMNS);
 
 /**
  * Validate a column name against the whitelist.
@@ -62,9 +71,16 @@ function validateColumn(column: string): void {
 export function compile(ast: ASTNode): CompileResult {
   const params: any[] = [];
   const conditions: string[] = [];
+  // Preserve first-appearance order while deduping — small enough that a
+  // linear scan beats a Set+Array dance and keeps the trace stable for tests.
+  const usedColumns: string[] = [];
 
   for (const clause of ast.clauses) {
     validateColumn(clause.column);
+
+    if (!usedColumns.includes(clause.column)) {
+      usedColumns.push(clause.column);
+    }
 
     const quotedCol = `"${clause.column}"`;
 
@@ -96,5 +112,5 @@ export function compile(ast: ASTNode): CompileResult {
   }
 
   const sql = conditions.join(' AND ');
-  return { sql, params };
+  return { sql, whereSql: sql, params, usedColumns };
 }

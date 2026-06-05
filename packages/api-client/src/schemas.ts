@@ -82,3 +82,49 @@ export const ListingHistoryResponseSchema = z.object({
 export type ListingHistoryResponse = z.infer<
   typeof ListingHistoryResponseSchema
 >;
+
+/**
+ * Saved search wire shape — mirrors `saved_searches` row in Postgres.
+ * `params` is a free-form JSONB blob; the dashboard treats it as a partial
+ * filter snapshot. Server returns `created_at` as an ISO timestamp string.
+ */
+export const SavedSearchSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  user_id: z.string(),
+  name: z.string(),
+  params: z.record(z.string(), z.unknown()),
+  created_at: z.string(),
+});
+export type SavedSearch = z.infer<typeof SavedSearchSchema>;
+
+export const SavedSearchListSchema = z.array(SavedSearchSchema);
+
+// -----------------------------------------------------------------------------
+// Filtered listings — /api/properties/query (Wave 6, query-lang)
+// -----------------------------------------------------------------------------
+// Numeric columns ship as either string or number depending on the pg driver's
+// cast (numeric/bigint come back as strings). The terminal coerces at the
+// boundary; the schema stays permissive so we don't reject valid rows.
+
+export const FilteredListingItemSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  address: z.string(),
+  price: z.union([z.number(), z.string()]).nullable(),
+  bedrooms: z.union([z.number(), z.string()]).nullable(),
+  bathrooms: z.union([z.number(), z.string()]).nullable(),
+  sqft: z.union([z.number(), z.string()]).nullable(),
+  estimated_rent: z.union([z.number(), z.string()]).nullable(),
+  year_built: z.number().nullable(),
+  primary_photo: z.string().nullable(),
+  listing_status: z.string().nullable(),
+});
+export type FilteredListingItem = z.infer<typeof FilteredListingItemSchema>;
+
+export const FilteredListingsResponseSchema = z.object({
+  items: z.array(FilteredListingItemSchema),
+  usedColumns: z.array(z.string()),
+  compiledWhere: z.string(),
+});
+export type FilteredListingsResponse = z.infer<
+  typeof FilteredListingsResponseSchema
+>;

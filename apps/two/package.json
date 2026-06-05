@@ -12,6 +12,7 @@
   "dependencies": {
     "@oper/api-client": "workspace:*",
     "@oper/primitives": "workspace:*",
+    "@oper/query-lang": "workspace:*",
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.2",
