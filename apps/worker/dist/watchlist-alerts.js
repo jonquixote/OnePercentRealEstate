@@ -360,8 +360,10 @@ async function main() {
     logger.info({ tickMs: env.WATCHLIST_TICK_MS }, 'Watchlist alerts worker starting');
     // Initial tick
     await tick();
-    // Scheduled ticks
-    setInterval(tick, env.WATCHLIST_TICK_MS).unref();
+    // Scheduled ticks. Do NOT .unref() — that would release the event
+    // loop after main() returns, exiting the process. Docker would loop
+    // it forever ("Restarting (0)") logging only the startup line.
+    setInterval(tick, env.WATCHLIST_TICK_MS);
     // Graceful shutdown
     process.on('SIGTERM', async () => {
         logger.info('SIGTERM received, closing pool');
