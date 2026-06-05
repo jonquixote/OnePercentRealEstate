@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Group as PanelGroup,
   Panel,
@@ -30,6 +32,8 @@ export default function TerminalLayout({
 }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [railCollapsed, setRailCollapsed] = React.useState(false);
+  const pathname = usePathname();
+  const portfolioActive = pathname?.startsWith("/portfolio") ?? false;
 
   // Lightweight layout persistence. v4 of react-resizable-panels dropped the
   // single-prop `autoSaveId`; the recommended replacement (`useDefaultLayout`)
@@ -79,6 +83,20 @@ export default function TerminalLayout({
               · terminal
             </span>
           </div>
+
+          <nav className="flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest">
+            <Link
+              href="/portfolio"
+              aria-current={portfolioActive ? "page" : undefined}
+              className={
+                portfolioActive
+                  ? "rounded-sm border border-primary/40 bg-primary/10 px-2 py-0.5 text-primary"
+                  : "rounded-sm border border-transparent px-2 py-0.5 text-zinc-400 hover:border-zinc-700 hover:text-zinc-100"
+              }
+            >
+              Portfolio
+            </Link>
+          </nav>
 
           <div className="relative mx-auto flex w-full max-w-xl items-center">
             <Search

@@ -1,8 +1,11 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { useProperties } from "@oper/api-client";
 import type { PropertyListItem } from "@oper/api-client";
+import { ThemeToggle } from "@oper/primitives";
 import {
   formatPct,
   formatPrice,
@@ -43,6 +46,14 @@ export default function PortfolioPage() {
     <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
       {/* Header */}
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-zinc-800/60 bg-zinc-950 px-6">
+        <Link
+          href="/"
+          className="flex items-center gap-1 rounded-sm border border-transparent px-2 py-0.5 font-mono text-[11px] uppercase tracking-widest text-zinc-400 hover:border-zinc-700 hover:text-zinc-100"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Terminal
+        </Link>
+
         <div className="flex items-baseline gap-2 font-mono">
           <span className="text-base font-semibold uppercase tracking-widest text-zinc-100">
             octavo
@@ -50,6 +61,10 @@ export default function PortfolioPage() {
           <span className="text-[10px] uppercase tracking-widest text-zinc-500">
             · portfolio
           </span>
+        </div>
+
+        <div className="ml-auto flex items-center gap-2">
+          <ThemeToggle />
         </div>
       </header>
 

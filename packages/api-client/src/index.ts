@@ -7,8 +7,17 @@ export {
   useProperty,
   useInfiniteListings,
   useListingHistory,
+  useSavedSearches,
+  useSaveSearch,
+  useDeleteSavedSearch,
+  useFilteredListings,
 } from "./hooks";
-export type { ViewportParams, InfiniteListingsFilters } from "./hooks";
+export type {
+  ViewportParams,
+  InfiniteListingsFilters,
+  SaveSearchInput,
+  DeleteSavedSearchInput,
+} from "./hooks";
 export * from "./schemas";
 export { TokenBucket, MapboxGeocoder, CachedGeocoder } from "./geocode";
 export type { GeocodeResult, GeocodeProvider } from "./geocode";

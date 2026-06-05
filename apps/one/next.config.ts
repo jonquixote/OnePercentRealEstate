@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  transpilePackages: ["@oper/primitives"],
+  transpilePackages: ["@oper/primitives", "@oper/query-lang"],
   images: {
     // Explicit allowlist replaces the previous `hostname: "**"` wildcard.
     // Add new origin patterns here as scrapers add new sources; the Wave 7

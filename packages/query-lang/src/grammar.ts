@@ -77,12 +77,61 @@ class Tokenizer {
     return result;
   }
 
+  /**
+   * Read a numeric literal. Accepts the friendly forms users actually type:
+   *   - bare integers / decimals: `42`, `0.08`
+   *   - dollar-prefixed: `$300,000`, `$1.5M`
+   *   - comma thousands separators: `300,000`
+   *   - magnitude suffixes (case-insensitive): `300k`, `1.5m`, `2B`
+   * The returned string is fully normalized — `$` stripped, commas removed,
+   * suffix expanded — so `parseFloat`/`parseInt` upstream see a plain
+   * number. Always-positive (signs are operators, not literals).
+   */
   private readNumber(): string {
-    let result = '';
-    while (this.pos < this.input.length && /[\d.]/.test(this.input[this.pos])) {
-      result += this.input[this.pos++];
+    // Optional leading '$' — already validated by the caller before delegating
+    // here; we just consume it so the digit loop starts at the right offset.
+    if (this.input[this.pos] === '$') this.pos++;
+
+    let raw = '';
+    while (
+      this.pos < this.input.length &&
+      /[\d.,]/.test(this.input[this.pos])
+    ) {
+      raw += this.input[this.pos++];
     }
-    return result;
+
+    // Optional k/m/b suffix. We accept exactly one and consume it inline
+    // so a follow-up token (`AND`, EOF, etc.) starts at the next char.
+    let multiplier = 1;
+    if (this.pos < this.input.length) {
+      const suffix = this.input[this.pos].toLowerCase();
+      if (suffix === 'k') {
+        multiplier = 1_000;
+        this.pos++;
+      } else if (suffix === 'm') {
+        multiplier = 1_000_000;
+        this.pos++;
+      } else if (suffix === 'b') {
+        multiplier = 1_000_000_000;
+        this.pos++;
+      }
+    }
+
+    // Strip commas — they are decorative thousands separators in this dialect.
+    const cleaned = raw.replace(/,/g, '');
+    if (cleaned === '' || cleaned === '.') {
+      throw new Error(`Invalid numeric literal at position ${this.pos}`);
+    }
+
+    if (multiplier === 1) return cleaned;
+
+    // Apply multiplier without going through float when possible — preserves
+    // integer fidelity for `300k` (-> 300000) and tolerates `1.5m` (-> 1500000).
+    const asNumber = parseFloat(cleaned);
+    if (!Number.isFinite(asNumber)) {
+      throw new Error(`Invalid numeric literal '${raw}' at position ${this.pos}`);
+    }
+    return String(asNumber * multiplier);
   }
 
   private readIdentifier(): string {
@@ -140,8 +189,8 @@ class Tokenizer {
       return { type: 'string', value: str, pos: startPos };
     }
 
-    // Numbers
-    if (/\d/.test(ch)) {
+    // Numbers (digit-leading, or `$`-prefixed currency forms like `$300,000`).
+    if (/\d/.test(ch) || (ch === '$' && /\d/.test(this.input[this.pos + 1] ?? ''))) {
       const num = this.readNumber();
       return { type: 'number', value: num, pos: startPos };
     }

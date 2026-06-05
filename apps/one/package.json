@@ -16,6 +16,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@oper/api-client": "workspace:*",
     "@oper/primitives": "workspace:*",
+    "@oper/query-lang": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/instrumentation-pg": "^0.55.0",
     "@vercel/otel": "^1.13.0",

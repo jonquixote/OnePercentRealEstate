@@ -37,6 +37,12 @@
       ],
       "@oper/api-client/*": [
         "../../packages/api-client/src/*"
+      ],
+      "@oper/query-lang": [
+        "../../packages/query-lang/src/index.ts"
+      ],
+      "@oper/query-lang/*": [
+        "../../packages/query-lang/src/*"
       ]
     }
   },

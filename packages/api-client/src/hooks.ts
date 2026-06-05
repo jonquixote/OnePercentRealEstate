@@ -3,6 +3,8 @@
 import {
   useQuery,
   useInfiniteQuery,
+  useMutation,
+  useQueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import { fetchJson } from "./fetcher";
@@ -11,10 +13,15 @@ import {
   PropertyListResponseWithCursorSchema,
   ViewportResponseSchema,
   ListingHistoryResponseSchema,
+  SavedSearchListSchema,
+  SavedSearchSchema,
+  FilteredListingsResponseSchema,
   type PropertyListItem,
   type PropertyListResponseWithCursor,
   type ViewportResponse,
   type ListingHistoryResponse,
+  type SavedSearch,
+  type FilteredListingsResponse,
 } from "./schemas";
 
 /** Fetch a list of properties by id (compare page, etc.). */
@@ -133,6 +140,99 @@ export function useInfiniteListings(
     },
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
+  });
+}
+
+/**
+ * Saved searches. `userId` is the (currently localStorage-scoped) browser id
+ * — once auth lands in Wave 8 the param will be dropped and the server
+ * resolves it from the session. Until then, callers MUST pass it explicitly.
+ */
+export function useSavedSearches(
+  userId: string | null,
+  options?: Partial<UseQueryOptions<SavedSearch[]>>,
+) {
+  return useQuery({
+    queryKey: ["saved-searches", userId],
+    queryFn: ({ signal }) => {
+      if (!userId) throw new Error("user_id missing");
+      return fetchJson<SavedSearch[]>(
+        `/api/saved-searches?user_id=${encodeURIComponent(userId)}`,
+        { signal, schema: SavedSearchListSchema },
+      );
+    },
+    enabled: userId != null,
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export interface SaveSearchInput {
+  user_id: string;
+  name: string;
+  params: Record<string, unknown>;
+}
+
+export function useSaveSearch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SaveSearchInput) =>
+      fetchJson<SavedSearch>("/api/saved-searches", {
+        method: "POST",
+        body: JSON.stringify(input),
+        schema: SavedSearchSchema,
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["saved-searches", vars.user_id] });
+    },
+  });
+}
+
+export interface DeleteSavedSearchInput {
+  id: number | string;
+  user_id: string;
+}
+
+export function useDeleteSavedSearch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, user_id }: DeleteSavedSearchInput) =>
+      fetchJson<{ success: true }>(
+        `/api/saved-searches?id=${encodeURIComponent(String(id))}&user_id=${encodeURIComponent(user_id)}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["saved-searches", vars.user_id] });
+    },
+  });
+}
+
+/**
+ * Run a SQL-like filter expression through the terminal's `/api/properties/query`
+ * endpoint. The expression is parsed + compiled server-side; the client
+ * never sees raw SQL. When `expression` is null/empty/whitespace the hook
+ * stays disabled so the caller can fall back to its viewport query.
+ */
+export function useFilteredListings(
+  expression: string | null,
+  options?: { limit?: number } & Partial<UseQueryOptions<FilteredListingsResponse>>,
+) {
+  const { limit, ...rest } = options ?? {};
+  const trimmed = (expression ?? "").trim();
+  const enabled = trimmed.length > 0;
+
+  return useQuery({
+    queryKey: ["filtered-listings", trimmed, limit ?? null] as const,
+    queryFn: ({ signal }) =>
+      fetchJson<FilteredListingsResponse>("/api/properties/query", {
+        signal,
+        method: "POST",
+        body: JSON.stringify({ expression: trimmed, limit }),
+        schema: FilteredListingsResponseSchema,
+      }),
+    enabled,
+    staleTime: 30_000,
+    ...rest,
   });
 }
 
