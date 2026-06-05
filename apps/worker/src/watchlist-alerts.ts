@@ -191,16 +191,43 @@ async function sendAlert(client: any, alertId: bigint, watchlistId: bigint, user
 }
 
 /**
- * Send an alert via Resend email API.
+ * HTML-escape an interpolation. Listing addresses come from MLS scrapes
+ * which we treat as untrusted; a value containing `<script>` or
+ * `<img onerror=>` would otherwise execute in the recipient's mail client.
+ */
+function escHtml(input: unknown): string {
+  return String(input ?? '').replace(/[&<>"']/g, (c) => {
+    switch (c) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return c;
+    }
+  });
+}
+
+/**
+ * Send an alert via Resend email API. All interpolations are HTML-escaped
+ * because the underlying listing data (address, etc.) is sourced from
+ * untrusted MLS scrapes.
  */
 async function sendEmailAlert(alert: any, recipientEmail: string): Promise<void> {
   const payload = JSON.parse(alert.payload);
+  const address = escHtml(payload.address);
+  const price = payload.price != null
+    ? `$${escHtml(Number(payload.price).toLocaleString())}`
+    : 'N/A';
+  const rent = payload.estimated_rent != null
+    ? `$${escHtml(Number(payload.estimated_rent).toLocaleString())}`
+    : 'N/A';
 
   const htmlBody = `
     <h2>New Property Match</h2>
-    <p><strong>Address:</strong> ${payload.address}</p>
-    <p><strong>Price:</strong> $${payload.price?.toLocaleString() || 'N/A'}</p>
-    <p><strong>Est. Rent:</strong> $${payload.estimated_rent?.toLocaleString() || 'N/A'}</p>
+    <p><strong>Address:</strong> ${address}</p>
+    <p><strong>Price:</strong> ${price}</p>
+    <p><strong>Est. Rent:</strong> ${rent}</p>
   `;
 
   const response = await fetch('https://api.resend.com/emails', {
@@ -212,7 +239,11 @@ async function sendEmailAlert(alert: any, recipientEmail: string): Promise<void>
     body: JSON.stringify({
       from: env.WATCHLIST_FROM_EMAIL,
       to: recipientEmail,
-      subject: `New property match: ${payload.address}`,
+      // Plain-text subject is rendered as text — no need to escape, but
+      // strip newlines to prevent header-injection style abuse.
+      subject: `New property match: ${String(payload.address ?? '')
+        .replace(/[\r\n]+/g, ' ')
+        .slice(0, 200)}`,
       html: htmlBody,
     }),
   });
@@ -224,21 +255,104 @@ async function sendEmailAlert(alert: any, recipientEmail: string): Promise<void>
 }
 
 /**
- * Send an alert via webhook.
+ * Validate that a user-supplied webhook URL is safe to call. Rejects
+ * loopback / RFC1918 / link-local / ULA / non-https. This is an SSRF
+ * mitigation because users supply webhook_url via user_alert_prefs and
+ * the worker runs inside the docker network — without this we could be
+ * tricked into reaching infrastructure-postgres-1, the redis container,
+ * the host gateway, etc.
+ */
+function isPrivateIpv4(ip: string): boolean {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) {
+    return true; // bogus IPs are private-equivalent — reject
+  }
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 169 && b === 254) return true; // link-local + AWS metadata
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 0) return true;
+  return false;
+}
+
+async function assertSafeWebhookUrl(raw: string): Promise<URL> {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('invalid webhook URL');
+  }
+  if (url.protocol !== 'https:') {
+    throw new Error('webhook URL must be https://');
+  }
+  if (url.username || url.password) {
+    throw new Error('webhook URL must not contain userinfo');
+  }
+  const host = url.hostname;
+  if (
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    /\.local$/.test(host) ||
+    /\.internal$/.test(host)
+  ) {
+    throw new Error('webhook host blocked');
+  }
+  // Reject IPv6 ULA / loopback regardless of DNS.
+  if (host.startsWith('[')) {
+    const v6 = host.slice(1, -1).toLowerCase();
+    if (v6 === '::1' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80')) {
+      throw new Error('webhook host blocked');
+    }
+  }
+  // Resolve and ensure no resolution lands in private ranges.
+  const { lookup } = await import('node:dns/promises');
+  const addrs = await lookup(host, { all: true });
+  for (const a of addrs) {
+    if (a.family === 4 && isPrivateIpv4(a.address)) {
+      throw new Error('webhook host resolves to private IP');
+    }
+    if (a.family === 6) {
+      const v6 = a.address.toLowerCase();
+      if (v6 === '::1' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80')) {
+        throw new Error('webhook host resolves to private IPv6');
+      }
+    }
+  }
+  return url;
+}
+
+/**
+ * Send an alert via webhook. URL is SSRF-validated; redirects are
+ * disabled because each hop would need re-validation and that's not
+ * worth the complexity for a v1 — webhook destinations should give us
+ * a stable terminal URL.
  */
 async function sendWebhookAlert(alert: any, webhookUrl: string): Promise<void> {
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      alertId: alert.id,
-      kind: alert.kind,
-      payload: JSON.parse(alert.payload),
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Webhook returned ${response.status}`);
+  const safe = await assertSafeWebhookUrl(webhookUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(safe.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      redirect: 'manual',
+      signal: controller.signal,
+      body: JSON.stringify({
+        alertId: alert.id,
+        kind: alert.kind,
+        payload: JSON.parse(alert.payload),
+      }),
+    });
+    if (response.status >= 300 && response.status < 400) {
+      throw new Error(`webhook returned redirect ${response.status} (rejected)`);
+    }
+    if (!response.ok) {
+      throw new Error(`Webhook returned ${response.status}`);
+    }
+  } finally {
+    clearTimeout(timer);
   }
 }
 
