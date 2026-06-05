@@ -227,7 +227,19 @@ function isEditableTarget(target: EventTarget | null): boolean {
 const registry = new Map<string, RegistryEntry>();
 const subscribers = new Set<() => void>();
 
+// useSyncExternalStore demands a referentially-stable snapshot when nothing
+// has changed; otherwise React keeps comparing new identities, re-renders
+// the consumer, re-calls getSnapshot, and bails out with React error #185
+// (max update depth). We cache the snapshot and only re-materialize it
+// when emit() runs.
+let cachedSnapshot: RegistryEntry[] = [];
+
+function refreshSnapshot() {
+  cachedSnapshot = Array.from(registry.values());
+}
+
 function emit() {
+  refreshSnapshot();
   subscribers.forEach((fn) => fn());
 }
 
@@ -239,7 +251,7 @@ function subscribe(fn: () => void): () => void {
 }
 
 function getRegistrySnapshot(): RegistryEntry[] {
-  return Array.from(registry.values());
+  return cachedSnapshot;
 }
 
 let idCounter = 0;
