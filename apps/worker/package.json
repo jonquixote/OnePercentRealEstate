@@ -9,9 +9,13 @@
     "start:crawl": "node dist/crawl.js",
     "start:refresh": "node dist/refresh-clusters.js",
     "start:rent-estimator": "node dist/rent-estimator.js",
+    "start:media-health": "node dist/media-health.js",
+    "start:ml-scheduler": "node dist/ml-scheduler.js",
     "dev:crawl": "tsx src/crawl.ts",
     "dev:refresh": "tsx src/refresh-clusters.ts",
     "dev:rent-estimator": "tsx src/rent-estimator.ts",
+    "dev:media-health": "tsx src/media-health.ts",
+    "dev:ml-scheduler": "tsx src/ml-scheduler.ts",
     "lint": "eslint src --max-warnings=0"
   },
   "dependencies": {

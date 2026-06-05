@@ -1,7 +1,7 @@
 'use client';
 
 import { AdvancedRentEstimator } from '@/components/AdvancedRentEstimator';
-import { CashflowCalculator } from '@/components/CashflowCalculator';
+import { CashflowSliders } from '@/components/property/CashflowSliders';
 
 interface PropertyFinancialsTabProps {
     property: any;
@@ -27,7 +27,10 @@ export function PropertyFinancialsTab({ property, isOnePercentRule }: PropertyFi
                 </div>
             </div>
             <div className="lg:col-span-2">
-                <CashflowCalculator property={property} />
+                <CashflowSliders
+                    listingPrice={property.listing_price}
+                    estimatedRent={property.estimated_rent}
+                />
             </div>
         </div>
     );

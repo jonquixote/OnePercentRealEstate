@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useListingHistory } from "@oper/api-client";
 import { Button, cn } from "@oper/primitives";
 import { sparkSeries } from "@/lib/coerce";
 import {
@@ -81,10 +82,10 @@ export function PropertyInspector() {
             Trend
           </span>
           <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-600">
-            MOCK · listings_history seeds next
+            Price · last 30 points
           </span>
         </div>
-        <Sparkline id={selected.id} />
+        <SparklineWithHistory id={selected.id} />
       </section>
 
       {/* Specs strip */}
@@ -161,21 +162,48 @@ function Dot() {
 }
 
 /**
- * Deterministic placeholder sparkline. Builds a smooth cubic path through a
- * 30-point series seeded from the property id (see `sparkSeries`). When
- * listings_history (Wave 3) lands, swap the series source and keep the
- * rendering — the path math is generic.
+ * Sparkline that reads from listings_history. Falls back to mock data if the
+ * history is empty or still loading.
  */
-function Sparkline({ id }: { id: string }) {
-  const points = React.useMemo(() => sparkSeries(id, 30), [id]);
+function SparklineWithHistory({ id }: { id: string }) {
+  const { data: history } = useListingHistory(id);
+
+  // Normalize price column to [0, 1] range
+  const points = React.useMemo(() => {
+    if (!history || history.points.length < 2) {
+      // Fall back to mock series
+      return sparkSeries(id, 30);
+    }
+
+    const prices = history.points
+      .map((p) => p.price)
+      .filter((p) => p != null) as number[];
+
+    if (prices.length === 0) {
+      return sparkSeries(id, 30);
+    }
+
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min;
+
+    // Normalize each price to [0, 1]; if all prices are the same, use 0.5
+    return history.points.map((p) => {
+      if (p.price == null) return 0.5;
+      if (range === 0) return 0.5;
+      return (p.price - min) / range;
+    });
+  }, [history, id]);
+
   const path = React.useMemo(() => buildSmoothPath(points, 200, 60), [points]);
+
   return (
     <svg
       viewBox="0 0 200 60"
       preserveAspectRatio="none"
       className="h-12 w-full"
       role="img"
-      aria-label="Mock 30-point price trend sparkline"
+      aria-label="Price trend sparkline from listings history"
     >
       <path
         d={path}

@@ -302,6 +302,39 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Wave 6: watchlist alerts worker. Every 15 min evaluate watchlists,
+  # create alerts for new matches / price drops, send via email (Resend) or
+  # webhook. Reads RESEND_API_KEY from .env when channel='email'.
+  worker-watchlist-alerts:
+    build:
+      context: ../
+      dockerfile: apps/worker/Dockerfile
+    restart: always
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      - WATCHLIST_TICK_MS=900000
+      - WATCHLIST_FROM_EMAIL=alerts@octavo.press
+      - LOG_LEVEL=info
+    command: ["node", "apps/worker/dist/watchlist-alerts.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # Wave 3: rent triangulation FastAPI shim. Imports services/rent_estimator_v2
   # (legacy math) + stamps active rent_models version onto each prediction.
   ml:
@@ -328,6 +361,69 @@ services:
         limits:
           memory: 768M
           cpus: '1'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Wave 7: media health crawler. Checks primary_photo URLs and stamps
+  # HTTP status back into listings.media_url_status. Same image as `worker`,
+  # different CMD.
+  worker-media-health:
+    build:
+      context: ../
+      dockerfile: apps/worker/Dockerfile
+    restart: always
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      - MEDIA_HEALTH_CONCURRENCY=8
+      - MEDIA_HEALTH_INTERVAL_MS=300000
+      - LOG_LEVEL=info
+    command: ["node", "apps/worker/dist/media-health.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Wave 7: ML scheduler. Runs drift at 02:00 UTC daily and eval at 03:00 UTC
+  # on Sundays. POSTs to http://ml:8000/ops/run-* and optionally sends alerts
+  # to OPS_WEBHOOK_URL. Same image as `worker`, different CMD.
+  worker-ml-scheduler:
+    build:
+      context: ../
+      dockerfile: apps/worker/Dockerfile
+    restart: always
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - ML_URL=http://ml:8000
+      - LOG_LEVEL=info
+    command: ["node", "apps/worker/dist/ml-scheduler.js"]
+    depends_on:
+      - ml
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
     logging:
       driver: "json-file"
       options:

@@ -188,3 +188,63 @@ def predict(req: PredictRequest) -> PredictResponse:
         model_version=_get_active_version(),
         features_hash=_features_hash(req),
     )
+
+
+# ---------------------------------------------------------------------------
+# Wave 7: Ops endpoints (drift + eval on demand)
+# ---------------------------------------------------------------------------
+
+
+class OpResponse(BaseModel):
+    ok: bool
+    lines: list[str] = []
+    alert: bool = False
+    exit_code: Optional[int] = None
+
+
+async def _run_subprocess(cmd: list[str]) -> tuple[bool, list[str], int]:
+    """Run a subprocess and capture stdout/stderr. Return (ok, lines, exit_code)."""
+    import asyncio
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120.0)
+        output = stdout.decode("utf-8", errors="replace").strip()
+        lines = output.split("\n") if output else []
+
+        if proc.returncode == 0:
+            return True, lines, 0
+        else:
+            return False, lines, proc.returncode
+
+    except asyncio.TimeoutError:
+        return False, ["timeout: subprocess exceeded 120s"], 124
+    except Exception as exc:
+        return False, [f"subprocess error: {exc}"], 1
+
+
+@app.post("/ops/run-drift", response_model=OpResponse)
+async def run_drift() -> OpResponse:
+    """Trigger the drift monitor. Captures stdout and returns JSON."""
+    ok, lines, exit_code = await _run_subprocess(["python", "-m", "drift"])
+
+    # Simple heuristic: if there are "WARNING" or "ERROR" lines, alert.
+    alert = any("WARNING" in line or "ERROR" in line for line in lines)
+
+    return OpResponse(ok=ok, lines=lines, exit_code=exit_code, alert=alert)
+
+
+@app.post("/ops/run-eval", response_model=OpResponse)
+async def run_eval() -> OpResponse:
+    """Trigger model evaluation. Captures stdout and returns JSON."""
+    ok, lines, exit_code = await _run_subprocess(["python", "-m", "eval"])
+
+    # Simple heuristic: if there are "WARNING" or "ERROR" lines, alert.
+    alert = any("WARNING" in line or "ERROR" in line for line in lines)
+
+    return OpResponse(ok=ok, lines=lines, exit_code=exit_code, alert=alert)

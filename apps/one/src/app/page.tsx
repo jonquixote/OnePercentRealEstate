@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { PropertyCard } from '@/components/ui/card';
 import Header from '@/components/Header';
-import { Loader2, TrendingUp, Search, BarChart3, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
+import { Loader2, TrendingUp, Search, BarChart3, ArrowRight, Map as MapIcon, List as ListIcon, Save } from 'lucide-react';
 import Link from 'next/link';
 import { PropertyMap } from '@/components/PropertyMap';
 import {
@@ -116,6 +116,45 @@ export default function Dashboard() {
     loadProperties(page + 1);
   };
 
+  const handleSaveSearch = async () => {
+    const searchName = window.prompt('Save this search as:', 'My Search');
+    if (!searchName) return;
+
+    try {
+      const response = await fetch('/api/saved-searches', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'guest-user', // Wave 8: Replace with real session user_id
+        },
+        body: JSON.stringify({
+          user_id: 'guest-user',
+          name: searchName,
+          params: {
+            minPrice: filters.minPrice,
+            maxPrice: filters.maxPrice,
+            minBeds: filters.minBeds,
+            minBaths: filters.minBaths,
+            onlyOnePercentRule: filters.onlyOnePercentRule,
+            minCapRate: filters.minCapRate,
+            minCashOnCash: filters.minCashOnCash,
+            propertyType: filters.propertyType,
+            sortBy,
+          },
+        }),
+      });
+
+      if (response.ok) {
+        showToast(`Search "${searchName}" saved!`);
+      } else {
+        showToast('Failed to save search');
+      }
+    } catch (error) {
+      console.error('Error saving search:', error);
+      showToast('Failed to save search');
+    }
+  };
+
   const toggleSelection = useCallback((id: string) => {
     setSelectedProperties(prev => {
       const next = new Set(prev);
@@ -178,6 +217,16 @@ export default function Dashboard() {
             </h2>
 
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveSearch}
+                className="hidden sm:flex"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Save Search
+              </Button>
+
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}

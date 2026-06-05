@@ -28,6 +28,14 @@ export type PropertyListItem = z.infer<typeof PropertyListItemSchema>;
 
 export const PropertyListResponseSchema = z.array(PropertyListItemSchema);
 
+export const PropertyListResponseWithCursorSchema = z.object({
+  items: z.array(PropertyListItemSchema),
+  nextCursor: z.string().nullable(),
+});
+export type PropertyListResponseWithCursor = z.infer<
+  typeof PropertyListResponseWithCursorSchema
+>;
+
 export const ViewportClusterSchema = z.object({
   latitude: z.number(),
   longitude: z.number(),
@@ -59,3 +67,18 @@ export const ViewportResponseSchema = z.object({
     .optional(),
 });
 export type ViewportResponse = z.infer<typeof ViewportResponseSchema>;
+
+export const ListingHistoryPointSchema = z.object({
+  observed_at: z.string(),
+  price: z.number().nullable(),
+  estimated_rent: z.number().nullable(),
+  days_on_market: z.number().nullable(),
+});
+export type ListingHistoryPoint = z.infer<typeof ListingHistoryPointSchema>;
+
+export const ListingHistoryResponseSchema = z.object({
+  points: z.array(ListingHistoryPointSchema),
+});
+export type ListingHistoryResponse = z.infer<
+  typeof ListingHistoryResponseSchema
+>;

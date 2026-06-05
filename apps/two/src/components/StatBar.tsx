@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { median } from "@/lib/coerce";
+import { median, percentile } from "@/lib/coerce";
 import { formatCompact, formatPct, formatPpsf, formatPrice } from "@/lib/format";
 import type { PropertyRow } from "@/lib/types";
 
@@ -23,23 +23,51 @@ export const StatBar = React.memo(function StatBar({ rows }: Props) {
       medOnePct: median(rows, (r) => r.onePct),
       medCap: median(rows, (r) => r.cap),
       medDom: median(rows, (r) => r.dom),
+      q1Price: percentile(rows, (r) => r.price, 25),
+      q3Price: percentile(rows, (r) => r.price, 75),
+      q1OnePct: percentile(rows, (r) => r.onePct, 25),
+      q3OnePct: percentile(rows, (r) => r.onePct, 75),
     };
   }, [rows]);
 
   return (
-    <div className="flex items-center gap-3 border-y border-zinc-800/60 bg-zinc-950/80 px-3 py-1.5 font-mono text-[11px]">
-      <Stat label="N" value={formatCompact(stats.count)} />
-      <Dot />
-      <Stat label="MED PRICE" value={formatPrice(stats.medPrice)} />
-      <Dot />
-      <Stat label="MED $/SQFT" value={formatPpsf(stats.medPpsf)} />
-      <Dot />
-      <Stat label="MED 1%" value={formatPct(stats.medOnePct, 2)} />
-      <Dot />
-      <Stat label="MED CAP" value={formatPct(stats.medCap, 1)} />
-      <Dot />
-      <Stat label="MED DOM" value={stats.medDom != null ? Math.round(stats.medDom).toString() : "—"} />
-      <span className="ml-auto text-zinc-600">live · 60s ttl</span>
+    <div className="flex flex-col border-y border-zinc-800/60 bg-zinc-950/80 px-3 py-1.5 font-mono text-[11px]">
+      {/* Median row */}
+      <div className="flex items-center gap-3">
+        <Stat label="N" value={formatCompact(stats.count)} />
+        <Dot />
+        <Stat label="MED PRICE" value={formatPrice(stats.medPrice)} />
+        <Dot />
+        <Stat label="MED $/SQFT" value={formatPpsf(stats.medPpsf)} />
+        <Dot />
+        <Stat label="MED 1%" value={formatPct(stats.medOnePct, 2)} />
+        <Dot />
+        <Stat label="MED CAP" value={formatPct(stats.medCap, 1)} />
+        <Dot />
+        <Stat label="MED DOM" value={stats.medDom != null ? Math.round(stats.medDom).toString() : "—"} />
+        <span className="ml-auto text-zinc-600">live · 60s ttl</span>
+      </div>
+
+      {/* IQR row */}
+      <div className="flex items-center gap-3 pt-1.5 text-[10px]">
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-zinc-500">IQR PRICE</span>
+          <span className="num text-zinc-100">
+            {stats.q1Price != null && stats.q3Price != null
+              ? `${formatPrice(stats.q1Price)} – ${formatPrice(stats.q3Price)}`
+              : "—"}
+          </span>
+        </span>
+        <Dot />
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-zinc-500">IQR 1%</span>
+          <span className="num text-zinc-100">
+            {stats.q1OnePct != null && stats.q3OnePct != null
+              ? `${formatPct(stats.q1OnePct, 2)} – ${formatPct(stats.q3OnePct, 2)}`
+              : "—"}
+          </span>
+        </span>
+      </div>
     </div>
   );
 });

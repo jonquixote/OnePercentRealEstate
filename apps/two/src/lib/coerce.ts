@@ -91,6 +91,27 @@ export function median(rows: PropertyRow[], pick: (r: PropertyRow) => number | n
   return vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
 }
 
+/** Percentile over a non-null numeric projection (0-100). */
+export function percentile(
+  rows: PropertyRow[],
+  pick: (r: PropertyRow) => number | null,
+  p: number
+): number | null {
+  const vals: number[] = [];
+  for (const r of rows) {
+    const v = pick(r);
+    if (v != null && Number.isFinite(v)) vals.push(v);
+  }
+  if (vals.length === 0) return null;
+  vals.sort((a, b) => a - b);
+  const idx = (p / 100) * (vals.length - 1);
+  const lower = Math.floor(idx);
+  const upper = Math.ceil(idx);
+  if (lower === upper) return vals[lower];
+  const w = idx - lower;
+  return vals[lower] * (1 - w) + vals[upper] * w;
+}
+
 /** Deterministic 30-point sparkline series in [0,1] from an id. */
 export function sparkSeries(id: string, points = 30): number[] {
   const out: number[] = [];
