@@ -1,0 +1,96 @@
+{
+  "name": "ZIP Iterator — every 30s, cycle all ZIPs",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 30
+            }
+          ]
+        }
+      },
+      "name": "Every 30s",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "trigger-30s"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT out_zip AS zip, crawl_job_id, cycle, wrapped FROM enqueue_next_zip_job('for_sale');",
+        "additionalFields": {}
+      },
+      "name": "Enqueue next ZIP",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [240, 0],
+      "id": "enqueue-next-zip",
+      "credentials": {
+        "postgres": {
+          "id": "pR4wUtye9OhGE0WS",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "summary",
+              "value": "={{ $json.wrapped ? 'CYCLE ' + $json.cycle + ' COMPLETE — wrapping to ' + $json.zip : 'enqueued ' + $json.zip + ' (job ' + $json.crawl_job_id + ', cycle ' + $json.cycle + ')' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Tag log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "id": "tag-log"
+    }
+  ],
+  "connections": {
+    "Every 30s": {
+      "main": [
+        [
+          {
+            "node": "Enqueue next ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enqueue next ZIP": {
+      "main": [
+        [
+          {
+            "node": "Tag log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": false,
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": [
+    {
+      "name": "scraper-orchestration"
+    }
+  ]
+}
