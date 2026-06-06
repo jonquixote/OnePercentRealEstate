@@ -22,6 +22,7 @@ export const PropertyListItemSchema = z.object({
   estimated_rent: z.number().nullable(),
   status: z.string(),
   images: z.array(z.string()),
+  media_blur: z.any().nullable().optional(),
   specs: PropertySpecsSchema,
 });
 export type PropertyListItem = z.infer<typeof PropertyListItemSchema>;
