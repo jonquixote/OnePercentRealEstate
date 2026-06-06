@@ -36,35 +36,47 @@ export async function GET(req: Request) {
               price AS listing_price,
               estimated_rent,
               listing_status AS status,
-              primary_photo,
-              bedrooms,
-              bathrooms,
-              sqft,
-              year_built,
-              hoa_fee
-            FROM listings
-            WHERE id IN (${placeholders})
-            `,
-            idArray
-          ),
-        { 'ids.count': idArray.length },
-      );
+          primary_photo,
+          images,
+          media_blur,
+          bedrooms,
+          bathrooms,
+          sqft,
+          year_built,
+          hoa_fee
+        FROM listings
+        WHERE id IN (${placeholders})
+        `,
+        idArray
+      ),
+      { 'ids.count': idArray.length },
+    );
 
-      const rows = result.rows.map((row: any) => ({
-        id: row.id,
-        address: row.address,
-        listing_price: row.listing_price != null ? Number(row.listing_price) : null,
-        estimated_rent: row.estimated_rent != null ? Number(row.estimated_rent) : null,
-        status: row.status ?? 'active',
-        images: row.primary_photo ? [row.primary_photo] : [],
-        specs: {
-          bedrooms: row.bedrooms != null ? Number(row.bedrooms) : null,
-          bathrooms: row.bathrooms != null ? Number(row.bathrooms) : null,
-          sqft: row.sqft != null ? Number(row.sqft) : null,
-          year_built: row.year_built != null ? Number(row.year_built) : null,
-          hoa_fee: row.hoa_fee != null ? Number(row.hoa_fee) : null,
-        },
-      }));
+    const rows = result.rows.map((row: any) => {
+      const images: string[] = (() => {
+        if (Array.isArray(row.images) && row.images.length > 0) {
+          return row.images.filter((url: any) => typeof url === 'string' && url.length > 0);
+        }
+        if (row.primary_photo) return [row.primary_photo];
+        return [];
+      })();
+
+      return {
+      id: row.id,
+      address: row.address,
+      listing_price: row.listing_price != null ? Number(row.listing_price) : null,
+      estimated_rent: row.estimated_rent != null ? Number(row.estimated_rent) : null,
+      status: row.status ?? 'active',
+      images,
+      media_blur: row.media_blur ?? null,
+      specs: {
+        bedrooms: row.bedrooms != null ? Number(row.bedrooms) : null,
+        bathrooms: row.bathrooms != null ? Number(row.bathrooms) : null,
+        sqft: row.sqft != null ? Number(row.sqft) : null,
+        year_built: row.year_built != null ? Number(row.year_built) : null,
+        hoa_fee: row.hoa_fee != null ? Number(row.hoa_fee) : null,
+      },
+    };});
 
       return NextResponse.json(rows);
     } finally {

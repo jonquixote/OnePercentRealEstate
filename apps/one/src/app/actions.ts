@@ -118,20 +118,22 @@ export async function getProperties(
         }
 
         // Map 'listings' table to the 'Property' interface shape expected by the frontend
-        const selectClause = `
-            id,
-            address,
-            COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
-            COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
-            COALESCE(bedrooms, (raw_data->>'beds')::numeric) as bedrooms,
-            COALESCE(bathrooms, (raw_data->>'full_baths')::numeric) as bathrooms,
-            COALESCE(sqft, (raw_data->>'sqft')::numeric) as sqft,
-            COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
-            COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
-            listing_status as status,
-            primary_photo,
-            created_at
-        `;
+  const selectClause = `
+id,
+address,
+COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
+COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
+COALESCE(bedrooms, (raw_data->>'beds')::numeric) as bedrooms,
+COALESCE(bathrooms, (raw_data->>'full_baths')::numeric) as bathrooms,
+COALESCE(sqft, (raw_data->>'sqft')::numeric) as sqft,
+COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
+COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
+listing_status as status,
+primary_photo,
+images,
+media_blur,
+created_at
+`;
 
         let query: string;
         if (useCursor) {
@@ -166,7 +168,13 @@ const client = await pool.connect();
         rent = getFallbackRent(Number(row.listing_price) || 0, beds);
       }
 
-      const images: string[] = row.primary_photo ? [row.primary_photo].filter(Boolean) : [];
+      const images: string[] = (() => {
+        if (Array.isArray(row.images) && row.images.length > 0) {
+          return row.images.filter((url: any) => typeof url === 'string' && url.length > 0);
+        }
+        if (row.primary_photo) return [row.primary_photo];
+        return [];
+      })();
 
       return {
         ...row,
@@ -180,6 +188,7 @@ const client = await pool.connect();
         latitude: Number(row.latitude) || 0,
         longitude: Number(row.longitude) || 0,
         images,
+        media_blur: row.media_blur ?? null,
         raw_data: {},
       };
     });
@@ -251,23 +260,26 @@ const client = await pool.connect();
 
 export async function getProperty(id: string) {
     try {
-        const query = `
-      SELECT
-        id,
-        address,
-        COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
-        (raw_data->>'estimated_rent')::numeric as estimated_rent,
-        COALESCE(bedrooms, (raw_data->>'beds')::numeric) as bedrooms,
-        COALESCE(bathrooms, (raw_data->>'full_baths')::numeric) as bathrooms,
-        COALESCE(sqft, (raw_data->>'sqft')::numeric) as sqft,
-        COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
-        COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
-        raw_data,
-        listing_status as status,
-        created_at
-      FROM listings
-      WHERE id = $1
-    `;
+    const query = `
+SELECT
+id,
+address,
+COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
+COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
+COALESCE(bedrooms, (raw_data->>'beds')::numeric) as bedrooms,
+COALESCE(bathrooms, (raw_data->>'full_baths')::numeric) as bathrooms,
+COALESCE(sqft, (raw_data->>'sqft')::numeric) as sqft,
+COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
+COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
+raw_data,
+primary_photo,
+images,
+media_blur,
+listing_status as status,
+created_at
+FROM listings
+WHERE id = $1
+`;
 
 const client = await pool.connect();
     try {
@@ -278,8 +290,12 @@ const client = await pool.connect();
       const row = result.rows[0];
       const raw = row.raw_data || {};
 
-      let images = [];
-      if (raw.primary_photo) images.push(raw.primary_photo);
+    let images: string[] = [];
+    if (Array.isArray(row.images) && row.images.length > 0) {
+      images = row.images.filter((url: any) => typeof url === 'string' && url.length > 0);
+    } else {
+      if (row.primary_photo) images.push(row.primary_photo);
+      if (raw.primary_photo && !images.includes(raw.primary_photo)) images.push(raw.primary_photo);
       if (raw.alt_photos) {
         const alts = Array.isArray(raw.alt_photos)
           ? raw.alt_photos
@@ -287,6 +303,7 @@ const client = await pool.connect();
         images.push(...alts);
       }
       images = images.map(url => url.trim()).filter(url => url.length > 0);
+    }
 
       let rent = Number(row.estimated_rent);
       if (!rent || rent === 0) {
@@ -308,8 +325,9 @@ const client = await pool.connect();
         },
         latitude: Number(row.latitude) || 0,
         longitude: Number(row.longitude) || 0,
-        images: images,
-        raw_data: raw,
+      images: images,
+      media_blur: row.media_blur ?? null,
+      raw_data: raw,
         status: row.status || 'watch'
       };
     } finally {
