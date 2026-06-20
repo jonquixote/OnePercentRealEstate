@@ -1,0 +1,28 @@
+-- OUT-OF-BAND: drop the transition bridge index AT CODE-DEPLOY time.
+--
+-- Why this index exists:
+--   The constraint swap (2026_06_21_listings_swap_unique_constraint.sql) removed
+--   the unique index on (address, listing_type). The OLD scraper code (still
+--   running until the new image deploys) upserts with `ON CONFLICT (address,
+--   listing_type)`, which then has no matching index → every /scrape 500s.
+--   To keep the live scraper working in the window between "migrations applied"
+--   and "new code deployed", a bridging unique index was created:
+--       listings_addr_type_bridge_uniq  ON listings (address, listing_type)
+--   This is safe ONLY while no address carries coexisting sale_types (true until
+--   the new scraper's foreclosure pass runs).
+--
+-- When to run this:
+--   At the scraper code deploy. The NEW scraper upserts with
+--   `ON CONFLICT (address, listing_type, sale_type)` and intentionally creates
+--   coexisting (standard + foreclosure) rows at one address — which the 2-col
+--   bridge unique would REJECT. So the bridge MUST be dropped as the new code
+--   goes live.
+--
+-- Ordering (brief transient scrape 500s are tolerable — the worker retries the
+-- ZIP next cycle):
+--   1. docker compose up -d --no-deps scraper   (deploy new image)
+--   2. run THIS script:
+--        DROP INDEX CONCURRENTLY IF EXISTS listings_addr_type_bridge_uniq;
+--   3. confirm scraper returns 200 and coexisting rows can insert.
+
+DROP INDEX CONCURRENTLY IF EXISTS public.listings_addr_type_bridge_uniq;

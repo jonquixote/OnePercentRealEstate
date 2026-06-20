@@ -30,3 +30,30 @@ The backfill is **resumable + idempotent**: it only touches rows where
 `address_hash IS NULL`, commits per batch, and never writes
 `estimated_rent` / `rent_calc_status` / `updated_at` (so the rent-calc queue and
 the rent NOTIFY trigger are untouched).
+
+## Transition bridge index (deploy ordering — IMPORTANT)
+
+The constraint swap drops the unique index on `(address, listing_type)`. The
+**old** scraper image (running until you deploy the new one) upserts with
+`ON CONFLICT (address, listing_type)` and will 500 on every `/scrape` without a
+matching index. A bridging unique index keeps it alive in the gap:
+
+```sql
+CREATE UNIQUE INDEX CONCURRENTLY listings_addr_type_bridge_uniq
+  ON public.listings (address, listing_type);
+```
+
+This was created on prod immediately after the swap (2026-06-20) and the scraper
+recovered. It is safe **only** while no address carries coexisting sale_types
+(true until the new scraper's foreclosure pass runs).
+
+**At code deploy**, the new scraper upserts with
+`ON CONFLICT (address, listing_type, sale_type)` and creates coexisting
+(standard + foreclosure) rows — which the 2-col bridge would reject. So drop it
+as the new code goes live:
+`out-of-band/2026_06_21_drop_bridge_index_at_deploy.sql`.
+
+**Current prod state (2026-06-20):** all Wave A+B migrations applied + backfill
+done + bridge index in place. Running containers are still on OLD code (forward
+-compatible: they ignore the new columns/tables). Pending: deploy app + scraper +
+worker, then drop the bridge index.
