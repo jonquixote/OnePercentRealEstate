@@ -1,13 +1,21 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Check, X, Award, Bookmark, GitCompare, FileDown } from 'lucide-react';
-import { Button } from '@oper/primitives';
+import { Button, resolveRuleFrom, type RuleConfig } from '@oper/primitives';
 import { Card, CardContent } from '@/components/ui/card';
 import { calculatePropertyMetrics } from '@/lib/calculators';
 import { gradeProperty, type Grade } from '@/lib/grading';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
+
+const STRATEGY_LABELS: Record<string, string> = {
+    buy_hold: 'Buy & Hold',
+    brrrr: 'BRRRR',
+    flip: 'Fix & Flip',
+    str: 'Short-Term Rental',
+};
 
 interface PropertyScorecardTabProps {
     property: any;
@@ -56,7 +64,30 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
     const rawData = property?.raw_data || {};
     const fin = property?.financial_snapshot || {};
 
-    const metrics = calculatePropertyMetrics(listing_price, estimated_rent);
+    // Resolve the applicable underwriting rule (per property type + sale type)
+    // from the single source of truth, so the grade + thresholds match the
+    // rules engine rather than a flat 1%.
+    const [cfg, setCfg] = useState<RuleConfig | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/underwriting-rules', { cache: 'no-store' })
+            .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+            .then((rows: RuleConfig[]) => {
+                if (cancelled) return;
+                const propType =
+                    property?.property_type ?? rawData?.style ?? rawData?.property_type ?? null;
+                const saleType = property?.sale_type ?? 'standard';
+                setCfg(
+                    resolveRuleFrom(rows, { propertyType: propType, saleType, strategy: 'buy_hold' })
+                );
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [property, rawData?.style, rawData?.property_type]);
+
+    const metrics = calculatePropertyMetrics(listing_price, estimated_rent, {}, {}, cfg ?? undefined);
 
     const sqft = fin?.sqft ?? rawData?.sqft ?? null;
     const yearBuilt = fin?.year_built ?? rawData?.year_built ?? null;
@@ -70,6 +101,7 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
         // calculator now returns fractions, matching grading's contract.
         capRate: metrics.capRate || 0,
         cashOnCash: metrics.cashOnCash || 0,
+        targetRatio: cfg?.targetRatio ?? undefined,
         isOnePercentRule: metrics.isOnePercentRule,
         monthlyCashflow: metrics.monthlyCashflow || 0,
         daysOnMarket,
@@ -120,6 +152,24 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
                                 <span className="text-2xl font-semibold text-gray-400">/ 100</span>
                             </div>
                             <p className="text-lg text-gray-600">{grade.headline}</p>
+                            {cfg && (
+                                <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 font-mono text-[11px] font-medium text-slate-600">
+                                        {STRATEGY_LABELS[cfg.strategy] ?? cfg.strategy}
+                                        {cfg.targetRatio != null
+                                            ? ` · ${(cfg.targetRatio * 100).toFixed(2)}% rule`
+                                            : ''}
+                                    </span>
+                                    {cfg.isProvisional && (
+                                        <span
+                                            className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 font-mono text-[11px] font-medium text-amber-700"
+                                            title="This strategy uses provisional assumptions (no high-confidence signal yet)."
+                                        >
+                                            provisional assumptions
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                             <div className="mt-3 w-full max-w-md">
                                 <div
                                     className="h-2 w-full overflow-hidden rounded-full bg-gray-100"

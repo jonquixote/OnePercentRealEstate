@@ -57,6 +57,14 @@ const statusToneClasses: Record<'active' | 'pending' | 'sold' | 'watch' | 'neutr
     neutral: 'text-zinc-600 dark:text-zinc-300',
 };
 
+const DISTRESS_LABELS: Record<string, string> = {
+    foreclosure: 'Foreclosure',
+    pre_foreclosure: 'Pre-Foreclosure',
+    reo: 'REO',
+    auction: 'Auction',
+    short_sale: 'Short Sale',
+};
+
 export const PropertyCard = React.memo(function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {
     const { address, listing_price, estimated_rent, financial_snapshot, status } = property;
 
@@ -81,6 +89,9 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
     } as const;
 
     const statusBadge = getStatusBadge(status);
+    const distressLabel = property.sale_type && property.sale_type !== 'standard'
+        ? DISTRESS_LABELS[property.sale_type] ?? null
+        : null;
 
     const handleToggle = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         e.stopPropagation();
@@ -152,8 +163,8 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                             {/* Bottom gradient for legibility under chip on bright photos */}
                             <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/25 to-transparent" />
 
-                            {/* Status pill (top-left) */}
-                            <div className="absolute top-3 left-3 z-10">
+                            {/* Status pill + distress badge (top-left, stacked) */}
+                            <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5">
                                 <span
                                     className={cn(
                                         "inline-flex items-center gap-1.5 rounded-full bg-white/85 dark:bg-zinc-900/80 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold tracking-wide shadow-sm",
@@ -172,6 +183,14 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                                     />
                                     {statusBadge.label}
                                 </span>
+                                {distressLabel && (
+                                    <span
+                                        className="inline-flex items-center gap-1.5 rounded-full bg-amber-600 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-white shadow-sm"
+                                        aria-label={`Distress sale: ${distressLabel}`}
+                                    >
+                                        {distressLabel}
+                                    </span>
+                                )}
                             </div>
 
                             {/* 1% Rule chip (top-right) */}
