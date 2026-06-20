@@ -12,12 +12,9 @@ import Redis, { type Redis as RedisType } from 'ioredis';
 let _redis: RedisType | null = null;
 
 function createRedis(): RedisType {
-  const url = process.env.REDIS_URL;
-  if (!url) {
-    throw new Error('REDIS_URL is not set. Cannot initialize Redis client.');
-  }
+  const url = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
   const client = new Redis(url, {
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: null,
     retryStrategy(times) {
       if (times > 100) return 5000;
       return Math.min(times * 100, 5000);

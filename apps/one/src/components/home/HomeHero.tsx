@@ -5,6 +5,11 @@ import { ArrowDown, Sparkles } from 'lucide-react';
 
 interface HomeHeroProps {
   onCtaClick?: () => void;
+  stats?: {
+    total: number;
+    markets: number;
+    rentCalcPending: number;
+  } | null;
 }
 
 /**
@@ -14,7 +19,11 @@ interface HomeHeroProps {
  * paid editorial budget, so we lean on typography, generous space, and
  * one signature financial sentence as the visual hook.
  */
-export function HomeHero({ onCtaClick }: HomeHeroProps) {
+export function HomeHero({ onCtaClick, stats }: HomeHeroProps) {
+  const badgeText = stats
+    ? `Live MLS data · ${stats.markets} markets · ${new Intl.NumberFormat('en-US').format(stats.total)} listings`
+    : 'Live MLS data · nationwide coverage';
+
   return (
     <section
       aria-labelledby="hero-headline"
@@ -35,7 +44,7 @@ export function HomeHero({ onCtaClick }: HomeHeroProps) {
         <div className="mx-auto max-w-4xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-900">
             <Sparkles className="h-3.5 w-3.5" />
-            Live MLS data · 50 markets · 4,600+ listings
+            {badgeText}
           </div>
 
           <h1
@@ -48,9 +57,10 @@ export function HomeHero({ onCtaClick }: HomeHeroProps) {
           </h1>
 
           <p className="mt-6 max-w-2xl text-pretty text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
-            Every listing scored on the 1% rule, cap rate, and monthly cashflow
+            Every listing scored against the rules that matter for your play —
+            1% and 2% rule, cap rate, cash-on-cash, DSCR, the 70% flip rule —
             before you click. Triangulated rent from HUD SAFMR, scraped comps,
-            and ML — so the number you see is the number that matters.
+            and ML, so the number you see is the number that matters.
           </p>
 
           <div className="mt-10 flex flex-wrap items-center gap-4">
@@ -83,7 +93,7 @@ export function HomeHero({ onCtaClick }: HomeHeroProps) {
               {
                 k: '2',
                 t: 'Filter',
-                d: '1% rule · cap rate · cashflow · property type',
+                d: 'Buy-hold · BRRRR · flip · by rule + deal type',
               },
               {
                 k: '3',

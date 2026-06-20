@@ -108,7 +108,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
                 <PropertyTabs activeTab={activeTab} onTabChange={setActiveTab} />
                 <div className="min-h-[500px]">
                     {activeTab === 'scorecard' && <PropertyScorecardTab property={property} />}
-                    {activeTab === 'overview' && <PropertyOverviewTab property={property} estCashflow={monthlyCashflow} capRate={capRate} cashOnCash={cashOnCash} />}
+                    {activeTab === 'overview' && <PropertyOverviewTab property={property} estCashflow={monthlyCashflow} capRate={capRate * 100} cashOnCash={cashOnCash * 100} />}
                     {activeTab === 'financials' && <PropertyFinancialsTab property={property} isOnePercentRule={isOnePercentRule} />}
                     {activeTab === 'market' && <PropertyMarketTab property={property} benchmark={benchmark} />}
                 </div>

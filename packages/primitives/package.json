@@ -10,11 +10,13 @@
     "./media": "./src/media.tsx",
     "./schema": "./src/schema.tsx",
     "./theme": "./src/theme.tsx",
-    "./hotkeys": "./src/hotkeys.tsx"
+    "./hotkeys": "./src/hotkeys.tsx",
+    "./underwriting": "./src/underwriting.ts"
   },
   "scripts": {
     "lint": "eslint src",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
@@ -30,8 +32,11 @@
     "react-dom": "^19.2.3"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.10",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^5"
+    "pg": "^8.13.1",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

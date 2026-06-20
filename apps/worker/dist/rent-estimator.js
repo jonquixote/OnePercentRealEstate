@@ -19,8 +19,59 @@
 import { Client, Pool } from 'pg';
 import { loadEnv } from './env.js';
 import { getLogger, newTraceId, withTrace } from './logger.js';
+import { Redis } from 'ioredis';
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
+// ---------------------------------------------------------------------------
+// Redis for cache busting after rent calculations
+// ---------------------------------------------------------------------------
+let redisClient = null;
+function getRedis() {
+    if (!env.REDIS_URL)
+        return null;
+    if (!redisClient) {
+        redisClient = new Redis(env.REDIS_URL, {
+            maxRetriesPerRequest: null,
+            retryStrategy(times) {
+                return Math.min(times * 200, 5000);
+            },
+            lazyConnect: true,
+        });
+        redisClient.on('error', (err) => {
+            log.warn({ err: err.message }, 'redis connection error');
+        });
+    }
+    return redisClient;
+}
+// Counter to batch cache-busting (every N completions)
+let completionsSinceLastBust = 0;
+const BUST_EVERY = 25;
+async function bustFrontendCaches() {
+    const r = getRedis();
+    if (!r)
+        return;
+    try {
+        // Delete known cache keys so the frontend fetches fresh data
+        await r.del('home:stats:v1');
+        // Bust featured deals cache (pattern: home:featured:v1:*)
+        const featuredKeys = await r.keys('home:featured:v1:*');
+        if (featuredKeys.length > 0) {
+            await r.del(...featuredKeys);
+        }
+        // Increment the version counter so property list caches expire
+        await r.incr('props:version');
+        log.info('busted frontend caches after rent completions');
+    }
+    catch (err) {
+        log.warn({ err: err.message }, 'failed to bust frontend caches');
+    }
+}
+// Non-rentable property types — skip ML for these
+const NON_RENTABLE_TYPES = new Set([
+    'LAND', 'LOT', 'LOTS', 'VACANT', 'VACANT LAND', 'VACANT LOT',
+    'FARM', 'RANCH', 'COMMERCIAL', 'INDUSTRIAL', 'OTHER',
+    'PARKING', 'BOAT SLIP',
+]);
 // ---------------------------------------------------------------------------
 // Pool
 // ---------------------------------------------------------------------------
@@ -195,6 +246,18 @@ async function processListing(listingId, parentLog) {
         await markFailed(payload.listing_id, 'missing lat/lon');
         return;
     }
+    // Skip ML call for non-rentable property types — set rent to 0 directly
+    const typeUpper = (payload.property_type ?? '').toUpperCase().trim();
+    if (NON_RENTABLE_TYPES.has(typeUpper)) {
+        await markDone(payload.listing_id, 0, 'non_rentable_skip', payload);
+        jobLog.info({ property_type: payload.property_type }, 'skipped non-rentable type');
+        completionsSinceLastBust++;
+        if (completionsSinceLastBust >= BUST_EVERY) {
+            completionsSinceLastBust = 0;
+            await bustFrontendCaches();
+        }
+        return;
+    }
     try {
         const prediction = await callMlService(payload, jobLog);
         await markDone(payload.listing_id, prediction.predicted_rent, prediction.model_version, payload);
@@ -203,6 +266,12 @@ async function processListing(listingId, parentLog) {
             predicted_rent: prediction.predicted_rent,
             model_version: prediction.model_version,
         }, 'rent calc done');
+        // Bust frontend caches periodically
+        completionsSinceLastBust++;
+        if (completionsSinceLastBust >= BUST_EVERY) {
+            completionsSinceLastBust = 0;
+            await bustFrontendCaches();
+        }
     }
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);

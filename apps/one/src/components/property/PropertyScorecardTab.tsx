@@ -67,9 +67,9 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
     const grade = gradeProperty({
         listing_price: listing_price > 0 ? listing_price : null,
         estimated_rent: estimated_rent > 0 ? estimated_rent : null,
-        // calculator returns percentages; grading expects fractions.
-        capRate: (metrics.capRate || 0) / 100,
-        cashOnCash: (metrics.cashOnCash || 0) / 100,
+        // calculator now returns fractions, matching grading's contract.
+        capRate: metrics.capRate || 0,
+        cashOnCash: metrics.cashOnCash || 0,
         isOnePercentRule: metrics.isOnePercentRule,
         monthlyCashflow: metrics.monthlyCashflow || 0,
         daysOnMarket,

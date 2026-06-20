@@ -10,6 +10,9 @@
  * drag a property down.
  */
 
+import { scoreToGrade, headlineForGrade, type Grade } from '@oper/primitives';
+export type { Grade };
+
 export interface GradeInput {
     listing_price: number | null;
     estimated_rent: number | null;
@@ -17,14 +20,14 @@ export interface GradeInput {
     cashOnCash: number;     // fraction
     isOnePercentRule: boolean;
     monthlyCashflow: number;
+    /** Per-type / sale-type 1% threshold (fraction). Defaults to 0.01. */
+    targetRatio?: number;
     daysOnMarket?: number | null;
     hoaFee?: number | null;       // monthly HOA dollars
     taxAnnual?: number | null;
     sqft?: number | null;
     yearBuilt?: number | null;
 }
-
-export type Grade = 'A' | 'B' | 'C' | 'D' | 'F';
 
 export interface GradeCategory {
     label: string;
@@ -57,14 +60,6 @@ const WEIGHTS = {
     dom: 5,
 } as const;
 
-const HEADLINES: Record<Grade, string> = {
-    A: 'Exceptional rental opportunity',
-    B: 'Above-average rental opportunity',
-    C: 'Solid but unremarkable rental',
-    D: 'Marginal — proceed carefully',
-    F: 'Likely cashflow negative — avoid',
-};
-
 function clamp(n: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, n));
 }
@@ -81,14 +76,6 @@ function fmtCurrency(n: number): string {
     }).format(n);
 }
 
-function scoreToGrade(score: number): Grade {
-    if (score >= 85) return 'A';
-    if (score >= 70) return 'B';
-    if (score >= 55) return 'C';
-    if (score >= 40) return 'D';
-    return 'F';
-}
-
 export function gradeProperty(input: GradeInput): GradeResult {
     const categories: GradeCategory[] = [];
 
@@ -97,15 +84,16 @@ export function gradeProperty(input: GradeInput): GradeResult {
         const ratio = input.listing_price && input.listing_price > 0 && input.estimated_rent
             ? input.estimated_rent / input.listing_price
             : null;
+        const target = input.targetRatio ?? 0.01;
         let pts = 0;
         let summary = 'Rent-to-price ratio unknown';
         let available = true;
         if (ratio === null) {
             available = false;
-        } else if (input.isOnePercentRule || ratio >= 0.01) {
+        } else if (input.isOnePercentRule || ratio >= target) {
             pts = WEIGHTS.onePercent;
             summary = `Passes the 1% rule (${fmtPct(ratio)})`;
-        } else if (ratio >= 0.0085) {
+        } else if (ratio >= target * 0.85) {
             pts = 12;
             summary = `Near the 1% rule (${fmtPct(ratio)})`;
         } else {
@@ -294,6 +282,6 @@ export function gradeProperty(input: GradeInput): GradeResult {
         pros,
         cons,
         breakdown: categories,
-        headline: HEADLINES[grade],
+        headline: headlineForGrade(grade),
     };
 }

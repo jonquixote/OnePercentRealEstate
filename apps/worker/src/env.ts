@@ -19,6 +19,8 @@ export interface WorkerEnv {
   readonly RENT_TIMEOUT_MS: number;
   readonly RENT_BACKFILL_BATCH: number;
   readonly RENT_WORKER_CONCURRENCY: number;
+  // Redis for cache busting after rent calculations
+  readonly REDIS_URL: string;
   // Wave 7 — media health crawler
   readonly MEDIA_HEALTH_CONCURRENCY: number;
   readonly MEDIA_HEALTH_INTERVAL_MS: number;
@@ -67,7 +69,8 @@ export function loadEnv(): WorkerEnv {
     // than 5 min anyway.
     SCRAPE_TIMEOUT_MS: readInt('SCRAPE_TIMEOUT_MS', 10 * 60 * 1000),
     // Wave 3
-    ML_URL: readString('ML_URL', 'http://ml:8100'),
+    ML_URL: readString('ML_URL', 'http://ml:8000'),
+    REDIS_URL: readString('REDIS_URL', ''),
     // 30s ceiling per prediction. The legacy in-DB trigger took 30–80 ms;
     // the FastAPI shim re-wraps the same math + a DB lookup so a 30s budget
     // is two orders of magnitude of headroom for tail latency.

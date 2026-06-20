@@ -210,16 +210,33 @@ def scrape_listings(req: ScrapeRequest):
                         ))
                         inserted += 1
                 else:
-                    # SALES LISTINGS TABLE - Use INSERT ON CONFLICT for atomic upsert
-                    # This prevents race conditions and duplicates
+                    # SALES LISTINGS TABLE - Use INSERT ON CONFLICT for atomic upsert.
+                    # sale_type + provenance + address identity are computed IN SQL
+                    # (classify_sale_type + md5) so they match the backfill byte-for-byte.
+                    # The homeharvest foreclosure flag is ground truth, but only coerces
+                    # when the text classifier found nothing more specific (reo/auction/etc).
                     cursor.execute("""
                         INSERT INTO listings (
                             address, city, state, zip_code, price, bedrooms, bathrooms,
-                            sqft, year_built, property_type, listing_type, images, raw_data, 
-                            latitude, longitude, status, user_id
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (address, listing_type) 
-                        DO UPDATE SET 
+                            sqft, year_built, property_type, listing_type, images, raw_data,
+                            latitude, longitude, status, user_id,
+                            sale_type, sale_type_source, sale_type_signal, address_norm, address_hash
+                        )
+                        SELECT
+                            %s, %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s,
+                            CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'foreclosure' ELSE c.sale_type END,
+                            CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest_flag' ELSE c.sale_type_source END,
+                            CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest foreclosure filter' ELSE c.sale_type_signal END,
+                            n.address_norm,
+                            md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), ''))
+                        FROM classify_sale_type(%s::jsonb, %s) c,
+                             LATERAL (
+                                 SELECT NULLIF(regexp_replace(regexp_replace(lower(trim(%s)), '[.,#]', '', 'g'), '\\s+', ' ', 'g'), '') AS address_norm
+                             ) n
+                        ON CONFLICT (address, listing_type, sale_type)
+                        DO UPDATE SET
                             price = EXCLUDED.price,
                             bedrooms = EXCLUDED.bedrooms,
                             bathrooms = EXCLUDED.bathrooms,
@@ -230,6 +247,10 @@ def scrape_listings(req: ScrapeRequest):
                             raw_data = EXCLUDED.raw_data,
                             latitude = EXCLUDED.latitude,
                             longitude = EXCLUDED.longitude,
+                            sale_type_source = EXCLUDED.sale_type_source,
+                            sale_type_signal = EXCLUDED.sale_type_signal,
+                            address_norm = EXCLUDED.address_norm,
+                            address_hash = EXCLUDED.address_hash,
                             updated_at = NOW()
                         WHERE listings.price IS DISTINCT FROM EXCLUDED.price
                            OR listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms
@@ -240,7 +261,11 @@ def scrape_listings(req: ScrapeRequest):
                         address, row.get('city'), row.get('state'), zip_code, price,
                         bedrooms, bathrooms, sqft, year_built, get_property_type(row),
                         req.listing_type, Json(images), Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
-                        'watch', DEFAULT_USER_ID
+                        'watch', DEFAULT_USER_ID,
+                        req.foreclosure, req.foreclosure, req.foreclosure,
+                        row.get('city'), row.get('state'),
+                        Json(raw_data), get_property_type(row),
+                        address
                     ))
                     result = cursor.fetchone()
                     if result:
@@ -248,7 +273,12 @@ def scrape_listings(req: ScrapeRequest):
                     else:
                         skipped += 1
 
-                conn.commit()
+                # Batch commit every 50 rows to reduce WAL overhead
+                if (inserted + skipped) % 50 == 0:
+                    conn.commit()
+
+            # Final commit for any remaining rows
+            conn.commit()
 
         except Exception as e:
             conn.rollback()

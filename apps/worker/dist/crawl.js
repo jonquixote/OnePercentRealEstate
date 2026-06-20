@@ -98,18 +98,31 @@ async function processJob(jobId, parentLog) {
     const start = Date.now();
     log.info({ region: job.region_value, region_type: job.region_type }, 'claimed crawl job');
     try {
-        const result = await scrape(job, log);
+        const saleResult = await scrape(job, 'for_sale', log).catch((err) => {
+            log.warn({ err: err.message }, 'for_sale scrape failed, continuing to for_rent');
+            return null;
+        });
+        const rentResult = await scrape(job, 'for_rent', log).catch((err) => {
+            log.warn({ err: err.message }, 'for_rent scrape failed');
+            return null;
+        });
+        if (!saleResult && !rentResult) {
+            throw new Error('both for_sale and for_rent scrapes failed');
+        }
+        const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0);
+        const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0);
+        const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0);
         await pool.query(`UPDATE crawl_jobs
           SET status = 'completed',
               finished_at = NOW(),
               listings_found = $2,
               error_message = NULL
-        WHERE id = $1`, [job.id, result.inserted]);
+        WHERE id = $1`, [job.id, totalInserted]);
         log.info({
             duration_ms: Date.now() - start,
-            count: result.count,
-            inserted: result.inserted,
-            skipped: result.skipped,
+            count: totalCount,
+            inserted: totalInserted,
+            skipped: totalSkipped,
         }, 'crawl job completed');
         return true;
     }
@@ -131,7 +144,7 @@ async function processJob(jobId, parentLog) {
         return true; // we DID process it (failed) — caller shouldn't retry the same id
     }
 }
-async function scrape(job, log) {
+async function scrape(job, listingType, log) {
     const url = `${env.SCRAPER_URL.replace(/\/$/, '')}/scrape`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), env.SCRAPE_TIMEOUT_MS);
@@ -141,7 +154,7 @@ async function scrape(job, log) {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
                 location: job.region_value,
-                listing_type: 'for_sale',
+                listing_type: listingType,
                 past_days: 30,
             }),
             signal: controller.signal,

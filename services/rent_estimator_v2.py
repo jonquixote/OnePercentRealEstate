@@ -100,14 +100,52 @@ class RentEstimate:
         }
 
 
+from psycopg2.pool import ThreadedConnectionPool
+
+# Initialize pool lazily
+_connection_pool = None
+
+def get_db_pool():
+    global _connection_pool
+    if _connection_pool is None:
+        try:
+            _connection_pool = ThreadedConnectionPool(
+                minconn=2,
+                maxconn=20,
+                dsn=DATABASE_URL
+            )
+        except Exception as e:
+            print(f"Error creating connection pool: {e}")
+    return _connection_pool
+
 def get_db_connection():
-    """Get database connection."""
+    """Get database connection from pool or direct connection."""
+    pool = get_db_pool()
+    if pool:
+        try:
+            return pool.getconn()
+        except Exception as e:
+            print(f"Error getting connection from pool: {e}")
     try:
         return psycopg2.connect(DATABASE_URL)
     except Exception as e:
         print(f"Database connection error: {e}")
         return None
 
+def release_db_connection(conn):
+    """Release connection back to pool or close it."""
+    pool = get_db_pool()
+    if pool and conn:
+        try:
+            pool.putconn(conn)
+            return
+        except Exception:
+            pass
+    if conn:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate distance in miles between two points."""
@@ -118,6 +156,28 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
     return R * c
 
+_NON_RENTABLE_TYPES = None
+
+def get_non_rentable_types() -> set:
+    """Fetch non-rentable types from public.property_type_rules or fallback."""
+    global _NON_RENTABLE_TYPES
+    if _NON_RENTABLE_TYPES is not None:
+        return _NON_RENTABLE_TYPES
+    
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT property_type FROM public.property_type_rules WHERE is_rentable = false")
+            rows = cur.fetchall()
+            _NON_RENTABLE_TYPES = {row[0].upper().strip() for row in rows}
+            return _NON_RENTABLE_TYPES
+        except Exception as e:
+            print(f"Error querying property_type_rules: {e}")
+        finally:
+            release_db_connection(conn)
+            
+    return NON_RENTABLE_TYPES
 
 def is_non_rentable(property_type: Optional[str]) -> bool:
     """Check if property type indicates no rentable structure."""
@@ -126,11 +186,9 @@ def is_non_rentable(property_type: Optional[str]) -> bool:
     
     pt_upper = property_type.upper().strip()
     
-    # Check exact match
-    if pt_upper in NON_RENTABLE_TYPES:
+    if pt_upper in get_non_rentable_types():
         return True
     
-    # Check partial match
     if any(x in pt_upper for x in ['LAND', 'LOT', 'VACANT']):
         return True
     
@@ -165,7 +223,7 @@ def get_hud_safmr(zip_code: str, bedrooms: int) -> Optional[float]:
     except Exception as e:
         print(f"Error fetching HUD SAFMR: {e}")
     finally:
-        conn.close()
+        release_db_connection(conn)
     
     return None
 
@@ -211,7 +269,7 @@ def get_scraped_comps(
         
         comps = []
         for c in candidates:
-            dist = haversine_distance(lat, lon, c['latitude'], c['longitude'])
+            dist = haversine_distance(lat, lon, float(c['latitude']), float(c['longitude']))
             if dist <= radius_miles:
                 # Calculate similarity score
                 score = 1.0 * (1 - dist / radius_miles)  # Distance weight
@@ -254,7 +312,7 @@ def get_scraped_comps(
         print(f"Error fetching comps: {e}")
         return None, [], 0
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 
 def get_ml_prediction(property_data: Dict[str, Any], hud_rent: Optional[float] = None) -> Optional[float]:
@@ -323,7 +381,7 @@ def estimate_rent_v2(
     # 3. Get Scraped Comps (Source B)
     comps_median, comps, comp_count = get_scraped_comps(
         lat, lon, bedrooms or 3,
-        radius_miles=radius_miles,
+        radius_miles=50.0,
         hud_rent=hud_rent
     )
     

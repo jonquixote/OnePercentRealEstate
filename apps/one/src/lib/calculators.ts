@@ -1,3 +1,14 @@
+import type { RuleConfig } from '@oper/primitives';
+
+/** Strip undefined/null so a partial config never clobbers a default. */
+function definedOnly<T extends object>(o: T): Partial<T> {
+    const out: Partial<T> = {};
+    for (const k in o) {
+        const v = o[k];
+        if (v !== undefined && v !== null) out[k] = v;
+    }
+    return out;
+}
 
 export interface LoanOptions {
     downPaymentPercent: number;
@@ -71,10 +82,29 @@ export function calculatePropertyMetrics(
     price: number,
     rent: number,
     loanOptions: Partial<LoanOptions> = {},
-    expenseOptions: Partial<ExpenseOptions> = {}
+    expenseOptions: Partial<ExpenseOptions> = {},
+    cfg?: Partial<RuleConfig>
 ): CashflowResult {
-    const loan = { ...DEFAULT_LOAN_OPTIONS, ...loanOptions };
-    const expenses = { ...DEFAULT_EXPENSE_OPTIONS, ...expenseOptions };
+    // Precedence: explicit options > resolved rule config > module defaults.
+    // The rule config (underwriting_rules) is the single source of truth for
+    // financing assumptions and the 1%-rule threshold.
+    const cfgLoan = cfg
+        ? definedOnly<Partial<LoanOptions>>({
+              downPaymentPercent: cfg.downPaymentPct,
+              interestRate: cfg.interestRate,
+              loanTermYears: cfg.loanTermYears,
+          })
+        : {};
+    const cfgExpense = cfg
+        ? definedOnly<Partial<ExpenseOptions>>({
+              propertyTaxRate: cfg.propertyTaxRate,
+              insuranceAnnual: cfg.insuranceAnnual,
+          })
+        : {};
+    const loan = { ...DEFAULT_LOAN_OPTIONS, ...cfgLoan, ...loanOptions };
+    const expenses = { ...DEFAULT_EXPENSE_OPTIONS, ...cfgExpense, ...expenseOptions };
+    const closingCostPct = cfg?.closingCostPct ?? 0.03;
+    const targetRatio = cfg?.targetRatio ?? 0.01;
 
     // 1. Loan Calculations
     const downPayment = price * loan.downPaymentPercent;
@@ -115,17 +145,16 @@ export function calculatePropertyMetrics(
     const monthlyCashflow = rent - totalMonthlyExpense;
     const annualCashflow = monthlyCashflow * 12;
     const noi = (rent * 12) - (monthlyOperatingExpenses * 12);
-    const capRate = price > 0 ? (noi / price) * 100 : 0;
+    // Fractions (0.08 = 8%) — consistent with @oper/primitives underwriting + grading.
+    const capRate = price > 0 ? (noi / price) : 0;
 
-    // Cash on Cash Return = Annual Cashflow / Initial Investment (Down Payment + Closing Costs usually, simplifying to Down Payment)
-    // TODO: Add closing costs to initial investment calculation for more accuracy
-    const closingCosts = price * 0.03;
+    // Cash on Cash Return = Annual Cashflow / Initial Investment (down payment + closing costs)
+    const closingCosts = price * closingCostPct;
   const totalCashInvested = downPayment + closingCosts;
-  const cashOnCash = totalCashInvested > 0 ? (annualCashflow / totalCashInvested) * 100 : 0;
+  const cashOnCash = totalCashInvested > 0 ? (annualCashflow / totalCashInvested) : 0;
 
-    // 1% Rule
-    // Monthly Rent >= 1% of Purchase Price
-    const isOnePercentRule = price > 0 && (rent / price) >= 0.0099;
+    // 1% rule — threshold from the resolved rule config (per property type / sale type).
+    const isOnePercentRule = price > 0 && (rent / price) >= targetRatio;
 
     return {
         monthlyMortgage,
