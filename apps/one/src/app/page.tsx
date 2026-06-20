@@ -18,6 +18,7 @@ import { SavedSearches } from '@/components/SavedSearches';
 import { HomeHero } from '@/components/home/HomeHero';
 import { StatsStrip } from '@/components/home/StatsStrip';
 import { FeaturedDeals } from '@/components/home/FeaturedDeals';
+import { MarketPulse } from '@/components/home/MarketPulse';
 
 interface Property {
   id: string;
@@ -44,6 +45,12 @@ export default function Dashboard() {
   const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
   const [showMap, setShowMap] = useState(true);
   const [sortBy, setSortBy] = useState('one_percent_high');
+
+  const [heroStats, setHeroStats] = useState<{
+    total: number;
+    markets: number;
+    rentCalcPending: number;
+  } | null>(null);
 
   const opportunitiesRef = useRef<HTMLDivElement | null>(null);
   const scrollToOpportunities = useCallback(() => {
@@ -77,6 +84,8 @@ export default function Dashboard() {
     qs.cap,
     qs.coc,
     qs.type,
+    qs.sale,
+    qs.strat,
   ]);
 
   async function loadProperties(pageNum: number) {
@@ -93,6 +102,8 @@ export default function Dashboard() {
         minCapRate: filters.minCapRate,
         minCashOnCash: filters.minCashOnCash,
         propertyType: filters.propertyType,
+        saleType: filters.saleType,
+        strategy: filters.strategy,
       });
 
       const items = data.items;
@@ -146,9 +157,10 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
       <Header />
-      <HomeHero onCtaClick={scrollToOpportunities} />
-      <StatsStrip />
-      <FeaturedDeals />
+      <HomeHero onCtaClick={scrollToOpportunities} stats={heroStats} />
+      <StatsStrip onStatsLoaded={(s) => setHeroStats({ total: s.total, markets: s.markets, rentCalcPending: s.rentCalcPending })} />
+      <FeaturedDeals rentCalcPending={heroStats?.rentCalcPending ?? 0} />
+      <MarketPulse />
 
       {/* Opportunities — the tool itself. Anchored target for hero CTA. */}
       <section

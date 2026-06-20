@@ -20,9 +20,59 @@
 import { Client, Pool, type Notification } from 'pg';
 import { loadEnv } from './env.js';
 import { getLogger, newTraceId, withTrace, type WorkerLogger } from './logger.js';
+import { Redis } from 'ioredis';
 
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
+
+// ---------------------------------------------------------------------------
+// Redis for cache busting after rent calculations
+// ---------------------------------------------------------------------------
+
+let redisClient: Redis | null = null;
+
+function getRedis(): Redis | null {
+  if (!env.REDIS_URL) return null;
+  if (!redisClient) {
+    redisClient = new Redis(env.REDIS_URL, {
+      maxRetriesPerRequest: null,
+      retryStrategy(times: number) {
+        return Math.min(times * 200, 5000);
+      },
+      lazyConnect: true,
+    });
+    redisClient.on('error', (err: Error) => {
+      log.warn({ err: err.message }, 'redis connection error');
+    });
+  }
+  return redisClient;
+}
+
+// Counter to batch cache-busting (every N completions)
+let completionsSinceLastBust = 0;
+const BUST_EVERY = 25;
+
+async function bustFrontendCaches(): Promise<void> {
+  const r = getRedis();
+  if (!r) return;
+  try {
+    // Delete known cache keys so the frontend fetches fresh data
+    await r.del('home:stats:v1');
+    // Bust featured deals cache (pattern: home:featured:v1:*)
+    const featuredKeys = await r.keys('home:featured:v1:*');
+    if (featuredKeys.length > 0) {
+      await r.del(...featuredKeys);
+    }
+    // Increment the version counter so property list caches expire
+    await r.incr('props:version');
+    log.info('busted frontend caches after rent completions');
+  } catch (err) {
+    log.warn({ err: (err as Error).message }, 'failed to bust frontend caches');
+  }
+}
+
+// Rentability is decided by the DB is_rentable() function (property_type_rules)
+// — the single source of truth. Resolved per row in loadListing(), no TS list.
 
 // Payload shape sent to the FastAPI shim. Mirrors the columns the
 // calculate_smart_rent function needs; zip_code is pulled from
@@ -40,6 +90,7 @@ interface ListingPayload {
   readonly latitude: number | null;
   readonly longitude: number | null;
   readonly property_type: string | null;
+  readonly is_rentable: boolean | null;
 }
 
 interface PredictResponse {
@@ -123,6 +174,7 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     latitude: number | null;
     longitude: number | null;
     property_type: string | null;
+    is_rentable: boolean | null;
   }>(
     `SELECT id,
             address,
@@ -136,7 +188,8 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
             year_built,
             latitude,
             longitude,
-            property_type
+            property_type,
+            public.is_rentable(property_type) AS is_rentable
        FROM listings
       WHERE id = $1`,
     [listingId],
@@ -161,6 +214,7 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     latitude: r.latitude != null ? Number(r.latitude) : null,
     longitude: r.longitude != null ? Number(r.longitude) : null,
     property_type: r.property_type,
+    is_rentable: r.is_rentable,
   };
 }
 
@@ -267,6 +321,19 @@ async function processListing(listingId: string, parentLog: WorkerLogger): Promi
     return;
   }
 
+  // Skip ML call for non-rentable property types — set rent to 0 directly.
+  // Single source of truth: DB is_rentable() (property_type_rules), resolved in loadListing.
+  if (payload.is_rentable === false) {
+    await markDone(payload.listing_id, 0, 'non_rentable_skip', payload);
+    jobLog.info({ property_type: payload.property_type }, 'skipped non-rentable type');
+    completionsSinceLastBust++;
+    if (completionsSinceLastBust >= BUST_EVERY) {
+      completionsSinceLastBust = 0;
+      await bustFrontendCaches();
+    }
+    return;
+  }
+
   try {
     const prediction = await callMlService(payload, jobLog);
     await markDone(payload.listing_id, prediction.predicted_rent, prediction.model_version, payload);
@@ -278,6 +345,13 @@ async function processListing(listingId: string, parentLog: WorkerLogger): Promi
       },
       'rent calc done',
     );
+
+    // Bust frontend caches periodically
+    completionsSinceLastBust++;
+    if (completionsSinceLastBust >= BUST_EVERY) {
+      completionsSinceLastBust = 0;
+      await bustFrontendCaches();
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     try {

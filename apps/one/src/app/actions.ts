@@ -7,6 +7,12 @@ const PROPERTY_CACHE_TTL = 60;
 const HUD_CACHE_TTL = 86400;
 const CACHE_VERSION_KEY = 'props:version';
 
+// Parameterized whitelists — never interpolate these into SQL as identifiers.
+const SALE_TYPE_WHITELIST = new Set([
+    'standard', 'foreclosure', 'pre_foreclosure', 'reo', 'auction', 'short_sale',
+]);
+const STRATEGY_WHITELIST = new Set(['buy_hold', 'brrrr', 'flip', 'str']);
+
 async function getCacheVersion(): Promise<string> {
     try {
         let v = await redis.get(CACHE_VERSION_KEY);
@@ -41,6 +47,8 @@ export async function getProperties(
         minCapRate?: number;
         minCashOnCash?: number;
         propertyType?: string;
+        saleType?: string;
+        strategy?: string;
     },
     cursor: string | null = null
 ) {
@@ -80,6 +88,15 @@ export async function getProperties(
         const params: any[] = [];
         let paramIndex = 1;
 
+        // Canonical display: default to standard inventory unless the user opts
+        // into a distress type. Strategy drives which rule thresholds apply.
+        const saleType = filters?.saleType && SALE_TYPE_WHITELIST.has(filters.saleType)
+            ? filters.saleType : 'standard';
+        const strategy = filters?.strategy && STRATEGY_WHITELIST.has(filters.strategy)
+            ? filters.strategy : 'buy_hold';
+        whereClauses.push(`sale_type = $${paramIndex++}`);
+        params.push(saleType);
+
         if (filters?.minPrice && filters.minPrice > 0) {
             whereClauses.push(`price >= $${paramIndex++}`);
             params.push(filters.minPrice);
@@ -97,18 +114,22 @@ export async function getProperties(
             params.push(filters.minBaths);
         }
         if (filters?.onlyOnePercentRule) {
-            whereClauses.push(`(estimated_rent / NULLIF(price, 0)) >= 0.01`);
+            // Per (property_type, sale_type, strategy) target via the single
+            // source of truth resolve_rule(); strategy is whitelisted above.
+            whereClauses.push(`(estimated_rent / NULLIF(price, 0)) >= COALESCE((SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, $${paramIndex++})), 0.01)`);
+            params.push(strategy);
         }
         if (filters?.minCapRate && filters.minCapRate > 0) {
+            // Cap rate uses the canonical 50%-rule NOI proxy (matches underwriting.ts).
             const capRate = (filters.minCapRate / 100).toFixed(4);
-            whereClauses.push(`((estimated_rent * 12) / NULLIF(price, 0)) >= ${capRate}`);
+            whereClauses.push(`((estimated_rent * 12 * 0.5) / NULLIF(price, 0)) >= ${capRate}`);
         }
         if (filters?.minCashOnCash && filters.minCashOnCash > 0) {
             const cashOnCash = (filters.minCashOnCash / 100).toFixed(4);
             whereClauses.push(`((estimated_rent * 12 * 0.75 - (price * 0.2 * 0.06)) / NULLIF(price * 0.2, 0)) >= ${cashOnCash}`);
         }
         if (filters?.propertyType && filters.propertyType !== '') {
-            whereClauses.push(`LOWER(raw_data->>'style') = LOWER($${paramIndex++})`);
+            whereClauses.push(`LOWER(property_type) = LOWER($${paramIndex++})`);
             params.push(filters.propertyType);
         }
 

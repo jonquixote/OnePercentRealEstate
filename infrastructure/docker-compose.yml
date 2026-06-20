@@ -150,7 +150,7 @@ services:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
     networks:
       - backend
     healthcheck:
@@ -248,6 +248,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - SCRAPER_URL=http://scraper:8000
       - CLUSTER_REFRESH_INTERVAL_MS=600000
       - LOG_LEVEL=info
@@ -255,12 +256,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - backend
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
           cpus: '0.5'
     logging:
       driver: "json-file"
@@ -281,6 +284,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - ML_URL=http://ml:8000
       - RENT_BACKFILL_BATCH=50
       - RENT_WORKER_CONCURRENCY=4
@@ -288,6 +292,8 @@ services:
     command: ["node", "apps/worker/dist/rent-estimator.js"]
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - backend

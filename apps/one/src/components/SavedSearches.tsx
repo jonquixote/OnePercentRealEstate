@@ -107,6 +107,8 @@ function paramsToQuerystate(
     cap: Number(params.minCapRate ?? 0),
     coc: Number(params.minCashOnCash ?? 0),
     type: typeof params.propertyType === 'string' ? params.propertyType : '',
+    sale: typeof params.saleType === 'string' ? params.saleType : '',
+    strat: typeof params.strategy === 'string' ? params.strategy : 'buy_hold',
   };
 }
 

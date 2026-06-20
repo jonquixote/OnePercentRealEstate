@@ -44,7 +44,8 @@ export function loadEnv() {
         // than 5 min anyway.
         SCRAPE_TIMEOUT_MS: readInt('SCRAPE_TIMEOUT_MS', 10 * 60 * 1000),
         // Wave 3
-        ML_URL: readString('ML_URL', 'http://ml:8100'),
+        ML_URL: readString('ML_URL', 'http://ml:8000'),
+        REDIS_URL: readString('REDIS_URL', ''),
         // 30s ceiling per prediction. The legacy in-DB trigger took 30–80 ms;
         // the FastAPI shim re-wraps the same math + a DB lookup so a 30s budget
         // is two orders of magnitude of headroom for tail latency.

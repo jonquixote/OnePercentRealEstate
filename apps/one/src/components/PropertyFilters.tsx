@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     useQueryStates,
     parseAsInteger,
@@ -22,6 +22,8 @@ export interface FilterState {
     minCapRate: number;
     minCashOnCash: number;
     propertyType: string;
+    saleType: string;
+    strategy: string;
 }
 
 /**
@@ -43,6 +45,8 @@ export const propertyFilterParsers = {
     cap: parseAsFloat.withDefault(0),
     coc: parseAsFloat.withDefault(0),
     type: parseAsString.withDefault(''),
+    sale: parseAsString.withDefault(''),
+    strat: parseAsString.withDefault('buy_hold'),
 };
 
 /**
@@ -59,6 +63,8 @@ export function toFilterState(qs: {
     cap: number;
     coc: number;
     type: string;
+    sale: string;
+    strat: string;
 }): FilterState {
     return {
         showSold: qs.sold,
@@ -70,15 +76,38 @@ export function toFilterState(qs: {
         minCapRate: qs.cap,
         minCashOnCash: qs.coc,
         propertyType: qs.type,
+        saleType: qs.sale,
+        strategy: qs.strat,
     };
+}
+
+interface PropertyTypeRule {
+    propertyType: string;
+    isRentable: boolean;
+    targetRatio: number | null;
+}
+
+const FALLBACK_TYPES = [
+    { value: '', label: 'Any' },
+    { value: 'single_family', label: 'Single Family' },
+    { value: 'multi_family', label: 'Multi-Family' },
+    { value: 'condos', label: 'Condo' },
+    { value: 'townhomes', label: 'Townhouse' },
+    { value: 'mobile', label: 'Mobile' },
+];
+
+function formatTypeLabel(type: string): string {
+    return type
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function PropertyFilters() {
     const [isOpen, setIsOpen] = useState(false);
+    const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string; isRentable: boolean }[]>([]);
+    const [typesLoading, setTypesLoading] = useState(true);
 
-    // URL-synced filter state. Writes are throttled (debounced at the URL level)
-    // so dragging a slider doesn't flood `history.replaceState`. The 300ms value
-    // matches the previously local-debounce timing on the parent's data fetch.
+    // URL-synced filter state
     const [qs, setQs] = useQueryStates(propertyFilterParsers, {
         history: 'replace',
         shallow: true,
@@ -87,6 +116,45 @@ export function PropertyFilters() {
     });
 
     const filters = toFilterState(qs);
+
+    // Fetch property types dynamically from the API
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/property-types', { cache: 'no-store' })
+            .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+            .then((data: PropertyTypeRule[]) => {
+                if (cancelled) return;
+                const types = [
+                    { value: '', label: 'Any', isRentable: true },
+                    ...data
+                        .filter((t) => t.isRentable)
+                        .map((t) => ({
+                            value: t.propertyType.toLowerCase(),
+                            label: formatTypeLabel(t.propertyType),
+                            isRentable: true,
+                        })),
+                    ...data
+                        .filter((t) => !t.isRentable)
+                        .map((t) => ({
+                            value: t.propertyType.toLowerCase(),
+                            label: formatTypeLabel(t.propertyType),
+                            isRentable: false,
+                        })),
+                ];
+                setPropertyTypes(types);
+                setTypesLoading(false);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setPropertyTypes(FALLBACK_TYPES.map((t) => ({ ...t, isRentable: true })));
+                setTypesLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, []);
+
+    const displayTypes = typesLoading
+        ? FALLBACK_TYPES.map((t) => ({ ...t, isRentable: true }))
+        : propertyTypes;
 
     return (
         <div className="bg-white border-b border-gray-200">
@@ -203,24 +271,73 @@ export function PropertyFilters() {
                             />
                         </div>
 
-                        {/* Property Type */}
+                        {/* Property Type — dynamically loaded */}
                         <div className="space-y-2 md:col-span-4">
                             <Label>Property Type</Label>
                             <div className="flex flex-wrap gap-2">
-                                {[
-                                    { value: '', label: 'Any' },
-                                    { value: 'single_family', label: 'Single Family' },
-                                    { value: 'multi_family', label: 'Multi-Family' },
-                                    { value: 'condo', label: 'Condo' },
-                                    { value: 'townhouse', label: 'Townhouse' },
-                                ].map(opt => (
+                                {displayTypes.map(opt => (
                                     <button
                                         key={opt.value || 'any'}
                                         onClick={() => setQs({ type: opt.value })}
-                                        className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${filters.propertyType === opt.value
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                            }`}
+                                        className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
+                                            filters.propertyType === opt.value
+                                                ? 'bg-blue-600 text-white'
+                                                : opt.isRentable
+                                                    ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                    : 'bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-500'
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Strategy — drives which rule thresholds apply */}
+                        <div className="space-y-2 md:col-span-4">
+                            <Label>Strategy</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { value: 'buy_hold', label: 'Buy & Hold' },
+                                    { value: 'brrrr', label: 'BRRRR' },
+                                    { value: 'flip', label: 'Fix & Flip' },
+                                    { value: 'str', label: 'Short-Term Rental' },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        onClick={() => setQs({ strat: opt.value })}
+                                        className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
+                                            filters.strategy === opt.value
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Deal Type — standard vs distress (foreclosure/auction/REO/...) */}
+                        <div className="space-y-2 md:col-span-4">
+                            <Label>Deal Type</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { value: '', label: 'Standard' },
+                                    { value: 'foreclosure', label: 'Foreclosure' },
+                                    { value: 'pre_foreclosure', label: 'Pre-Foreclosure' },
+                                    { value: 'reo', label: 'REO' },
+                                    { value: 'auction', label: 'Auction' },
+                                    { value: 'short_sale', label: 'Short Sale' },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value || 'standard'}
+                                        onClick={() => setQs({ sale: opt.value })}
+                                        className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
+                                            filters.saleType === opt.value
+                                                ? 'bg-amber-600 text-white'
+                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
                                     >
                                         {opt.label}
                                     </button>

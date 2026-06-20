@@ -1,339 +1,302 @@
 'use client';
 
-import * as React from 'react';
-import Map, { Source, Layer, type MapRef, type ViewStateChangeEvent } from 'react-map-gl/mapbox';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import MapGL, { Layer, Source, type MapRef, type MapMouseEvent } from 'react-map-gl/mapbox';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
+const TILE_URL = process.env.NEXT_PUBLIC_TILE_URL ?? '/tiles';
 
-const clusterLayer: any = {
-  id: 'clusters',
-  type: 'circle',
-  source: 'listings-source',
-  filter: ['>=', ['get', 'cluster'], 1],
-  paint: {
-    'circle-color': [
-      'step',
-      ['get', 'point_count'],
-      '#51bbd6',
-      10,
-      '#f1f075',
-      50,
-      '#f28cb1',
-    ],
-    'circle-radius': [
-      'step',
-      ['get', 'point_count'],
-      18,
-      10,
-      24,
-      50,
-      32,
-    ],
-    'circle-stroke-width': 3,
-    'circle-stroke-color': '#ffffff',
-    'circle-opacity': 0.9,
-  },
-};
-
-const clusterCountLayer: any = {
-  id: 'cluster-count',
-  type: 'symbol',
-  source: 'listings-source',
-  filter: ['>=', ['get', 'cluster'], 1],
-  layout: {
-    'text-field': '{point_count_abbreviated}',
-    'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-    'text-size': 13,
-  },
-  paint: {
-    'text-color': '#1a1a2e',
-  },
-};
-
-const unclusteredPointLayer: any = {
-  id: 'unclustered-point',
-  type: 'circle',
-  source: 'listings-source',
-  filter: ['!', ['get', 'cluster']],
-  paint: {
-    'circle-color': [
-      'interpolate',
-      ['linear'],
-      ['get', 'price'],
-      100000,
-      '#51bbd6',
-      500000,
-      '#f1f075',
-      1000000,
-      '#f28cb1',
-    ],
-    'circle-radius': [
-      'interpolate',
-      ['linear'],
-      ['zoom'],
-      6,
-      4,
-      14,
-      8,
-      18,
-      12,
-    ],
-    'circle-stroke-width': 2,
-    'circle-stroke-color': '#fff',
-    'circle-opacity': 0.9,
-  },
-};
-
-const unclusteredLabelLayer: any = {
-  id: 'unclustered-label',
-  type: 'symbol',
-  source: 'listings-source',
-  filter: ['!', ['get', 'cluster']],
-  layout: {
-    'text-field': [
-      'format',
-      ['concat', '$', ['to-string', ['get', 'price_display']]],
-      { 'font-scale': 0.75 },
-    ],
-    'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-    'text-size': 11,
-    'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
-    'text-radial-offset': 0.7,
-    'text-justify': 'auto',
-  },
-  paint: {
-    'text-color': '#1a1a2e',
-    'text-halo-color': '#ffffff',
-    'text-halo-width': 1.5,
-  },
-};
-
-export interface PropertyMapProps {
+interface PropertyMapProps {
   filters?: {
     minPrice?: number;
     maxPrice?: number;
     minBeds?: number;
     minBaths?: number;
     status?: string;
+    propertyType?: string;
   };
-  onMarkerClick?: (propertyId: string) => void;
+  onMarkerClick?: (id: string) => void;
 }
 
-function formatPriceShort(n: number | null): string {
-  if (n == null) return '—';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
-  return String(Math.round(n));
+interface PopupInfo {
+  longitude: number;
+  latitude: number;
+  id: string;
+  address: string;
+  city: string;
+  state: string;
+  price: number;
+  estimated_rent: number;
+  ratio_pct: number;
+  property_type: string;
+  bedrooms: number;
+  bathrooms: number;
 }
 
+function formatPrice(n: number): string {
+  if (!n) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+/**
+ * Property map using MVT vector tiles from pg_tileserv.
+ *
+ * Previous version used GeoJSON clustering which double-clustered
+ * (backend pre-clustered + Mapbox client cluster = 1 mega-pin).
+ * This version renders individual points from vector tiles with
+ * zoom-based sizing and ratio-based coloring.
+ */
 export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
-  const mapRef = React.useRef<MapRef>(null);
+  const mapRef = useRef<MapRef>(null);
   const router = useRouter();
+  const [popup, setPopup] = useState<PopupInfo | null>(null);
+  const [cursor, setCursor] = useState<string>('');
 
-  const [viewState, setViewState] = React.useState({
-    latitude: 39.8283,
-    longitude: -98.5795,
-    zoom: 3.5,
-  });
+  // Build tile URL with filter params
+  const listingStatus = filters?.status ?? 'for_sale';
+  const tileUrl = `${TILE_URL}/public.listings_mvt/{z}/{x}/{y}.pbf?p_listing_status=${listingStatus}`;
 
-  const [geojsonData, setGeojsonData] = React.useState<GeoJSON.FeatureCollection | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const onMouseEnter = useCallback(() => setCursor('pointer'), []);
+  const onMouseLeave = useCallback(() => {
+    setCursor('');
+    setPopup(null);
+  }, []);
 
-  const prevRequestRef = React.useRef<string>('');
-
-  const buildViewportParams = React.useCallback(() => {
-    if (!mapRef.current) return null;
-    const bounds = mapRef.current.getBounds();
-    if (!bounds) return null;
-    const zoom = Math.floor(viewState.zoom);
-    return {
-      north: bounds.getNorth(),
-      south: bounds.getSouth(),
-      east: bounds.getEast(),
-      west: bounds.getWest(),
-      zoom,
-      minPrice: filters?.minPrice,
-      maxPrice: filters?.maxPrice,
-      beds: filters?.minBeds,
-      baths: filters?.minBaths,
-      status: filters?.status,
-    };
-  }, [viewState.zoom, filters]);
-
-  const fetchViewport = React.useCallback(async () => {
-    const params = buildViewportParams();
-    if (!params) return;
-
-    const requestKey = JSON.stringify(params);
-    if (requestKey === prevRequestRef.current) return;
-    prevRequestRef.current = requestKey;
-
-    setLoading(true);
-    try {
-      const search = new URLSearchParams();
-      for (const [k, v] of Object.entries(params)) {
-        if (v != null && v !== '') search.set(k, String(v));
-      }
-
-      const res = await fetch(`/api/properties/viewport?${search.toString()}`);
-      if (!res.ok) return;
-
-      const data = await res.json();
-
-      const features: GeoJSON.Feature[] = data.data.map((item: any) => {
-        if (data.type === 'clusters') {
-          const count = Number(item.count) || 1;
-          const avgPrice = item.avg_price != null ? Number(item.avg_price) : null;
-          return {
-            type: 'Feature' as const,
-            geometry: {
-              type: 'Point' as const,
-              coordinates: [Number(item.longitude), Number(item.latitude)],
-            },
-            properties: {
-              cluster: count > 1 ? true : false,
-              point_count: count,
-              price: avgPrice,
-              price_display: formatPriceShort(avgPrice),
-              avg_price: avgPrice,
-              min_price: item.min_price != null ? Number(item.min_price) : null,
-              max_price: item.max_price != null ? Number(item.max_price) : null,
-            },
-          };
-        } else {
-          return {
-            type: 'Feature' as const,
-            geometry: {
-              type: 'Point' as const,
-              coordinates: [Number(item.longitude), Number(item.latitude)],
-            },
-            properties: {
-              cluster: false,
-              id: String(item.id),
-              address: item.address,
-              price: item.price != null ? Number(item.price) : null,
-              price_display: formatPriceShort(item.price != null ? Number(item.price) : null),
-              bedrooms: item.bedrooms,
-              bathrooms: item.bathrooms,
-              sqft: item.sqft,
-              primary_photo: item.primary_photo,
-              status: item.status,
-            },
-          };
-        }
-      });
-
-      setGeojsonData({
-        type: 'FeatureCollection',
-        features,
-      });
-    } catch (err) {
-      console.error('Viewport fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [buildViewportParams]);
-
-  const debouncedFetch = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleMoveEnd = React.useCallback(
-    (evt: ViewStateChangeEvent) => {
-      setViewState(evt.viewState);
-      if (debouncedFetch.current) clearTimeout(debouncedFetch.current);
-      debouncedFetch.current = setTimeout(() => {
-        fetchViewport();
-      }, 300);
-    },
-    [fetchViewport],
-  );
-
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mapRef.current) {
-        fetchViewport();
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [fetchViewport]);
-
-  React.useEffect(() => {
-    prevRequestRef.current = '';
-    if (debouncedFetch.current) clearTimeout(debouncedFetch.current);
-    debouncedFetch.current = setTimeout(() => {
-      fetchViewport();
-    }, 100);
-  }, [filters, fetchViewport]);
-
-  const handleClick = React.useCallback(
-    (event: any) => {
+  const onClick = useCallback(
+    (event: MapMouseEvent) => {
       const feature = event.features?.[0];
-      if (!feature) return;
+      if (!feature || !feature.properties) return;
 
       const props = feature.properties;
-      if (props?.cluster) {
-        const clusterZoom = Math.min(viewState.zoom + 3, 18);
-        mapRef.current?.flyTo({
-          center: event.lngLat,
-          zoom: clusterZoom,
-          duration: 600,
-        });
+
+      // Cluster: zoom in
+      if (props.count != null && !props.id) {
+        const map = mapRef.current;
+        if (map && event.lngLat) {
+          map.flyTo({
+            center: [event.lngLat.lng, event.lngLat.lat],
+            zoom: Math.min((map.getZoom() ?? 3) + 2, 14),
+            duration: 500,
+          });
+        }
         return;
       }
 
-      const propertyId = props?.id;
-      if (propertyId) {
-        if (onMarkerClick) {
-          onMarkerClick(propertyId);
-        } else {
-          router.push(`/property/${propertyId}`);
-        }
+      // Individual point: navigate
+      const id = String(props.id);
+      if (onMarkerClick) {
+        onMarkerClick(id);
+      } else {
+        router.push(`/property/${id}`);
       }
     },
-    [router, onMarkerClick, viewState.zoom],
+    [onMarkerClick, router]
   );
 
-  if (!MAPBOX_TOKEN) {
-    return <div className="p-4 text-red-500">Mapbox Token Missing</div>;
-  }
+  const onHover = useCallback((event: MapMouseEvent) => {
+    const feature = event.features?.[0];
+    if (!feature || !feature.properties) {
+      setPopup(null);
+      return;
+    }
+
+    const props = feature.properties;
+    // MVT features have coordinates in the geometry
+    const [lng, lat] = event.lngLat ? [event.lngLat.lng, event.lngLat.lat] : [0, 0];
+
+    setPopup({
+      longitude: lng,
+      latitude: lat,
+      id: String(props.id),
+      address: props.address ?? '',
+      city: props.city ?? '',
+      state: props.state ?? '',
+      price: Number(props.price) || 0,
+      estimated_rent: Number(props.estimated_rent) || 0,
+      ratio_pct: Number(props.ratio_pct) || 0,
+      property_type: props.property_type ?? '',
+      bedrooms: Number(props.bedrooms) || 0,
+      bathrooms: Number(props.bathrooms) || 0,
+    });
+  }, []);
 
   return (
-    <div className="absolute inset-0">
-      <Map
-        {...viewState}
-        onMoveEnd={handleMoveEnd}
-        onMove={(evt) => setViewState(evt.viewState)}
+    <div
+      className="relative h-full w-full"
+      aria-label="Property map showing investment opportunities across the United States"
+      role="application"
+    >
+      <MapGL
         ref={mapRef}
-        mapStyle="mapbox://styles/mapbox/streets-v12"
+        initialViewState={{
+          latitude: 39.8,
+          longitude: -98.6,
+          zoom: 3.5,
+        }}
         mapboxAccessToken={MAPBOX_TOKEN}
-        interactiveLayerIds={['clusters', 'unclustered-point']}
-        onClick={handleClick}
+        mapStyle="mapbox://styles/mapbox/light-v11"
         style={{ width: '100%', height: '100%' }}
+        interactiveLayerIds={['listings-circle', 'listings-cluster']}
+        onClick={onClick}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onMouseMove={onHover}
+        cursor={cursor}
+        attributionControl={false}
         reuseMaps
       >
-        {geojsonData && (
-          <Source
-            id="listings-source"
-            type="geojson"
-            data={geojsonData}
-            cluster={true}
-            clusterMaxZoom={14}
-            clusterRadius={50}
-          >
-            <Layer {...clusterLayer} />
-            <Layer {...clusterCountLayer} />
-            <Layer {...unclusteredPointLayer} />
-            <Layer {...unclusteredLabelLayer} />
-          </Source>
-        )}
-        {loading && (
-          <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-md bg-white/90 px-2.5 py-1.5 text-xs text-zinc-600 shadow-sm backdrop-blur-sm">
-            <div className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600" />
-            Loading…
+        <Source
+          id="listings-tiles"
+          type="vector"
+          tiles={[tileUrl]}
+          minzoom={2}
+          maxzoom={14}
+        >
+          {/* ── Cluster circles (z <= 7): MVT returns grid-aggregated centroids with 'count' ── */}
+          <Layer
+            id="listings-cluster"
+            type="circle"
+            source-layer="listings"
+            filter={['has', 'count']}
+            paint={{
+              'circle-radius': [
+                'interpolate', ['linear'], ['get', 'count'],
+                1, 8,
+                50, 16,
+                500, 24,
+                5000, 36,
+                50000, 48,
+              ],
+              'circle-color': [
+                'interpolate', ['linear'], ['to-number', ['get', 'ratio_pct'], 0],
+                0, '#94a3b8',
+                0.3, '#ef4444',
+                0.6, '#f59e0b',
+                1.0, '#10b981',
+                1.5, '#059669',
+              ],
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#ffffff',
+              'circle-opacity': 0.85,
+            }}
+          />
+
+          {/* Cluster count labels */}
+          <Layer
+            id="listings-cluster-label"
+            type="symbol"
+            source-layer="listings"
+            filter={['has', 'count']}
+            layout={{
+              'text-field': ['to-string', ['get', 'count']],
+              'text-size': 11,
+              'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
+              'text-allow-overlap': true,
+            }}
+            paint={{
+              'text-color': '#ffffff',
+            }}
+          />
+
+          {/* ── Individual property circles (z > 7): MVT returns full point details ── */}
+          <Layer
+            id="listings-circle"
+            type="circle"
+            source-layer="listings"
+            filter={['has', 'id']}
+            paint={{
+              'circle-radius': [
+                'interpolate', ['linear'], ['zoom'],
+                8, 3,
+                10, 5,
+                12, 6,
+                14, 10,
+              ],
+              'circle-color': [
+                'interpolate', ['linear'], ['to-number', ['get', 'ratio_pct'], 0],
+                0, '#94a3b8',
+                0.3, '#ef4444',
+                0.6, '#f59e0b',
+                1.0, '#10b981',
+                1.5, '#059669',
+              ],
+              'circle-stroke-width': [
+                'interpolate', ['linear'], ['zoom'],
+                8, 0.5,
+                12, 1,
+              ],
+              'circle-stroke-color': '#ffffff',
+              'circle-opacity': [
+                'interpolate', ['linear'], ['zoom'],
+                8, 0.75,
+                12, 0.85,
+                14, 0.95,
+              ],
+            }}
+          />
+        </Source>
+      </MapGL>
+
+      {/* Hover tooltip */}
+      {popup && (
+        <div
+          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
+          style={{
+            left: mapRef.current?.project([popup.longitude, popup.latitude]).x ?? 0,
+            top: (mapRef.current?.project([popup.longitude, popup.latitude]).y ?? 0) - 12,
+          }}
+        >
+          <p className="text-xs font-semibold text-slate-900 line-clamp-1">{popup.address}</p>
+          <p className="text-[10px] text-slate-500">
+            {[popup.city, popup.state].filter(Boolean).join(', ')}
+          </p>
+          <div className="mt-1 flex items-baseline gap-3">
+            <span className="font-mono text-sm font-semibold tabular-nums text-slate-900">
+              {formatPrice(popup.price)}
+            </span>
+            {popup.ratio_pct > 0 && (
+              <span
+                className={`font-mono text-[11px] font-semibold tabular-nums ${
+                  popup.ratio_pct >= 1.0 ? 'text-emerald-600' : 'text-amber-600'
+                }`}
+              >
+                {popup.ratio_pct.toFixed(2)}%
+              </span>
+            )}
           </div>
-        )}
-      </Map>
+          <div className="mt-0.5 text-[10px] text-slate-400">
+            {popup.bedrooms}bd · {popup.bathrooms}ba
+            {popup.property_type && ` · ${popup.property_type.replace(/_/g, ' ')}`}
+          </div>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur">
+        <p className="mb-1 text-[10px] font-medium text-slate-600">Rent / Price Ratio</p>
+        <div className="flex items-center gap-1.5">
+          {[
+            { color: '#ef4444', label: '<0.6%' },
+            { color: '#f59e0b', label: '0.6–1%' },
+            { color: '#10b981', label: '≥1%' },
+            { color: '#059669', label: '≥1.5%' },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-0.5">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-[9px] text-slate-500">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

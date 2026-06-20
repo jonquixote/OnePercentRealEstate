@@ -20,6 +20,7 @@ const ViewportSchema = z.object({
     baths: z.coerce.number().optional(),
     propertyType: z.string().optional(),
     status: z.string().optional(),
+    saleType: z.string().optional(),
 });
 
 type ViewportParams = z.infer<typeof ViewportSchema>;
@@ -55,7 +56,10 @@ export async function GET(request: NextRequest) {
     const startTime = Date.now();
 
     // Sort keys to generate consistent cache key
-    const cacheKey = `viewport:${Object.keys(params).sort().map(k => `${k}=${params[k as keyof ViewportParams]}`).join('&')}`;
+    // Floor zoom to integer for cache key — float zoom from pinch-zoom
+    // generates infinite unique keys and kills the cache hit rate.
+    const cacheParams = { ...params, zoom: Math.floor(params.zoom) };
+    const cacheKey = `viewport:${Object.keys(cacheParams).sort().map(k => `${k}=${cacheParams[k as keyof typeof cacheParams]}`).join('&')}`;
 
     // Try fetching from cache
     try {
@@ -254,6 +258,9 @@ function hasNonDefaultFilters(params: ViewportParams): boolean {
     if (params.baths !== undefined) return true;
     if (params.propertyType !== undefined && params.propertyType !== '') return true;
     if (params.status !== undefined && params.status !== 'for_sale') return true;
+    // The cluster MV has no sale_type dimension — distress filters must use the
+    // on-the-fly path. Plain 'standard' (the default view) can still use the MV.
+    if (params.saleType !== undefined && params.saleType !== '' && params.saleType !== 'standard') return true;
     return false;
 }
 
@@ -280,6 +287,16 @@ function buildFilterClause(params: ViewportParams) {
     if (params.baths) {
         parts.push(`bathrooms >= $${idx++}`);
         values.push(params.baths);
+    }
+
+    if (params.propertyType && params.propertyType !== '') {
+        parts.push(`LOWER(property_type) = LOWER($${idx++})`);
+        values.push(params.propertyType);
+    }
+
+    if (params.saleType && params.saleType !== '') {
+        parts.push(`LOWER(sale_type) = LOWER($${idx++})`);
+        values.push(params.saleType);
     }
 
     if (params.status) {
