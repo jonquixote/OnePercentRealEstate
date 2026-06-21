@@ -13,6 +13,10 @@ import {
   resolveRuleFrom,
   evaluateRules,
   scoreToGrade,
+  annualDebtService,
+  annualCashflow,
+  cashInvested,
+  cashOnCash,
   type RuleConfig,
 } from './underwriting';
 
@@ -195,6 +199,11 @@ const TEST_DB = process.env.TEST_DATABASE_URL;
         ['foreclosure property', 'foreclosure'],
         ['lovely updated ranch', 'standard'],
         ['auctioneer listed this home', 'standard'], // word-boundary: not "auction"
+        // v2: plural / verb forms must match
+        ['multiple auctions scheduled', 'auction'],
+        ['portfolio of reos', 'reo'],
+        ['accepting short sales only', 'short_sale'],
+        ['recently foreclosed property', 'foreclosure'],
       ];
       for (const [text, expected] of cases) {
         const { rows } = await c.query(
@@ -202,6 +211,93 @@ const TEST_DB = process.env.TEST_DATABASE_URL;
           [text],
         );
         expect(rows[0].sale_type).toBe(expected);
+      }
+    } finally {
+      await c.end();
+    }
+  });
+
+  it('classify_sale_type detects structured flags.is_foreclosure + confidence', async () => {
+    const { Client } = await import('pg');
+    const c = new (Client as any)({ connectionString: TEST_DB });
+    await c.connect();
+    try {
+      // flags object with is_foreclosure true, no foreclosure text → still foreclosure
+      const { rows } = await c.query(
+        `SELECT sale_type, sale_type_source, sale_type_confidence
+         FROM classify_sale_type(jsonb_build_object('text','nice home','flags', jsonb_build_object('is_foreclosure', true)), NULL)`,
+      );
+      expect(rows[0].sale_type).toBe('foreclosure');
+      expect(Number(rows[0].sale_type_confidence)).toBeCloseTo(0.95, 5);
+      // free-text-only match → lower confidence
+      const { rows: r2 } = await c.query(
+        `SELECT sale_type_confidence FROM classify_sale_type(jsonb_build_object('text','this is an auction'), NULL)`,
+      );
+      expect(Number(r2[0].sale_type_confidence)).toBeCloseTo(0.6, 5);
+    } finally {
+      await c.end();
+    }
+  });
+
+  it('SQL resolve_rule precedence + thresholds match TS resolveRuleFrom', async () => {
+    const { Client } = await import('pg');
+    const c = new (Client as any)({ connectionString: TEST_DB });
+    await c.connect();
+    try {
+      // Load the active rule matrix into TS (mirror of /api/underwriting-rules).
+      const { rows } = await c.query(
+        `SELECT property_type AS "matchedPropertyType", sale_type AS "matchedSaleType", strategy,
+                target_ratio AS "targetRatio", down_payment_pct AS "downPaymentPct",
+                interest_rate AS "interestRate", loan_term_years AS "loanTermYears",
+                closing_cost_pct AS "closingCostPct", property_tax_rate AS "propertyTaxRate",
+                insurance_annual AS "insuranceAnnual", arv_discount AS "arvDiscount"
+         FROM underwriting_rules WHERE is_active AND effective_to IS NULL`,
+      );
+      const cfgRows = rows.map((r: any) => ({
+        ...r,
+        targetRatio: r.targetRatio != null ? Number(r.targetRatio) : null,
+        downPaymentPct: Number(r.downPaymentPct), interestRate: Number(r.interestRate),
+        loanTermYears: Number(r.loanTermYears), closingCostPct: Number(r.closingCostPct),
+        propertyTaxRate: Number(r.propertyTaxRate), insuranceAnnual: Number(r.insuranceAnnual),
+        arvDiscount: r.arvDiscount != null ? Number(r.arvDiscount) : null,
+      }));
+      const cases: Array<[string, string, 'buy_hold' | 'flip']> = [
+        ['MULTI_FAMILY', 'standard', 'buy_hold'],
+        ['SINGLE_FAMILY', 'auction', 'flip'],
+        ['NONEXISTENT_TYPE', 'standard', 'buy_hold'],
+        ['CONDOS', 'standard', 'buy_hold'],
+      ];
+      for (const [type, sale, strat] of cases) {
+        const { rows: sql } = await c.query(
+          `SELECT resolved_tier, target_ratio FROM resolve_rule($1,$2,$3)`,
+          [type, sale, strat],
+        );
+        const ts = resolveRuleFrom(cfgRows as any, { propertyType: type, saleType: sale as any, strategy: strat });
+        expect(ts).not.toBeNull();
+        expect(ts!.resolvedTier).toBe(sql[0].resolved_tier);
+        const sqlTr = sql[0].target_ratio != null ? Number(sql[0].target_ratio) : null;
+        expect(ts!.targetRatio ?? null).toEqual(sqlTr);
+      }
+    } finally {
+      await c.end();
+    }
+  });
+
+  it('SQL cash-on-cash filter matches TS cashOnCash() (default financing)', async () => {
+    const { Client } = await import('pg');
+    const c = new (Client as any)({ connectionString: TEST_DB });
+    await c.connect();
+    try {
+      const cfg: RuleConfig = { ...BUY_HOLD_BASE };
+      for (const f of [{ price: 120_000, rent: 1500 }, { price: 300_000, rent: 1800 }]) {
+        const { rows } = await c.query(
+          `SELECT (((($2::numeric * 12 * 0.5) - ($1 * 0.8 * (0.0054166667 * power(1.0054166667,360) / (power(1.0054166667,360)-1)) * 12)) / NULLIF($1 * 0.23, 0))) AS coc`,
+          [f.price, f.rent],
+        );
+        const noi = f.rent * 12 * 0.5;
+        const ds = annualDebtService(cfg, f.price);
+        const tsCoc = cashOnCash(annualCashflow(noi, ds), cashInvested(cfg, f.price));
+        expect(near(tsCoc!, Number(rows[0].coc), 1e-6)).toBe(true);
       }
     } finally {
       await c.end();

@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import redis from '@/lib/redis';
 import { safeErrorResponse } from '@/lib/api-error';
 import { timingSafeEqual } from 'crypto';
 
 export const dynamic = 'force-dynamic';
+
+const CACHE_KEY = 'admin:underwriting-observability:v1';
+const CACHE_TTL_S = 120; // the v_* views full-scan listings; cache briefly
 
 function isAdmin(req: Request): boolean {
   const provided = req.headers.get('x-api-key') || req.headers.get('x-admin-key');
@@ -27,6 +31,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  try {
+    const cached = await redis.get(CACHE_KEY).catch(() => null);
+    if (cached) {
+      return NextResponse.json(JSON.parse(cached), { headers: { 'X-Cache': 'HIT' } });
+    }
+  } catch {
+    /* ignore */
+  }
+
   const client = await pool.connect();
   try {
     const [coverage, saleTypes, fallback, passRates, activeRules] = await Promise.all([
@@ -37,14 +50,16 @@ export async function GET(req: Request) {
       client.query('SELECT * FROM v_underwriting_rules_active'),
     ]);
 
-    return NextResponse.json({
+    const payload = {
       coverage: coverage.rows[0] ?? null,
       saleTypeDistribution: saleTypes.rows,
       fallbackTierUsage: fallback.rows,
       buyHoldPassRates: passRates.rows,
       activeRules: activeRules.rows,
       generatedAt: new Date().toISOString(),
-    });
+    };
+    redis.setex(CACHE_KEY, CACHE_TTL_S, JSON.stringify(payload)).catch(() => {});
+    return NextResponse.json(payload, { headers: { 'X-Cache': 'MISS' } });
   } catch (error) {
     return safeErrorResponse(error, 500);
   } finally {

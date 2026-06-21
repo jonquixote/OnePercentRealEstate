@@ -34,6 +34,7 @@ BEGIN
                    c.sale_type,
                    c.sale_type_source,
                    c.sale_type_signal,
+                   c.sale_type_confidence,
                    NULLIF(
                        regexp_replace(
                            regexp_replace(lower(trim(coalesce(l.address, ''))), '[.,#]', '', 'g'),
@@ -47,11 +48,12 @@ BEGIN
             CROSS JOIN LATERAL public.classify_sale_type(l.raw_data, l.property_type) c
         )
         UPDATE public.listings l
-        SET sale_type        = cls.sale_type,
-            sale_type_source = cls.sale_type_source,
-            sale_type_signal = cls.sale_type_signal,
-            address_norm     = cls.anorm,
-            address_hash     = md5(
+        SET sale_type            = cls.sale_type,
+            sale_type_source     = cls.sale_type_source,
+            sale_type_signal     = cls.sale_type_signal,
+            sale_type_confidence = cls.sale_type_confidence,
+            address_norm         = cls.anorm,
+            address_hash         = md5(
                 coalesce(cls.anorm, '') || '|' ||
                 coalesce(lower(cls.city), '') || '|' ||
                 coalesce(lower(cls.state), '')

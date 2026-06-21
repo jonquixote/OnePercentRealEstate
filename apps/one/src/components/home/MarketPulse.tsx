@@ -28,7 +28,16 @@ const fmt = new Intl.NumberFormat('en-US');
 export function MarketPulse() {
   const [stats, setStats] = useState<StatsShape | null>(null);
   const [seen, setSeen] = useState(false);
+  const [reduced, setReduced] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const m = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const on = () => setReduced(m.matches);
+    on();
+    m.addEventListener?.('change', on);
+    return () => m.removeEventListener?.('change', on);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,21 +120,27 @@ export function MarketPulse() {
         </div>
 
         <div className="lg:col-span-8" ref={ref}>
-          <div className="flex h-56 items-end gap-1">
+          <div
+            className="flex h-56 items-end gap-1"
+            role="img"
+            aria-label={`Distribution of rent-to-price ratios from ${bins[0]?.loPct.toFixed(1) ?? '0.2'}% to ${bins[bins.length - 1]?.hiPct.toFixed(1) ?? '1.7'}%. ${fmt.format(clears)} listings clear the ${threshold.toFixed(2)}% line.`}
+          >
             {bins.map((b, i) => {
               const above = b.loPct >= threshold;
               const h = (b.count / peak) * 100;
+              const grown = seen || reduced;
               return (
                 <div
                   key={i}
+                  aria-hidden
                   className="group relative flex h-full flex-1 flex-col justify-end"
                   title={`${b.loPct.toFixed(1)}–${b.hiPct.toFixed(1)}% · ${fmt.format(b.count)}`}
                 >
                   <div
-                    className={`rounded-t-sm transition-[height] duration-700 ease-out ${
+                    className={`rounded-t-sm ${reduced ? '' : 'transition-[height] duration-700 ease-out'} ${
                       above ? 'bg-emerald-600' : 'bg-amber-600/60'
                     }`}
-                    style={{ height: seen ? `${h}%` : '0%', transitionDelay: `${i * 18}ms` }}
+                    style={{ height: grown ? `${h}%` : '0%', transitionDelay: reduced ? '0ms' : `${i * 18}ms` }}
                   />
                 </div>
               );

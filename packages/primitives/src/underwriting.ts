@@ -102,6 +102,15 @@ export interface RuleResult {
   summary: string;
 }
 
+/** A weighted scoring category (property-quality + rule signals) for the grade. */
+export interface GradeCategory {
+  label: string;
+  weight: number;
+  points: number;
+  available: boolean;
+  summary: string;
+}
+
 export interface RuleEvaluation {
   strategy: Strategy;
   context: { propertyType?: string | null; saleType?: SaleType | null };
@@ -115,6 +124,10 @@ export interface RuleEvaluation {
   strategyPass: boolean | null; // passes ALL available rules for the strategy
   score?: number; // 0..100 composite
   grade?: Grade;
+  headline?: string;
+  breakdown: GradeCategory[]; // weighted category bars (the single grade source)
+  pros: string[];
+  cons: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -388,11 +401,18 @@ export function evaluateRules(
     applicableRules: applicable.length,
     passedRules: passed.length,
     strategyPass,
+    breakdown: [],
+    pros: [],
+    cons: [],
   };
 
   const scored = compositeScore(inputs, evaluation);
   evaluation.score = scored.score;
   evaluation.grade = scored.grade;
+  evaluation.headline = scored.headline;
+  evaluation.breakdown = scored.breakdown;
+  evaluation.pros = scored.pros;
+  evaluation.cons = scored.cons;
   return evaluation;
 }
 
@@ -424,29 +444,46 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+export interface ScoreResult {
+  score: number;
+  grade: Grade;
+  headline: string;
+  breakdown: GradeCategory[];
+  pros: string[];
+  cons: string[];
+}
+
+const fpct = (v: number) => `${(v * 100).toFixed(1)}%`;
+const fmoney = (v: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+
 /**
- * Composite 0..100 score. Buy-hold/BRRRR use a weighted category model
- * (rescaled against available data); flip/STR score off their rule pass ratio
- * blended with the headline return metric.
+ * Composite 0..100 score + full category breakdown + pros/cons — the SINGLE
+ * grade source consumed by the UI. Buy-hold/BRRRR use a weighted category model
+ * (rescaled against available data); flip/STR derive categories from their rule
+ * pass/fail set blended with the headline return metric.
  */
-export function compositeScore(
-  inputs: PropertyInputs,
-  evaluation: RuleEvaluation
-): { score: number; grade: Grade; headline: string } {
-  let score: number;
-  if (evaluation.strategy === 'flip' || evaluation.strategy === 'str') {
-    const ratioPart =
-      evaluation.applicableRules > 0
-        ? evaluation.passedRules / evaluation.applicableRules
-        : 0;
-    const roi = evaluation.metrics.flipRoi ?? evaluation.metrics.strCapRate ?? 0;
-    const roiPart = clamp((roi ?? 0) / 0.25, 0, 1); // 25% ROI/cap saturates
-    score = Math.round((ratioPart * 0.6 + roiPart * 0.4) * 100);
-  } else {
-    score = buyHoldScore(inputs, evaluation);
-  }
+export function compositeScore(inputs: PropertyInputs, evaluation: RuleEvaluation): ScoreResult {
+  const breakdown =
+    evaluation.strategy === 'flip' || evaluation.strategy === 'str'
+      ? strategyBreakdown(evaluation)
+      : buyHoldBreakdown(inputs, evaluation);
+
+  const evalable = breakdown.filter((c) => c.available);
+  const raw = evalable.reduce((a, c) => a + c.points, 0);
+  const max = evalable.reduce((a, c) => a + c.weight, 0);
+  const score = max > 0 ? Math.round((raw / max) * 100) : 0;
   const grade = scoreToGrade(score);
-  return { score, grade, headline: HEADLINES[grade] };
+
+  const pros: string[] = [];
+  const cons: string[] = [];
+  for (const c of breakdown) {
+    if (!c.available) continue;
+    if (c.points >= c.weight) pros.push(c.summary);
+    else if (c.points === 0) cons.push(c.summary);
+  }
+
+  return { score, grade, headline: HEADLINES[grade], breakdown, pros, cons };
 }
 
 const BUY_HOLD_WEIGHTS = {
@@ -460,70 +497,95 @@ const BUY_HOLD_WEIGHTS = {
   dom: 5,
 } as const;
 
-function buyHoldScore(inputs: PropertyInputs, ev: RuleEvaluation): number {
-  const cats: Array<{ pts: number; weight: number; available: boolean }> = [];
+/** Flip/STR breakdown: each evaluated rule becomes a pass/fail category, plus the headline return. */
+function strategyBreakdown(ev: RuleEvaluation): GradeCategory[] {
+  const cats: GradeCategory[] = ev.rules.map((r) => ({
+    label: r.label,
+    weight: 1,
+    points: r.passes ? 1 : 0,
+    available: r.available,
+    summary: r.summary,
+  }));
+  const roi = ev.metrics.flipRoi ?? ev.metrics.strCapRate ?? null;
+  if (roi !== null) {
+    cats.push({
+      label: ev.strategy === 'flip' ? 'Projected ROI' : 'STR cap rate',
+      weight: 2,
+      points: Math.round(clamp(roi / 0.25, 0, 1) * 2),
+      available: true,
+      summary: `${ev.strategy === 'flip' ? 'Projected ROI' : 'STR cap rate'} ${fpct(roi)}`,
+    });
+  }
+  return cats;
+}
+
+function buyHoldBreakdown(inputs: PropertyInputs, ev: RuleEvaluation): GradeCategory[] {
+  const cats: GradeCategory[] = [];
   const ratioM = ev.metrics.rentToPriceMonthly;
   const target = ev.config.targetRatio ?? 0.01;
 
   // 1% rule
-  if (ratioM === null) cats.push({ pts: 0, weight: BUY_HOLD_WEIGHTS.one_percent, available: false });
-  else {
-    let pts = 0;
-    if (ratioM >= target) pts = BUY_HOLD_WEIGHTS.one_percent;
-    else if (ratioM >= target * 0.85) pts = 12;
-    cats.push({ pts, weight: BUY_HOLD_WEIGHTS.one_percent, available: true });
-  }
-  // cap rate, linear vs (targetCapRate or 0.10 ceiling)
+  if (ratioM === null) cats.push({ label: '1% Rule', weight: BUY_HOLD_WEIGHTS.one_percent, points: 0, available: false, summary: 'Rent-to-price unknown' });
+  else if (ratioM >= target) cats.push({ label: '1% Rule', weight: BUY_HOLD_WEIGHTS.one_percent, points: BUY_HOLD_WEIGHTS.one_percent, available: true, summary: `Clears the rule (${fpct(ratioM)} ≥ ${fpct(target)})` });
+  else if (ratioM >= target * 0.85) cats.push({ label: '1% Rule', weight: BUY_HOLD_WEIGHTS.one_percent, points: 12, available: true, summary: `Near the rule (${fpct(ratioM)})` });
+  else cats.push({ label: '1% Rule', weight: BUY_HOLD_WEIGHTS.one_percent, points: 0, available: true, summary: `Below the rule (${fpct(ratioM)})` });
+
+  // cap rate (linear vs ceiling derived from target)
   const cap = ev.metrics.capRate;
   const capCeil = Math.max(0.06, (ev.config.targetCapRate ?? 0.06) * 1.6);
-  if (cap === null || cap === 0) cats.push({ pts: 0, weight: BUY_HOLD_WEIGHTS.cap_rate, available: false });
-  else cats.push({ pts: Math.round(clamp(cap / capCeil, 0, 1) * BUY_HOLD_WEIGHTS.cap_rate), weight: BUY_HOLD_WEIGHTS.cap_rate, available: true });
-  // cash-on-cash, linear vs ceiling
+  if (cap === null || cap === 0) cats.push({ label: 'Cap Rate', weight: BUY_HOLD_WEIGHTS.cap_rate, points: 0, available: false, summary: 'Cap rate unavailable' });
+  else cats.push({ label: 'Cap Rate', weight: BUY_HOLD_WEIGHTS.cap_rate, points: Math.round(clamp(cap / capCeil, 0, 1) * BUY_HOLD_WEIGHTS.cap_rate), available: true, summary: `Cap rate ${fpct(cap)}` });
+
+  // cash-on-cash
   const coc = ev.metrics.cashOnCash;
   const cocCeil = Math.max(0.10, (ev.config.targetCoc ?? 0.08) * 1.6);
-  if (coc === null) cats.push({ pts: 0, weight: BUY_HOLD_WEIGHTS.cash_on_cash, available: false });
-  else cats.push({ pts: Math.round(clamp(coc / cocCeil, 0, 1) * BUY_HOLD_WEIGHTS.cash_on_cash), weight: BUY_HOLD_WEIGHTS.cash_on_cash, available: true });
-  // cashflow (monthly)
+  if (coc === null) cats.push({ label: 'Cash-on-Cash', weight: BUY_HOLD_WEIGHTS.cash_on_cash, points: 0, available: false, summary: 'Cash-on-cash unavailable' });
+  else cats.push({ label: 'Cash-on-Cash', weight: BUY_HOLD_WEIGHTS.cash_on_cash, points: Math.round(clamp(coc / cocCeil, 0, 1) * BUY_HOLD_WEIGHTS.cash_on_cash), available: true, summary: `Cash-on-cash ${fpct(coc)}` });
+
+  // monthly cashflow
   const cf = ev.metrics.annualCashflow;
-  if (cf === null) cats.push({ pts: 0, weight: BUY_HOLD_WEIGHTS.cashflow, available: false });
+  if (cf === null) cats.push({ label: 'Cashflow', weight: BUY_HOLD_WEIGHTS.cashflow, points: 0, available: false, summary: 'Cashflow unknown' });
   else {
     const m = cf / 12;
-    let pts = 0;
-    if (m >= 200) pts = BUY_HOLD_WEIGHTS.cashflow;
-    else if (m > 0) pts = 10;
-    else if (m === 0) pts = 4;
-    cats.push({ pts, weight: BUY_HOLD_WEIGHTS.cashflow, available: true });
+    if (m >= 200) cats.push({ label: 'Cashflow', weight: BUY_HOLD_WEIGHTS.cashflow, points: BUY_HOLD_WEIGHTS.cashflow, available: true, summary: `Strong cashflow (${fmoney(m)}/mo)` });
+    else if (m > 0) cats.push({ label: 'Cashflow', weight: BUY_HOLD_WEIGHTS.cashflow, points: 10, available: true, summary: `Thin positive cashflow (${fmoney(m)}/mo)` });
+    else if (m === 0) cats.push({ label: 'Cashflow', weight: BUY_HOLD_WEIGHTS.cashflow, points: 4, available: true, summary: 'Breakeven cashflow' });
+    else cats.push({ label: 'Cashflow', weight: BUY_HOLD_WEIGHTS.cashflow, points: 0, available: true, summary: `Negative cashflow (${fmoney(m)}/mo)` });
   }
+
   // HOA reasonableness
   const hoa = inputs.hoaMonthly;
-  if (hoa === null || hoa === undefined || hoa === 0)
-    cats.push({ pts: BUY_HOLD_WEIGHTS.hoa, weight: BUY_HOLD_WEIGHTS.hoa, available: true });
-  else if (!inputs.monthlyRent || inputs.monthlyRent <= 0)
-    cats.push({ pts: 0, weight: BUY_HOLD_WEIGHTS.hoa, available: false });
+  if (hoa === null || hoa === undefined || hoa === 0) cats.push({ label: 'HOA', weight: BUY_HOLD_WEIGHTS.hoa, points: BUY_HOLD_WEIGHTS.hoa, available: true, summary: 'No HOA dues' });
+  else if (!inputs.monthlyRent || inputs.monthlyRent <= 0) cats.push({ label: 'HOA', weight: BUY_HOLD_WEIGHTS.hoa, points: 0, available: false, summary: 'HOA impact unknown' });
   else {
     const r = hoa / inputs.monthlyRent;
-    const pts = r < 0.1 ? BUY_HOLD_WEIGHTS.hoa : r <= 0.2 ? 2 : 0;
-    cats.push({ pts, weight: BUY_HOLD_WEIGHTS.hoa, available: true });
+    if (r < 0.1) cats.push({ label: 'HOA', weight: BUY_HOLD_WEIGHTS.hoa, points: BUY_HOLD_WEIGHTS.hoa, available: true, summary: `Reasonable HOA (${fpct(r)} of rent)` });
+    else if (r <= 0.2) cats.push({ label: 'HOA', weight: BUY_HOLD_WEIGHTS.hoa, points: 2, available: true, summary: `Elevated HOA (${fpct(r)} of rent)` });
+    else cats.push({ label: 'HOA', weight: BUY_HOLD_WEIGHTS.hoa, points: 0, available: true, summary: `High HOA drag (${fpct(r)} of rent)` });
   }
+
   // age
   const yb = inputs.yearBuilt;
-  if (!yb || yb <= 0) cats.push({ pts: 0, weight: BUY_HOLD_WEIGHTS.age, available: false });
+  if (!yb || yb <= 0) cats.push({ label: 'Age', weight: BUY_HOLD_WEIGHTS.age, points: 0, available: false, summary: 'Year built unknown' });
   else {
     const age = new Date().getFullYear() - yb;
-    const pts = age <= 30 ? BUY_HOLD_WEIGHTS.age : age <= 60 ? 3 : 1;
-    cats.push({ pts, weight: BUY_HOLD_WEIGHTS.age, available: true });
+    if (age <= 30) cats.push({ label: 'Age', weight: BUY_HOLD_WEIGHTS.age, points: BUY_HOLD_WEIGHTS.age, available: true, summary: `Newer construction (built ${yb})` });
+    else if (age <= 60) cats.push({ label: 'Age', weight: BUY_HOLD_WEIGHTS.age, points: 3, available: true, summary: `Mid-age home (built ${yb})` });
+    else cats.push({ label: 'Age', weight: BUY_HOLD_WEIGHTS.age, points: 1, available: true, summary: `Older home (built ${yb})` });
   }
+
   // sqft
   const sqft = inputs.sqft;
-  if (!sqft || sqft <= 0) cats.push({ pts: 0, weight: BUY_HOLD_WEIGHTS.sqft, available: false });
-  else cats.push({ pts: sqft >= 800 ? BUY_HOLD_WEIGHTS.sqft : 2, weight: BUY_HOLD_WEIGHTS.sqft, available: true });
+  if (!sqft || sqft <= 0) cats.push({ label: 'Size', weight: BUY_HOLD_WEIGHTS.sqft, points: 0, available: false, summary: 'Square footage unknown' });
+  else if (sqft >= 800) cats.push({ label: 'Size', weight: BUY_HOLD_WEIGHTS.sqft, points: BUY_HOLD_WEIGHTS.sqft, available: true, summary: `Healthy size (${sqft.toLocaleString()} sqft)` });
+  else cats.push({ label: 'Size', weight: BUY_HOLD_WEIGHTS.sqft, points: 2, available: true, summary: `Small footprint (${sqft.toLocaleString()} sqft)` });
+
   // days on market
   const dom = inputs.daysOnMarket;
-  if (dom === null || dom === undefined || dom < 0) cats.push({ pts: 0, weight: BUY_HOLD_WEIGHTS.dom, available: false });
-  else cats.push({ pts: dom < 14 ? BUY_HOLD_WEIGHTS.dom : dom <= 60 ? 3 : 0, weight: BUY_HOLD_WEIGHTS.dom, available: true });
+  if (dom === null || dom === undefined || dom < 0) cats.push({ label: 'Days on Market', weight: BUY_HOLD_WEIGHTS.dom, points: 0, available: false, summary: 'Days on market unknown' });
+  else if (dom < 14) cats.push({ label: 'Days on Market', weight: BUY_HOLD_WEIGHTS.dom, points: BUY_HOLD_WEIGHTS.dom, available: true, summary: `Fresh listing (${dom} days)` });
+  else if (dom <= 60) cats.push({ label: 'Days on Market', weight: BUY_HOLD_WEIGHTS.dom, points: 3, available: true, summary: `Standard market time (${dom} days)` });
+  else cats.push({ label: 'Days on Market', weight: BUY_HOLD_WEIGHTS.dom, points: 0, available: true, summary: `Stale listing (${dom} days)` });
 
-  const evalable = cats.filter((c) => c.available);
-  const raw = evalable.reduce((a, c) => a + c.pts, 0);
-  const max = evalable.reduce((a, c) => a + c.weight, 0);
-  return max > 0 ? Math.round((raw / max) * 100) : 0;
+  return cats;
 }

@@ -55,6 +55,12 @@ export async function POST(req: NextRequest) {
   //    where whereSql only references whitelisted columns + $N placeholders.
   //  - LIMIT is a server-controlled integer (clamped above).
   //  - statement_timeout caps runaway predicates.
+  // Canonical display: default to standard inventory so coexisting distress
+  // rows don't double-appear — UNLESS the user's expression references sale_type
+  // explicitly (then they've opted into a specific distress view).
+  const saleTypeDefault = compiled.usedColumns.includes('sale_type')
+    ? ''
+    : `sale_type = 'standard' AND`;
   const sql = `
     SELECT
       id::text AS id,
@@ -66,10 +72,11 @@ export async function POST(req: NextRequest) {
       estimated_rent,
       year_built,
       primary_photo,
+      sale_type,
       listing_status
     FROM listings
     WHERE listing_type = 'for_sale'
-      AND (${compiled.whereSql})
+      AND ${saleTypeDefault} (${compiled.whereSql})
     ORDER BY id DESC
     LIMIT ${limit}
   `;

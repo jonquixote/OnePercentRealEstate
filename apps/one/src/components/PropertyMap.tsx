@@ -16,6 +16,7 @@ interface PropertyMapProps {
     minBaths?: number;
     status?: string;
     propertyType?: string;
+    saleType?: string;
   };
   onMarkerClick?: (id: string) => void;
 }
@@ -60,7 +61,8 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
 
   // Build tile URL with filter params
   const listingStatus = filters?.status ?? 'for_sale';
-  const tileUrl = `${TILE_URL}/public.listings_mvt/{z}/{x}/{y}.pbf?p_listing_status=${listingStatus}`;
+  const saleType = filters?.saleType && filters.saleType !== '' ? filters.saleType : 'standard';
+  const tileUrl = `${TILE_URL}/public.listings_mvt/{z}/{x}/{y}.pbf?p_listing_status=${listingStatus}&p_sale_type=${saleType}`;
 
   const onMouseEnter = useCallback(() => setCursor('pointer'), []);
   const onMouseLeave = useCallback(() => {

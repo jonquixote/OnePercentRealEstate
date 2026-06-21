@@ -116,17 +116,27 @@ export async function getProperties(
         if (filters?.onlyOnePercentRule) {
             // Per (property_type, sale_type, strategy) target via the single
             // source of truth resolve_rule(); strategy is whitelisted above.
-            whereClauses.push(`(estimated_rent / NULLIF(price, 0)) >= COALESCE((SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, $${paramIndex++})), 0.01)`);
+            // When the resolved rule has no target_ratio (flip / STR), the
+            // comparison is NULL and COALESCE→TRUE, i.e. the 1%/rent gate is a
+            // no-op for strategies it doesn't apply to (no bogus 1% on flips).
+            whereClauses.push(`COALESCE((estimated_rent / NULLIF(price, 0)) >= (SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, $${paramIndex++})), TRUE)`);
             params.push(strategy);
         }
         if (filters?.minCapRate && filters.minCapRate > 0) {
-            // Cap rate uses the canonical 50%-rule NOI proxy (matches underwriting.ts).
+            // Cap rate uses the canonical 50%-rule NOI proxy (matches underwriting.ts capRate()).
             const capRate = (filters.minCapRate / 100).toFixed(4);
             whereClauses.push(`((estimated_rent * 12 * 0.5) / NULLIF(price, 0)) >= ${capRate}`);
         }
         if (filters?.minCashOnCash && filters.minCashOnCash > 0) {
+            // Cash-on-cash mirrors underwriting.ts exactly with buy-hold default
+            // financing (these equal every seeded rule's financing config):
+            //   NOI       = rent*12*0.5                       (50% rule)
+            //   debtSvc   = amortizing P&I on an 80% LTV, 6.5%/30yr loan, annualized
+            //   invested  = 20% down + 3% closing = 23% of price
+            //   CoC       = (NOI - debtSvc) / invested
+            // Amortization factor uses r=0.065/12, n=360 so it matches monthlyMortgage().
             const cashOnCash = (filters.minCashOnCash / 100).toFixed(4);
-            whereClauses.push(`((estimated_rent * 12 * 0.75 - (price * 0.2 * 0.06)) / NULLIF(price * 0.2, 0)) >= ${cashOnCash}`);
+            whereClauses.push(`(((estimated_rent * 12 * 0.5) - (price * 0.8 * (0.0054166667 * power(1.0054166667, 360) / (power(1.0054166667, 360) - 1)) * 12)) / NULLIF(price * 0.23, 0)) >= ${cashOnCash}`);
         }
         if (filters?.propertyType && filters.propertyType !== '') {
             whereClauses.push(`LOWER(property_type) = LOWER($${paramIndex++})`);
@@ -151,6 +161,7 @@ COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
 COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
 listing_status as status,
 sale_type,
+(SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, 'buy_hold')) as target_ratio,
 primary_photo,
 images,
 media_blur,
@@ -294,6 +305,9 @@ COALESCE(sqft, (raw_data->>'sqft')::numeric) as sqft,
 COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
 COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
 raw_data,
+property_type,
+sale_type,
+(SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, 'buy_hold')) as target_ratio,
 primary_photo,
 images,
 media_blur,
