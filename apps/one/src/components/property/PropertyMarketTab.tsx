@@ -7,7 +7,7 @@ import { CompsStrip } from '@/components/property/CompsStrip';
 
 const MarketCharts = dynamic(() => import('@/components/charts/MarketCharts'), {
     ssr: false,
-    loading: () => <div className="h-[300px] w-full bg-gray-50 animate-pulse rounded" />
+    loading: () => <div className="h-[300px] w-full bg-white/[0.02] animate-pulse rounded" />
 });
 
 const formatCurrency = (val: number) =>
@@ -29,13 +29,13 @@ export function PropertyMarketTab({ property, benchmark }: PropertyMarketTabProp
 
             {raw_data?.neighborhood_stats && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <div className="bg-ink-panel rounded-xl border border-line p-6">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-lg font-semibold text-gray-900">Neighborhood Vibe</h3>
+                            <h3 className="text-lg font-semibold text-white">Neighborhood Vibe</h3>
                             {raw_data.neighborhood_stats.osm && (
                                 <Badge className={`${raw_data.neighborhood_stats.osm.total_count > 20 ? 'bg-green-100 text-green-800 hover:bg-green-200' :
                                     raw_data.neighborhood_stats.osm.total_count > 10 ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' :
-                                        'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                                        'bg-white/[0.05] text-haze hover:bg-white/[0.08]'
                                     } px-3 py-1 text-sm font-medium border-none`}>
                                     {raw_data.neighborhood_stats.osm.total_count > 20 ? 'Vibrant' :
                                         raw_data.neighborhood_stats.osm.total_count > 10 ? 'Active' : 'Quiet'}
@@ -63,95 +63,95 @@ export function PropertyMarketTab({ property, benchmark }: PropertyMarketTabProp
                                                     case 'bus_station': return <Bus className="w-4 h-4 text-indigo-600" />;
                                                     case 'hospital':
                                                     case 'pharmacy': return <Stethoscope className="w-4 h-4 text-red-600" />;
-                                                    default: return <Store className="w-4 h-4 text-gray-600" />;
+                                                    default: return <Store className="w-4 h-4 text-haze" />;
                                                 }
                                             };
 
                                             return (
-                                                <div key={amenity} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                                <div key={amenity} className="flex items-center justify-between p-3 bg-white/[0.02] rounded-lg border border-line">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-white rounded-md shadow-sm">
+                                                        <div className="p-2 bg-ink-panel rounded-md shadow-sm">
                                                             {getIcon(amenity)}
                                                         </div>
-                                                        <span className="text-sm font-medium text-gray-700 capitalize">
+                                                        <span className="text-sm font-medium text-haze capitalize">
                                                             {amenity.replace(/_/g, ' ')}
                                                         </span>
                                                     </div>
-                                                    <span className="text-sm font-bold text-gray-900">{String(count)}</span>
+                                                    <span className="text-sm font-bold text-white">{String(count)}</span>
                                                 </div>
                                             );
                                         })}
                                 </div>
-                                <p className="text-xs text-gray-400 mt-4 text-right">
+                                <p className="text-xs text-muted-foreground mt-4 text-right">
                                     {raw_data.neighborhood_stats.osm.total_count} amenities within 1km
                                 </p>
                             </div>
                         ) : (
-                            <div className="text-center py-8 text-gray-500">
+                            <div className="text-center py-8 text-muted-foreground">
                                 <MapPin className="w-8 h-8 mx-auto mb-2 opacity-20" />
                                 <p>No amenity data available.</p>
                             </div>
                         )}
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Local Economy</h3>
+                    <div className="bg-ink-panel rounded-xl border border-line p-6">
+                        <h3 className="text-lg font-semibold text-white mb-4">Local Economy</h3>
                         {raw_data.neighborhood_stats.census ? (
                             <div className="space-y-4">
                                 <div>
-                                    <p className="text-sm text-gray-500">Area</p>
-                                    <p className="font-medium text-gray-900">{raw_data.neighborhood_stats.census.area_name}</p>
+                                    <p className="text-sm text-muted-foreground">Area</p>
+                                    <p className="font-medium text-white">{raw_data.neighborhood_stats.census.area_name}</p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <p className="text-sm text-gray-500">Median Income</p>
+                                        <p className="text-sm text-muted-foreground">Median Income</p>
                                         <p className="text-xl font-bold text-green-600">
                                             {formatCurrency(Number(raw_data.neighborhood_stats.census.median_income))}
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-500">Total Population</p>
-                                        <p className="text-xl font-bold text-gray-900">
+                                        <p className="text-sm text-muted-foreground">Total Population</p>
+                                        <p className="text-xl font-bold text-white">
                                             {Number(raw_data.neighborhood_stats.census.population).toLocaleString()}
                                         </p>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <p className="text-sm text-gray-500">In Poverty</p>
+                                        <p className="text-sm text-muted-foreground">In Poverty</p>
                                         <p className="text-lg font-medium text-red-600">
                                             {Number(raw_data.neighborhood_stats.census.poverty_count).toLocaleString()}
-                                            <span className="text-sm text-gray-500 ml-1">
+                                            <span className="text-sm text-muted-foreground ml-1">
                                                 ({raw_data.neighborhood_stats.census.poverty_rate}%)
                                             </span>
                                         </p>
                                     </div>
                                     {raw_data.neighborhood_stats.census.unemployment && (
                                         <div>
-                                            <p className="text-sm text-gray-500">Unemployment</p>
-                                            <p className="text-lg font-medium text-gray-900">
+                                            <p className="text-sm text-muted-foreground">Unemployment</p>
+                                            <p className="text-lg font-medium text-white">
                                                 {raw_data.neighborhood_stats.census.unemployment.rate}%
                                             </p>
-                                            <p className="text-[10px] text-gray-400">
+                                            <p className="text-[10px] text-muted-foreground">
                                                 {raw_data.neighborhood_stats.census.unemployment.period}
                                             </p>
                                         </div>
                                     )}
                                 </div>
-                                <p className="text-xs text-gray-400 mt-2 text-right">
+                                <p className="text-xs text-muted-foreground mt-2 text-right">
                                     Source: US Census SAIPE ({raw_data.neighborhood_stats.census.year}) & BLS
                                 </p>
                             </div>
                         ) : (
-                            <p className="text-gray-500 text-sm">No economic data available.</p>
+                            <p className="text-muted-foreground text-sm">No economic data available.</p>
                         )}
                     </div>
                 </div>
             )}
 
-            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                <h3 className="text-lg font-semibold text-gray-900">Market Trends</h3>
-                <p className="text-gray-500 mt-2">Historical data and neighborhood analytics coming soon.</p>
+            <div className="bg-ink-panel rounded-xl border border-line p-8 text-center">
+                <h3 className="text-lg font-semibold text-white">Market Trends</h3>
+                <p className="text-muted-foreground mt-2">Historical data and neighborhood analytics coming soon.</p>
             </div>
         </div>
     );

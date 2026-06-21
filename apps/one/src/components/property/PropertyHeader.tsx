@@ -14,14 +14,14 @@ interface PropertyHeaderProps {
 
 export function PropertyHeader({ address, status, listingUrl, onExportPdf, exporting }: PropertyHeaderProps) {
     return (
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <header className="bg-ink/90 border-b border-line sticky top-0 z-10 backdrop-blur">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="flex h-16 items-center justify-between">
                     <div className="flex items-center gap-4 min-w-0">
-                        <Link href="/" className="p-2 -ml-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-100" aria-label="Back to results">
+                        <Link href="/" className="p-2 -ml-2 text-muted-foreground hover:text-white rounded-full hover:bg-white/[0.06]" aria-label="Back to results">
                             <ArrowLeft className="h-5 w-5" />
                         </Link>
-                        <h1 className="text-lg font-semibold text-gray-900 truncate max-w-md">{address}</h1>
+                        <h1 className="text-lg font-semibold text-white truncate max-w-md">{address}</h1>
                         <Badge variant={status === 'watch' ? 'default' : 'secondary'} className="capitalize">
                             {status.replace('_', ' ')}
                         </Badge>
@@ -32,7 +32,7 @@ export function PropertyHeader({ address, status, listingUrl, onExportPdf, expor
                                 href={listingUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center rounded-md bg-white border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                className="flex items-center rounded-md border border-line bg-white/[0.03] px-3 py-1.5 text-sm font-medium text-haze hover:bg-white/[0.08] hover:text-white"
                             >
                                 <ExternalLink className="mr-2 h-4 w-4" />
                                 View Original
@@ -41,7 +41,7 @@ export function PropertyHeader({ address, status, listingUrl, onExportPdf, expor
                         <button
                             onClick={onExportPdf}
                             disabled={exporting}
-                            className="flex items-center rounded-md bg-white border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            className="flex items-center rounded-md border border-line bg-white/[0.03] px-3 py-1.5 text-sm font-medium text-haze hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
                         >
                             {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                             Export PDF

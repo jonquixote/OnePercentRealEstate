@@ -138,8 +138,10 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
                     key={s}
                     onClick={() => setStrategy(s)}
                     className={cn(
-                        'rounded-full px-3 py-1 font-mono text-[11px] font-medium transition-colors',
-                        strategy === s ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        'rounded-full border px-3.5 py-1.5 font-mono text-[11px] font-medium transition-colors',
+                        strategy === s
+                            ? 'border-pass bg-pass/15 text-pass-hi'
+                            : 'border-line bg-white/[0.03] text-haze hover:bg-white/[0.06]'
                     )}
                 >
                     {STRATEGY_LABELS[s] ?? s}

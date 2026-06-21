@@ -22,7 +22,7 @@ export function PropertyTabs({ activeTab, onTabChange }: PropertyTabsProps) {
     ];
 
     return (
-        <div className="border-b border-gray-200">
+        <div className="border-b border-line">
             <div role="tablist" aria-label="Property details" className="-mb-px flex space-x-8 overflow-x-auto">
                 {tabs.map((tab) => {
                     const isActive = activeTab === tab.id;
@@ -39,9 +39,9 @@ export function PropertyTabs({ activeTab, onTabChange }: PropertyTabsProps) {
                             onClick={() => onTabChange(tab.id)}
                             className={cn(
                                 isActive
-                                    ? "border-blue-500 text-blue-600"
-                                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700",
-                                "inline-flex items-center gap-2 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                    ? "border-pass text-pass-hi"
+                                    : "border-transparent text-muted-foreground hover:border-line hover:text-white",
+                                "inline-flex items-center gap-2 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-pass"
                             )}
                         >
                             <Icon className="h-4 w-4" />

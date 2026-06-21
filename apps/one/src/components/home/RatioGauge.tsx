@@ -21,7 +21,7 @@ export function RatioGauge({ ratioPct, thresholdPct = 1.0, width = 96, className
   const x = (v: number) =>
     ((Math.min(max, Math.max(min, v)) - min) / (max - min)) * (width - 8) + 4;
   const clears = ratioPct != null && ratioPct >= thresholdPct;
-  const mark = clears ? '#0E9F6E' : '#A9761F';
+  const mark = clears ? '#34E0A1' : '#D8A24A';
 
   return (
     <svg
@@ -31,14 +31,14 @@ export function RatioGauge({ ratioPct, thresholdPct = 1.0, width = 96, className
       aria-hidden
       className={className}
     >
-      <line x1="4" y1="18" x2={width - 4} y2="18" stroke="rgba(23,32,51,0.14)" strokeWidth="1.5" />
+      <line x1="4" y1="18" x2={width - 4} y2="18" stroke="rgba(255,255,255,0.16)" strokeWidth="1.5" />
       {/* the rule threshold line */}
       <line
         x1={x(thresholdPct)}
         y1="6"
         x2={x(thresholdPct)}
         y2="22"
-        stroke="rgba(23,32,51,0.34)"
+        stroke="rgba(255,255,255,0.42)"
         strokeWidth="1.25"
         strokeDasharray="2 2"
       />

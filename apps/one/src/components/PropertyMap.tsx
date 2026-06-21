@@ -142,7 +142,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
           zoom: 3.5,
         }}
         mapboxAccessToken={MAPBOX_TOKEN}
-        mapStyle="mapbox://styles/mapbox/light-v11"
+        mapStyle="mapbox://styles/mapbox/dark-v11"
         style={{ width: '100%', height: '100%' }}
         interactiveLayerIds={['listings-circle', 'listings-cluster']}
         onClick={onClick}
@@ -248,31 +248,31 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       {/* Hover tooltip */}
       {popup && (
         <div
-          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
+          className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg border border-line bg-ink-panel/95 p-3 shadow-xl backdrop-blur"
           style={{
             left: mapRef.current?.project([popup.longitude, popup.latitude]).x ?? 0,
             top: (mapRef.current?.project([popup.longitude, popup.latitude]).y ?? 0) - 12,
           }}
         >
-          <p className="text-xs font-semibold text-slate-900 line-clamp-1">{popup.address}</p>
-          <p className="text-[10px] text-slate-500">
+          <p className="text-xs font-semibold text-white line-clamp-1">{popup.address}</p>
+          <p className="text-[10px] text-muted-foreground">
             {[popup.city, popup.state].filter(Boolean).join(', ')}
           </p>
           <div className="mt-1 flex items-baseline gap-3">
-            <span className="font-mono text-sm font-semibold tabular-nums text-slate-900">
+            <span className="font-mono text-sm font-semibold tabular-nums text-white">
               {formatPrice(popup.price)}
             </span>
             {popup.ratio_pct > 0 && (
               <span
                 className={`font-mono text-[11px] font-semibold tabular-nums ${
-                  popup.ratio_pct >= 1.0 ? 'text-emerald-600' : 'text-amber-600'
+                  popup.ratio_pct >= 1.0 ? 'text-pass-hi' : 'text-brass-hi'
                 }`}
               >
                 {popup.ratio_pct.toFixed(2)}%
               </span>
             )}
           </div>
-          <div className="mt-0.5 text-[10px] text-slate-400">
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
             {popup.bedrooms}bd · {popup.bathrooms}ba
             {popup.property_type && ` · ${popup.property_type.replace(/_/g, ' ')}`}
           </div>
@@ -280,8 +280,8 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       )}
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur">
-        <p className="mb-1 text-[10px] font-medium text-slate-600">Rent / Price Ratio</p>
+      <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-line bg-ink-panel/90 p-2 shadow-sm backdrop-blur">
+        <p className="mb-1 text-[10px] font-medium text-haze">Rent / Price Ratio</p>
         <div className="flex items-center gap-1.5">
           {[
             { color: '#ef4444', label: '<0.6%' },
@@ -294,7 +294,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
                 className="inline-block h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: item.color }}
               />
-              <span className="text-[9px] text-slate-500">{item.label}</span>
+              <span className="text-[9px] text-muted-foreground">{item.label}</span>
             </div>
           ))}
         </div>

@@ -30,12 +30,12 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card>
                     <CardContent className="p-6">
-                        <div className="flex items-center gap-2 text-gray-500 mb-2">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-2">
                             <DollarSign className="h-4 w-4" />
                             <span className="text-sm font-medium">Listing Price</span>
                         </div>
-                        <p className="text-3xl font-bold text-gray-900">{listing_price > 0 ? formatCurrency(listing_price) : 'Price unavailable'}</p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-3xl font-bold text-white">{listing_price > 0 ? formatCurrency(listing_price) : 'Price unavailable'}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
                             {raw_data?.sqft > 0
                                 ? `$${Math.round(listing_price / raw_data.sqft).toLocaleString()}/sqft`
                                 : 'N/A'}
@@ -44,14 +44,14 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
                 </Card>
                 <Card>
                     <CardContent className="p-6">
-                        <div className="flex items-center gap-2 text-gray-500 mb-2">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-2">
                             <TrendingUp className="h-4 w-4" />
                             <span className="text-sm font-medium">Rent Potential</span>
                         </div>
-                        <p className={`text-3xl font-bold ${estimated_rent > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                        <p className={`text-3xl font-bold ${estimated_rent > 0 ? 'text-blue-600' : 'text-muted-foreground'}`}>
                             {estimated_rent > 0 ? formatCurrency(estimated_rent) : 'Pending...'}
                         </p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-muted-foreground mt-1">
                             {estimated_rent > 0
                                 ? `Based on market analysis`
                                 : 'Awaiting smart estimate generation'
@@ -61,25 +61,25 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
                 </Card>
                 <Card>
                     <CardContent className="p-6">
-                        <div className="flex items-center gap-2 text-gray-500 mb-2">
+                        <div className="flex items-center gap-2 text-muted-foreground mb-2">
                             <DollarSign className="h-4 w-4" />
                             <span className="text-sm font-medium">Est. Cashflow</span>
                         </div>
                         {estimated_rent > 0 ? (
                             <>
                                 <p className={`text-3xl font-bold ${estCashflow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {estCashflow > 0 ? '+' : ''}{formatCurrency(estCashflow)}<span className="text-lg text-gray-400 font-normal">/mo</span>
+                                    {estCashflow > 0 ? '+' : ''}{formatCurrency(estCashflow)}<span className="text-lg text-muted-foreground font-normal">/mo</span>
                                 </p>
-                                <p className="text-sm text-gray-500 mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">
                                     Based on 20% down
                                 </p>
                             </>
                         ) : (
                             <>
-                                <p className="text-3xl font-bold text-gray-300">
+                                <p className="text-3xl font-bold text-muted-foreground">
                                     --
                                 </p>
-                                <p className="text-sm text-gray-500 mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">
                                     Requires rent estimate
                                 </p>
                             </>
@@ -92,28 +92,28 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Card>
                         <CardContent className="p-6">
-                            <div className="flex items-center gap-2 text-gray-500 mb-2">
+                            <div className="flex items-center gap-2 text-muted-foreground mb-2">
                                 <Percent className="h-4 w-4" />
                                 <span className="text-sm font-medium">Cap Rate</span>
                             </div>
                             <p className={`text-3xl font-bold ${capRate >= 6 ? 'text-green-600' : capRate >= 4 ? 'text-yellow-600' : 'text-red-600'}`}>
                                 {capRate.toFixed(2)}%
                             </p>
-                            <p className="text-sm text-gray-500 mt-1">
+                            <p className="text-sm text-muted-foreground mt-1">
                                 Itemized-expense estimate · the Scorecard grade uses the 50% rule
                             </p>
                         </CardContent>
                     </Card>
                     <Card>
                         <CardContent className="p-6">
-                            <div className="flex items-center gap-2 text-gray-500 mb-2">
+                            <div className="flex items-center gap-2 text-muted-foreground mb-2">
                                 <TrendingUp className="h-4 w-4" />
                                 <span className="text-sm font-medium">Cash-on-Cash</span>
                             </div>
                             <p className={`text-3xl font-bold ${cashOnCash >= 8 ? 'text-green-600' : cashOnCash >= 4 ? 'text-yellow-600' : 'text-red-600'}`}>
                                 {cashOnCash.toFixed(2)}%
                             </p>
-                            <p className="text-sm text-gray-500 mt-1">
+                            <p className="text-sm text-muted-foreground mt-1">
                                 Annual cashflow / cash invested
                             </p>
                         </CardContent>
@@ -123,106 +123,106 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Key Facts</h3>
+                    <div className="bg-ink-panel rounded-xl border border-line p-6">
+                        <h3 className="text-lg font-semibold text-white mb-4">Key Facts</h3>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
                             <div className="flex items-center gap-3">
-                                <Bed className="h-5 w-5 text-gray-400" />
+                                <Bed className="h-5 w-5 text-muted-foreground" />
                                 <div>
-                                    <p className="text-sm text-gray-500">Bedrooms</p>
-                                    <p className="font-medium text-gray-900">{raw_data?.beds || 'N/A'}</p>
+                                    <p className="text-sm text-muted-foreground">Bedrooms</p>
+                                    <p className="font-medium text-white">{raw_data?.beds || 'N/A'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <Bath className="h-5 w-5 text-gray-400" />
+                                <Bath className="h-5 w-5 text-muted-foreground" />
                                 <div>
-                                    <p className="text-sm text-gray-500">Bathrooms</p>
-                                    <p className="font-medium text-gray-900">{raw_data?.baths || 'N/A'}</p>
+                                    <p className="text-sm text-muted-foreground">Bathrooms</p>
+                                    <p className="font-medium text-white">{raw_data?.baths || 'N/A'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <Square className="h-5 w-5 text-gray-400" />
+                                <Square className="h-5 w-5 text-muted-foreground" />
                                 <div>
-                                    <p className="text-sm text-gray-500">Square Feet</p>
-                                    <p className="font-medium text-gray-900">{raw_data?.sqft ? formatNumber(raw_data.sqft) : 'N/A'}</p>
+                                    <p className="text-sm text-muted-foreground">Square Feet</p>
+                                    <p className="font-medium text-white">{raw_data?.sqft ? formatNumber(raw_data.sqft) : 'N/A'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <Calendar className="h-5 w-5 text-gray-400" />
+                                <Calendar className="h-5 w-5 text-muted-foreground" />
                                 <div>
-                                    <p className="text-sm text-gray-500">Year Built</p>
-                                    <p className="font-medium text-gray-900">{financial_snapshot?.year_built || 'N/A'}</p>
+                                    <p className="text-sm text-muted-foreground">Year Built</p>
+                                    <p className="font-medium text-white">{financial_snapshot?.year_built || 'N/A'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <Home className="h-5 w-5 text-gray-400" />
+                                <Home className="h-5 w-5 text-muted-foreground" />
                                 <div>
-                                    <p className="text-sm text-gray-500">HOA</p>
-                                    <p className="font-medium text-gray-900">{raw_data?.hoa_fee ? formatCurrency(raw_data.hoa_fee) : 'None'}</p>
+                                    <p className="text-sm text-muted-foreground">HOA</p>
+                                    <p className="font-medium text-white">{raw_data?.hoa_fee ? formatCurrency(raw_data.hoa_fee) : 'None'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <DollarSign className="h-5 w-5 text-gray-400" />
+                                <DollarSign className="h-5 w-5 text-muted-foreground" />
                                 <div>
-                                    <p className="text-sm text-gray-500">Tax/Year</p>
-                                    <p className="font-medium text-gray-900">{raw_data?.tax_annual_amount ? formatCurrency(raw_data.tax_annual_amount) : 'N/A'}</p>
+                                    <p className="text-sm text-muted-foreground">Tax/Year</p>
+                                    <p className="font-medium text-white">{raw_data?.tax_annual_amount ? formatCurrency(raw_data.tax_annual_amount) : 'N/A'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <Home className="h-5 w-5 text-gray-400" />
+                                <Home className="h-5 w-5 text-muted-foreground" />
                                 <div>
-                                    <p className="text-sm text-gray-500">Lot Size</p>
-                                    <p className="font-medium text-gray-900">{raw_data?.lot_sqft ? formatNumber(raw_data.lot_sqft) + ' sqft' : 'N/A'}</p>
+                                    <p className="text-sm text-muted-foreground">Lot Size</p>
+                                    <p className="font-medium text-white">{raw_data?.lot_sqft ? formatNumber(raw_data.lot_sqft) + ' sqft' : 'N/A'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <Home className="h-5 w-5 text-gray-400" />
+                                <Home className="h-5 w-5 text-muted-foreground" />
                                 <div>
-                                    <p className="text-sm text-gray-500">Type</p>
-                                    <p className="font-medium text-gray-900 capitalize">{raw_data?.style ? raw_data.style.replace(/_/g, ' ') : 'Single Family'}</p>
+                                    <p className="text-sm text-muted-foreground">Type</p>
+                                    <p className="font-medium text-white capitalize">{raw_data?.style ? raw_data.style.replace(/_/g, ' ') : 'Single Family'}</p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Amenities & Features</h3>
+                    <div className="bg-ink-panel rounded-xl border border-line p-6">
+                        <h3 className="text-lg font-semibold text-white mb-4">Amenities & Features</h3>
                         <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div className="flex justify-between border-b border-gray-100 py-2">
-                                <span className="text-gray-500">Cooling</span>
-                                <span className="font-medium text-gray-900">{raw_data?.cooling || 'None'}</span>
+                            <div className="flex justify-between border-b border-line py-2">
+                                <span className="text-muted-foreground">Cooling</span>
+                                <span className="font-medium text-white">{raw_data?.cooling || 'None'}</span>
                             </div>
-                            <div className="flex justify-between border-b border-gray-100 py-2">
-                                <span className="text-gray-500">Heating</span>
-                                <span className="font-medium text-gray-900">{raw_data?.heating || 'None'}</span>
+                            <div className="flex justify-between border-b border-line py-2">
+                                <span className="text-muted-foreground">Heating</span>
+                                <span className="font-medium text-white">{raw_data?.heating || 'None'}</span>
                             </div>
-                            <div className="flex justify-between border-b border-gray-100 py-2">
-                                <span className="text-gray-500">Parking</span>
-                                <span className="font-medium text-gray-900">{raw_data?.parking_garage || 'None'}</span>
+                            <div className="flex justify-between border-b border-line py-2">
+                                <span className="text-muted-foreground">Parking</span>
+                                <span className="font-medium text-white">{raw_data?.parking_garage || 'None'}</span>
                             </div>
-                            <div className="flex justify-between border-b border-gray-100 py-2">
-                                <span className="text-gray-500">Stories</span>
-                                <span className="font-medium text-gray-900">{raw_data?.stories || 'N/A'}</span>
+                            <div className="flex justify-between border-b border-line py-2">
+                                <span className="text-muted-foreground">Stories</span>
+                                <span className="font-medium text-white">{raw_data?.stories || 'N/A'}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">About this Home</h3>
-                        <p className="text-gray-600 leading-relaxed whitespace-pre-line">
+                    <div className="bg-ink-panel rounded-xl border border-line p-6">
+                        <h3 className="text-lg font-semibold text-white mb-4">About this Home</h3>
+                        <p className="text-haze leading-relaxed whitespace-pre-line">
                             {raw_data?.text || raw_data?.description || "No description available for this property."}
                         </p>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Details</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-xs font-mono text-gray-600">
+                    <div className="bg-ink-panel rounded-xl border border-line p-6">
+                        <h3 className="text-lg font-semibold text-white mb-4">Additional Details</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-xs font-mono text-haze">
                             {raw_data && Object.entries(raw_data).map(([key, value]) => {
                                 if (['schools', 'alt_photos', 'primary_photo', 'description', 'text', 'neighborhood_stats', 'style', 'cooling', 'heating', 'parking_garage', 'stories', 'beds', 'baths', 'sqft', 'lot_sqft', 'year_built', 'hoa_fee', 'tax_annual_amount', 'mls_id', 'agent', 'broker'].includes(key) || value === null) return null;
                                 return (
-                                    <div key={key} className="flex justify-between border-b border-gray-100 py-1">
-                                        <span className="font-medium text-gray-500 capitalize">{key.replace(/_/g, ' ')}</span>
-                                        <span className="text-gray-900 truncate max-w-[200px]" title={String(value)}>{String(value)}</span>
+                                    <div key={key} className="flex justify-between border-b border-line py-1">
+                                        <span className="font-medium text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</span>
+                                        <span className="text-white truncate max-w-[200px]" title={String(value)}>{String(value)}</span>
                                     </div>
                                 );
                             })}
@@ -232,30 +232,30 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
 
                 <div className="space-y-6">
                     {(raw_data?.agent || raw_data?.broker) && (
-                        <div className="bg-white rounded-xl border border-gray-200 p-6">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Listing Agent</h3>
+                        <div className="bg-ink-panel rounded-xl border border-line p-6">
+                            <h3 className="text-lg font-semibold text-white mb-4">Listing Agent</h3>
                             <div className="flex items-center gap-3 mb-2">
-                                <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
+                                <div className="h-10 w-10 rounded-full bg-white/[0.05] flex items-center justify-center text-muted-foreground">
                                     <span className="font-bold text-lg">{raw_data?.agent ? raw_data.agent[0] : 'A'}</span>
                                 </div>
                                 <div>
-                                    <p className="font-medium text-gray-900">{raw_data?.agent || 'Unknown Agent'}</p>
-                                    <p className="text-xs text-gray-500">{raw_data?.broker || 'Unknown Broker'}</p>
+                                    <p className="font-medium text-white">{raw_data?.agent || 'Unknown Agent'}</p>
+                                    <p className="text-xs text-muted-foreground">{raw_data?.broker || 'Unknown Broker'}</p>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Location</h3>
-                        <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-                            <MapPin className="h-8 w-8 text-gray-400" />
+                    <div className="bg-ink-panel rounded-xl border border-line p-6">
+                        <h3 className="text-lg font-semibold text-white mb-4">Location</h3>
+                        <div className="aspect-video bg-white/[0.05] rounded-lg flex items-center justify-center mb-4">
+                            <MapPin className="h-8 w-8 text-muted-foreground" />
                         </div>
-                        <p className="text-sm text-gray-600">{address}</p>
+                        <p className="text-sm text-haze">{address}</p>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Schools</h3>
+                    <div className="bg-ink-panel rounded-xl border border-line p-6">
+                        <h3 className="text-lg font-semibold text-white mb-4">Schools</h3>
 
                         {raw_data?.neighborhood_stats?.census?.school_district && (
                             <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
@@ -290,25 +290,25 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
 
                                 if (schools.length > 0) {
                                     return schools.map((school, i) => (
-                                        <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                                        <div key={i} className="flex items-center gap-2 text-sm text-haze">
                                             <div className="h-2 w-2 rounded-full bg-blue-500" />
                                             {school}
                                         </div>
                                     ));
                                 } else if (raw_data?.neighborhood_stats?.osm?.counts?.school) {
                                     return (
-                                        <div className="text-sm text-gray-600">
+                                        <div className="text-sm text-haze">
                                             <div className="flex items-center gap-2 mb-2">
                                                 <School className="w-4 h-4 text-blue-500" />
                                                 <span className="font-medium">{raw_data.neighborhood_stats.osm.counts.school} Nearby Schools</span>
                                             </div>
-                                            <p className="text-xs text-gray-400">
+                                            <p className="text-xs text-muted-foreground">
                                                 (Detected via OpenStreetMap)
                                             </p>
                                         </div>
                                     );
                                 } else {
-                                    return <p className="text-sm text-gray-500">No school data available.</p>;
+                                    return <p className="text-sm text-muted-foreground">No school data available.</p>;
                                 }
                             })()}
                         </div>

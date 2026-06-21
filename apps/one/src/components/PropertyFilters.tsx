@@ -157,7 +157,7 @@ export function PropertyFilters() {
         : propertyTypes;
 
     return (
-        <div className="bg-white border-b border-gray-200">
+        <div className="bg-transparent">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -169,21 +169,21 @@ export function PropertyFilters() {
                         {/* Quick Toggles */}
                         <div className="hidden md:flex items-center gap-4 text-sm">
                             <label className="flex items-center gap-2 cursor-pointer">
-                                <span className="text-gray-600">Show Sold</span>
+                                <span className="text-haze">Show Sold</span>
                                 <input
                                     type="checkbox"
                                     checked={filters.showSold}
                                     onChange={(e) => setQs({ sold: e.target.checked })}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    className="rounded border-line bg-white/10 accent-[#0e9f6e]"
                                 />
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer">
-                                <span className="font-medium text-green-600">1% Rule Only</span>
+                                <span className="font-medium text-pass-hi">1% Rule Only</span>
                                 <input
                                     type="checkbox"
                                     checked={filters.onlyOnePercentRule}
                                     onChange={(e) => setQs({ op: e.target.checked })}
-                                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                    className="rounded border-line bg-white/10 accent-[#0e9f6e]"
                                 />
                             </label>
                         </div>
@@ -216,8 +216,8 @@ export function PropertyFilters() {
                                         key={num}
                                         onClick={() => setQs({ beds: num })}
                                         className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${filters.minBeds === num
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            ? 'bg-pass text-white'
+                                            : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
                                             }`}
                                     >
                                         {num}+
@@ -235,8 +235,8 @@ export function PropertyFilters() {
                                         key={num}
                                         onClick={() => setQs({ baths: num })}
                                         className={`px-2 h-8 rounded-full text-sm font-medium transition-colors ${filters.minBaths === num
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            ? 'bg-pass text-white'
+                                            : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
                                             }`}
                                     >
                                         {num}+
@@ -281,10 +281,10 @@ export function PropertyFilters() {
                                         onClick={() => setQs({ type: opt.value })}
                                         className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
                                             filters.propertyType === opt.value
-                                                ? 'bg-blue-600 text-white'
+                                                ? 'bg-pass text-white'
                                                 : opt.isRentable
-                                                    ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    : 'bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-500'
+                                                    ? 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                                    : 'bg-white/[0.02] text-muted-foreground hover:bg-white/[0.06]'
                                         }`}
                                     >
                                         {opt.label}
@@ -308,8 +308,8 @@ export function PropertyFilters() {
                                         onClick={() => setQs({ strat: opt.value })}
                                         className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
                                             filters.strategy === opt.value
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                ? 'bg-pass text-white'
+                                                : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
                                         }`}
                                     >
                                         {opt.label}
@@ -336,7 +336,7 @@ export function PropertyFilters() {
                                         className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
                                             filters.saleType === opt.value
                                                 ? 'bg-amber-600 text-white'
-                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
                                         }`}
                                     >
                                         {opt.label}
@@ -352,18 +352,18 @@ export function PropertyFilters() {
                                     type="checkbox"
                                     checked={filters.showSold}
                                     onChange={(e) => setQs({ sold: e.target.checked })}
-                                    className="rounded border-gray-300"
+                                    className="rounded border-line bg-white/10 accent-[#0e9f6e]"
                                 />
-                                <span className="text-gray-600">Show Sold Listings</span>
+                                <span className="text-haze">Show Sold Listings</span>
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={filters.onlyOnePercentRule}
                                     onChange={(e) => setQs({ op: e.target.checked })}
-                                    className="rounded border-gray-300"
+                                    className="rounded border-line bg-white/10 accent-[#0e9f6e]"
                                 />
-                                <span className="font-medium text-green-600">1% Rule Deals Only</span>
+                                <span className="font-medium text-pass-hi">1% Rule Deals Only</span>
                             </label>
                         </div>
                     </div>

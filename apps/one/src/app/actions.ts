@@ -83,8 +83,10 @@ export async function getProperties(
   const useCursor = cursor !== null && cursorCompatible;
   const offset = (page - 1) * limit;
 
-        // Build WHERE clauses dynamically
-        const whereClauses = ["listing_type = 'for_sale'"];
+        // Build WHERE clauses dynamically. A $10k price floor drops data-error /
+        // placeholder listings (e.g. $1 prices) whose rent/price ratio is noise
+        // and would otherwise dominate the yield-ranked sort.
+        const whereClauses = ["listing_type = 'for_sale'", 'price > 10000'];
         const params: any[] = [];
         let paramIndex = 1;
 

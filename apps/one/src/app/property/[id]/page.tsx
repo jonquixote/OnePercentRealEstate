@@ -78,11 +78,11 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
     }, [id]);
 
     if (loading) {
-        return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
+        return <div className="flex h-screen items-center justify-center bg-ink"><Loader2 className="h-8 w-8 animate-spin text-pass" /></div>;
     }
 
     if (!property) {
-        return <div className="flex h-screen items-center justify-center"><p className="text-gray-500">Property not found.</p></div>;
+        return <div className="flex h-screen items-center justify-center bg-ink"><p className="text-muted-foreground">Property not found.</p></div>;
     }
 
     const { address = '', listing_price = 0, estimated_rent = 0, status = 'watch', images = [], raw_data: rawData = {} } = property;
@@ -94,7 +94,7 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
     const schemaData = buildSchemaData(property, id);
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-12">
+        <div className="min-h-screen bg-ink pb-12">
             {schemaData && <Schema kind="RealEstateListing" data={schemaData} />}
             <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
                 <PropertyReport ref={reportRef} property={property} />

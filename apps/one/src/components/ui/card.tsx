@@ -72,7 +72,10 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
     const hasRent = !!estimated_rent && estimated_rent > 0;
     const hasPrice = !!listing_price && listing_price > 0;
 
-    const ratioPct = hasRent && hasPrice ? (estimated_rent / listing_price) * 100 : null;
+    // Guard against data-error prices (e.g. $1 listings) that produce absurd
+    // ratios; a real monthly rent/price above ~25% is noise, not a deal.
+    const rawRatioPct = hasRent && hasPrice ? (estimated_rent / listing_price) * 100 : null;
+    const ratioPct = rawRatioPct != null && rawRatioPct <= 25 ? rawRatioPct : null;
 
     // Per-(type, sale_type) buy-hold target, as percent (resolve_rule); default 1%.
     const targetPct = property.target_ratio != null ? Number(property.target_ratio) * 100 : 1.0;
@@ -123,7 +126,7 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
             >
                 {onSelect && (
                     <div
-                        className="absolute top-3 right-3 z-30 md:opacity-0 md:group-hover:opacity-100 opacity-90 transition-opacity duration-200 bg-white/90 dark:bg-zinc-900/80 backdrop-blur-sm rounded-md p-0.5 shadow-sm"
+                        className="absolute top-3 right-3 z-30 md:opacity-0 md:group-hover:opacity-100 opacity-90 transition-opacity duration-200 bg-white/90 dark:bg-ink-panel/80 backdrop-blur-sm rounded-md p-0.5 shadow-sm"
                         title="Select to Compare"
                     >
                         <input
@@ -142,7 +145,7 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                 >
                     <article
                         className={cn(
-                            "relative flex flex-col h-full overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 shadow-sm transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1 group-hover:border-zinc-300 dark:group-hover:border-zinc-700",
+                            "relative flex flex-col h-full overflow-hidden rounded-2xl bg-white dark:bg-ink-panel border border-zinc-200/70 dark:border-line shadow-sm transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1 group-hover:border-zinc-300 dark:group-hover:border-zinc-700",
                             isSelected && "ring-2 ring-slate-900 dark:ring-zinc-100 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950"
                         )}
                     >
@@ -171,7 +174,7 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                             <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5">
                                 <span
                                     className={cn(
-                                        "inline-flex items-center gap-1.5 rounded-full bg-white/85 dark:bg-zinc-900/80 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold tracking-wide shadow-sm",
+                                        "inline-flex items-center gap-1.5 rounded-full bg-white/85 dark:bg-ink-panel/80 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold tracking-wide shadow-sm",
                                         statusToneClasses[statusBadge.tone]
                                     )}
                                 >
@@ -250,7 +253,7 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                             </div>
 
                             {/* Bottom row: monthly cashflow */}
-                            <div className="mt-auto pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 mt-4">
+                            <div className="mt-auto pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-line mt-4">
                                 <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                                     Est. Cashflow
                                 </span>
@@ -291,7 +294,7 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
 export function PropertyCardSkeleton() {
     return (
         <div className="relative h-full">
-            <div className="flex flex-col h-full overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 shadow-sm animate-pulse">
+            <div className="flex flex-col h-full overflow-hidden rounded-2xl bg-white dark:bg-ink-panel border border-zinc-200/70 dark:border-line shadow-sm animate-pulse">
                 {/* Image area */}
                 <div className="relative aspect-[16/9] w-full bg-zinc-200 dark:bg-zinc-800">
                     <div className="absolute top-3 left-3 h-6 w-16 rounded-full bg-zinc-300/70 dark:bg-zinc-700" />
@@ -305,7 +308,7 @@ export function PropertyCardSkeleton() {
                     </div>
                     <div className="mt-2 h-4 w-3/4 rounded-md bg-zinc-200 dark:bg-zinc-800" />
                     <div className="mt-3 h-4 w-40 rounded-md bg-zinc-200 dark:bg-zinc-800" />
-                    <div className="mt-auto pt-4 mt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="mt-auto pt-4 mt-4 flex items-center justify-between border-t border-zinc-100 dark:border-line">
                         <div className="h-3 w-24 rounded-md bg-zinc-200 dark:bg-zinc-800" />
                         <div className="h-4 w-20 rounded-md bg-zinc-200 dark:bg-zinc-800" />
                     </div>
