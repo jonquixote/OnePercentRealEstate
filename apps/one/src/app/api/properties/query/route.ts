@@ -84,17 +84,24 @@ export async function POST(req: NextRequest) {
   try {
     const client = await pool.connect();
     try {
+      // SET LOCAL only takes effect inside a transaction; without BEGIN/COMMIT it
+      // is a silent no-op on a pooled client, leaving runaway predicates unbounded.
+      await client.query('BEGIN');
       await client.query(`SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
       const result = await withSpan(
         'query.expression',
         () => client.query(sql, compiled.params),
         { usedColumns: compiled.usedColumns.join(','), paramCount: compiled.params.length }
       );
+      await client.query('COMMIT');
       return NextResponse.json({
         items: result.rows,
         usedColumns: compiled.usedColumns,
         compiledWhere: compiled.whereSql,
       });
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
     } finally {
       client.release();
     }

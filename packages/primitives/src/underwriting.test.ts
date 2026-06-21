@@ -139,6 +139,26 @@ describe('evaluateRules — pass/fail fixtures', () => {
   });
 });
 
+describe('gradable — insufficient-data instead of a misleading hard F', () => {
+  it('STR with no ADR is not gradable', () => {
+    const cfg: RuleConfig = { ...BUY_HOLD_BASE, strategy: 'str', strAdr: null, strOccupancy: 0.55, isProvisional: true };
+    const ev = evaluateRules({ price: 300_000, monthlyRent: 1500 }, cfg);
+    expect(ev.gradable).toBe(false);
+    expect(ev.gradableReason).toMatch(/revenue signal/i);
+  });
+  it('flip without ARV is not gradable; with ARV it is', () => {
+    const cfg: RuleConfig = { ...BUY_HOLD_BASE, strategy: 'flip', arvDiscount: 0.7, rehabPerSqft: 35, minFlipRoi: 0.15 };
+    const noArv = evaluateRules({ price: 150_000, monthlyRent: 0, sqft: 1500 }, cfg);
+    expect(noArv.gradable).toBe(false);
+    const withArv = evaluateRules({ price: 150_000, monthlyRent: 0, sqft: 1500, arv: 300_000, rehabBudget: 40_000 }, cfg);
+    expect(withArv.gradable).toBe(true);
+  });
+  it('buy_hold with real data is gradable', () => {
+    const ev = evaluateRules({ price: 100_000, monthlyRent: 1500, sqft: 1200 }, BUY_HOLD_BASE);
+    expect(ev.gradable).toBe(true);
+  });
+});
+
 describe('grade boundaries', () => {
   it('maps scores to letters', () => {
     expect(scoreToGrade(90)).toBe('A');

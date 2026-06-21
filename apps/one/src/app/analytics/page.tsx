@@ -26,6 +26,7 @@ export default async function AnalyticsPage() {
                 COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
                 raw_data
             FROM listings
+            WHERE listing_type = 'for_sale' AND sale_type = 'standard'
             ORDER BY created_at DESC
             LIMIT 500
         `);
