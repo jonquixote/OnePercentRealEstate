@@ -128,6 +128,11 @@ export interface RuleEvaluation {
   breakdown: GradeCategory[]; // weighted category bars (the single grade source)
   pros: string[];
   cons: string[];
+  // false when the strategy lacks the inputs to produce a meaningful grade
+  // (e.g. STR with no revenue signal, flip with no ARV) — UI shows an
+  // "insufficient data" state instead of a misleading hard F.
+  gradable: boolean;
+  gradableReason?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -404,7 +409,23 @@ export function evaluateRules(
     breakdown: [],
     pros: [],
     cons: [],
+    gradable: true,
   };
+
+  // A strategy is only gradable when it has the inputs it needs. STR needs a
+  // revenue signal (ADR×occupancy); flip needs a real ARV (we don't fake ARV=price).
+  if (cfg.strategy === 'str' && (!ok(cfg.strAdr) || !ok(cfg.strOccupancy))) {
+    evaluation.gradable = false;
+    evaluation.gradableReason =
+      'Short-term-rental grading needs a revenue signal (ADR × occupancy), which is not available yet.';
+  } else if (cfg.strategy === 'flip' && !ok(inputs.arv)) {
+    evaluation.gradable = false;
+    evaluation.gradableReason =
+      'Fix-and-flip grading needs an after-repair value (ARV) and rehab estimate.';
+  } else if (applicable.length === 0) {
+    evaluation.gradable = false;
+    evaluation.gradableReason = 'Not enough data to grade this property.';
+  }
 
   const scored = compositeScore(inputs, evaluation);
   evaluation.score = scored.score;

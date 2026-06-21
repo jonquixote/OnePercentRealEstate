@@ -148,12 +148,42 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
         </div>
     );
 
-    if (!evaluation || !evaluation.grade) {
+    // Rules not loaded yet → skeleton.
+    if (!evaluation) {
         return (
             <div id="tabpanel-scorecard" role="tabpanel" aria-labelledby="tab-scorecard" className="space-y-6">
                 <div className="flex justify-between">{strategyChips}</div>
                 <div className="h-40 animate-pulse rounded-2xl bg-gray-100" />
                 <div className="h-64 animate-pulse rounded-2xl bg-gray-100" />
+            </div>
+        );
+    }
+
+    // Strategy lacks the inputs to grade meaningfully (STR with no revenue
+    // signal, flip with no ARV) → honest "insufficient data" instead of a hard F.
+    if (!evaluation.gradable || !evaluation.grade) {
+        return (
+            <div id="tabpanel-scorecard" role="tabpanel" aria-labelledby="tab-scorecard" className="space-y-8">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-gray-500">Underwrite as</p>
+                    {strategyChips}
+                </div>
+                <Card>
+                    <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
+                        <Award className="h-8 w-8 text-gray-300" />
+                        <p className="text-lg font-semibold text-gray-900">
+                            Not enough data to grade {STRATEGY_LABELS[strategy] ?? strategy}
+                        </p>
+                        <p className="max-w-md text-sm text-gray-500">
+                            {evaluation.gradableReason ?? 'Insufficient inputs for this strategy.'}
+                        </p>
+                        {evaluation.isProvisional && (
+                            <span className="rounded-full bg-amber-100 px-2.5 py-1 font-mono text-[11px] font-medium text-amber-700">
+                                provisional assumptions
+                            </span>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
         );
     }

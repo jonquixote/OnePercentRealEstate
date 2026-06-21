@@ -40,8 +40,9 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                 COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
                 raw_data,
                 created_at
-            FROM listings 
+            FROM listings
             WHERE raw_data->>'zip_code' = $1
+              AND listing_type = 'for_sale' AND sale_type = 'standard'
             ORDER BY created_at DESC
             LIMIT 100
         `, [zipcode]);

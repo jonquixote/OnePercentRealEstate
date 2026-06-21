@@ -89,7 +89,7 @@ def scrape_listings(req: ScrapeRequest):
         
         if df is None or (hasattr(df, "empty") and df.empty):
             print(f"No results for {req.location}")
-            return {"count": 0, "inserted": 0, "skipped": 0}
+            return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0}
 
         print(f"df shape: {df.shape}")
 
@@ -129,7 +129,7 @@ def scrape_listings(req: ScrapeRequest):
             clean_records.append(clean_rec)
 
         if not clean_records:
-            return {"count": 0, "inserted": 0, "skipped": 0}
+            return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0}
 
         # Connect to DB
         conn = get_db_connection()

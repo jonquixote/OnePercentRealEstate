@@ -100,7 +100,7 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
                                 {capRate.toFixed(2)}%
                             </p>
                             <p className="text-sm text-gray-500 mt-1">
-                                Unlevered annual yield on price
+                                Itemized-expense estimate · the Scorecard grade uses the 50% rule
                             </p>
                         </CardContent>
                     </Card>

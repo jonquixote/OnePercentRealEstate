@@ -117,6 +117,7 @@ export async function GET(
       FROM listings l, base
       WHERE l.id <> $1
         AND l.listing_type = 'for_sale'
+        AND l.sale_type = 'standard'
         AND l.geom IS NOT NULL
         AND base.geom IS NOT NULL
         AND ST_DWithin(l.geom::geography, base.geom::geography, 5000)
