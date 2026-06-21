@@ -5,13 +5,16 @@ import { withSpan } from '@/lib/tracing';
 
 export const dynamic = 'force-dynamic';
 
-const CACHE_KEY = 'home:featured:v1';
+const CACHE_KEY = 'home:featured:v2';
 const CACHE_TTL_S = 600;
+const STRATEGY_WHITELIST = new Set(['buy_hold', 'brrrr', 'flip', 'str']);
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const limit = Math.min(Math.max(parseInt(searchParams.get('limit') ?? '6', 10) || 6, 1), 12);
-  const cacheKey = `${CACHE_KEY}:${limit}`;
+  const strategyParam = searchParams.get('strategy') || 'buy_hold';
+  const strategy = STRATEGY_WHITELIST.has(strategyParam) ? strategyParam : 'buy_hold';
+  const cacheKey = `${CACHE_KEY}:${limit}:${strategy}`;
 
   try {
     const cached = await redis.get(cacheKey).catch(() => null);
@@ -56,16 +59,16 @@ export async function GET(req: Request) {
                    THEN (l.estimated_rent / l.price * 100)::numeric(6,2) END AS ratio_pct,
               -- resolved per-(type, sale_type) buy-hold target, as percent, so the
               -- gauge draws the listing's actual rule line (not a flat 1%).
-              (COALESCE((SELECT target_ratio FROM resolve_rule(l.property_type, l.sale_type, 'buy_hold')), 0.01) * 100)::numeric(6,2) AS target_ratio_pct
+              (COALESCE((SELECT target_ratio FROM resolve_rule(l.property_type, l.sale_type, $2)), 0.01) * 100)::numeric(6,2) AS target_ratio_pct
             FROM listings l
             WHERE l.listing_type = 'for_sale'
               AND l.sale_type = 'standard'
-              AND l.price > 0
+              AND l.price > 10000
               AND l.primary_photo IS NOT NULL
               AND public.is_rentable(l.property_type)
               AND l.rent_calc_status = 'done'
               AND l.estimated_rent > 0
-              AND (l.estimated_rent / l.price) >= COALESCE((SELECT target_ratio FROM resolve_rule(l.property_type, l.sale_type, 'buy_hold')), 0.01)
+              AND (l.estimated_rent / l.price) >= COALESCE((SELECT target_ratio FROM resolve_rule(l.property_type, l.sale_type, $2)), 0.01)
           )
           SELECT id, address, city, state, price, estimated_rent,
                  bedrooms, bathrooms, sqft, primary_photo, property_type, ratio_pct, target_ratio_pct
@@ -76,7 +79,7 @@ export async function GET(req: Request) {
             created_at DESC NULLS LAST
           LIMIT $1
         `;
-        return client.query(sql, [limit]);
+        return client.query(sql, [limit, strategy]);
       } finally {
         client.release();
       }

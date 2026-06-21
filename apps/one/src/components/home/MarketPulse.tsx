@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { STRATEGY_BY_ID, type Strategy } from '@/lib/strategies';
 
 interface HistogramBin {
   loPct: number;
@@ -8,28 +9,26 @@ interface HistogramBin {
   count: number;
 }
 
-interface StatsShape {
-  total: number;
-  onePercentPasses: number;
-  medianRatioPct: number | null;
+interface MarketPulseProps {
+  strategy: Strategy;
   histogram: HistogramBin[];
   thresholdPct: number;
+  clears: number;
+  medianRatioPct: number | null;
 }
 
 const fmt = new Intl.NumberFormat('en-US');
 
 /**
- * Market pulse — the rent/price distribution drawn as a histogram with the 1%
- * line drawn literally through it. The brand's one memorable image: almost
- * everything sits in brass below the line; the few deals that clear it glow.
- * Wired to the real /api/stats histogram (gated to standard, rentable, rent-done
- * listings) — not seeded data.
+ * Market pulse — the rent/price distribution with the rule line drawn through
+ * it. The brand's one memorable image: almost everything sits in brass below
+ * the line; the few deals that clear it glow. Reframes per strategy.
  */
-export function MarketPulse() {
-  const [stats, setStats] = useState<StatsShape | null>(null);
+export function MarketPulse({ strategy, histogram, thresholdPct, clears, medianRatioPct }: MarketPulseProps) {
   const [seen, setSeen] = useState(false);
   const [reduced, setReduced] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const meta = STRATEGY_BY_ID[strategy];
 
   useEffect(() => {
     const m = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -37,19 +36,6 @@ export function MarketPulse() {
     on();
     m.addEventListener?.('change', on);
     return () => m.removeEventListener?.('change', on);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/stats', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((j: StatsShape) => {
-        if (!cancelled) setStats(j);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
@@ -68,53 +54,37 @@ export function MarketPulse() {
     return () => io.disconnect();
   }, []);
 
-  // Don't render the section until there's a non-empty distribution to show.
-  const bins = stats?.histogram ?? [];
+  const bins = histogram ?? [];
   const peak = Math.max(1, ...bins.map((b) => b.count));
   const hasData = bins.some((b) => b.count > 0);
-  if (stats && !hasData) return null;
-
-  const threshold = stats?.thresholdPct ?? 1.0;
-  const clears = stats?.onePercentPasses ?? 0;
-  const median = stats?.medianRatioPct ?? null;
+  if (!hasData) return null;
 
   return (
-    <section
-      aria-labelledby="pulse-headline"
-      className="border-t border-slate-200/70 bg-slate-50"
-    >
+    <section id="pulse" aria-labelledby="pulse-headline" className="border-t border-line bg-ink-panel/40">
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-10 px-6 py-16 lg:grid-cols-12 lg:items-end lg:px-8">
         <div className="lg:col-span-4">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-amber-700">
-            Market pulse
-          </p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-brass-hi">Market pulse</p>
           <h2
             id="pulse-headline"
-            className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-3xl"
+            className="mt-2 font-sans text-[clamp(26px,3vw,36px)] font-semibold leading-[1.1] tracking-[-0.02em] text-white"
           >
             Almost nothing clears.
             <br />
             That&rsquo;s the edge.
           </h2>
-          <p className="mt-4 max-w-sm text-sm leading-7 text-slate-600">
-            {median != null ? (
-              <>Most listings sit near {median.toFixed(2)}% rent-to-price. </>
-            ) : null}
-            The{' '}
-            <span className="font-semibold tabular-nums text-emerald-700">
-              {fmt.format(clears)}
-            </span>{' '}
-            that cross the {threshold.toFixed(2)}% line are the only ones worth
-            your time — and we surface them first.
+          <p className="mt-4 max-w-sm text-[15px] leading-7 text-haze">
+            {medianRatioPct != null ? <>Most listings sit near {medianRatioPct.toFixed(2)}% rent-to-price. </> : null}
+            The <span className="font-semibold tabular-nums text-pass-hi">{fmt.format(clears)}</span> that cross the{' '}
+            {thresholdPct.toFixed(2)}% {meta.lineName.includes('rule') ? 'line' : 'line'} are the only ones worth your time — and we surface them first.
           </p>
-          <div className="mt-6 flex gap-5 text-sm">
+          <div className="mt-6 flex gap-5 text-[13px]">
             <span className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-sm bg-emerald-600" />
-              <span className="text-slate-600">Clears the rule</span>
+              <span className="h-3 w-3 rounded-sm bg-pass" />
+              <span className="text-haze">Clears the {meta.lineName}</span>
             </span>
             <span className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-sm bg-amber-600/70" />
-              <span className="text-slate-600">Below the rule</span>
+              <span className="h-3 w-3 rounded-sm bg-brass/70" />
+              <span className="text-haze">Below</span>
             </span>
           </div>
         </div>
@@ -123,10 +93,10 @@ export function MarketPulse() {
           <div
             className="flex h-56 items-end gap-1"
             role="img"
-            aria-label={`Distribution of rent-to-price ratios from ${bins[0]?.loPct.toFixed(1) ?? '0.2'}% to ${bins[bins.length - 1]?.hiPct.toFixed(1) ?? '1.7'}%. ${fmt.format(clears)} listings clear the ${threshold.toFixed(2)}% line.`}
+            aria-label={`Distribution of rent-to-price ratios. ${fmt.format(clears)} listings clear the ${thresholdPct.toFixed(2)}% line.`}
           >
             {bins.map((b, i) => {
-              const above = b.loPct >= threshold;
+              const above = b.loPct >= thresholdPct;
               const h = (b.count / peak) * 100;
               const grown = seen || reduced;
               return (
@@ -138,7 +108,7 @@ export function MarketPulse() {
                 >
                   <div
                     className={`rounded-t-sm ${reduced ? '' : 'transition-[height] duration-700 ease-out'} ${
-                      above ? 'bg-emerald-600' : 'bg-amber-600/60'
+                      above ? 'bg-pass' : 'bg-brass/55'
                     }`}
                     style={{ height: grown ? `${h}%` : '0%', transitionDelay: reduced ? '0ms' : `${i * 18}ms` }}
                   />
@@ -146,10 +116,10 @@ export function MarketPulse() {
               );
             })}
           </div>
-          <div className="mt-2 h-px bg-slate-200" />
-          <div className="mt-2 flex items-center justify-between font-mono text-[11px] text-slate-500">
+          <div className="mt-2 h-px bg-line" />
+          <div className="mt-2 flex items-center justify-between font-mono text-[11px] text-muted-foreground">
             <span>{bins[0]?.loPct.toFixed(1) ?? '0.2'}%</span>
-            <span className="text-emerald-700">↑ {threshold.toFixed(2)}% line</span>
+            <span className="text-pass-hi">↑ {thresholdPct.toFixed(2)}% line</span>
             <span>{bins[bins.length - 1]?.hiPct.toFixed(1) ?? '1.7'}%</span>
           </div>
         </div>

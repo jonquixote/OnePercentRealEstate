@@ -12,7 +12,7 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
  */
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider defaultTheme="light">
+    <ThemeProvider defaultTheme="dark">
       <NuqsAdapter>
         <ApiClientProvider>{children}</ApiClientProvider>
       </NuqsAdapter>

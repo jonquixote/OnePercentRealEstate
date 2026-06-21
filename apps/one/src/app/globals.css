@@ -3,11 +3,36 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * one.octavo.press — "the line" design system.
+ *
+ * Deep ink canvas; the rule threshold is the brand's one memorable image,
+ * drawn literally (hero tape, market pulse, per-deal gauge). emerald = clears,
+ * brass = below. Geist Mono carries the numerals like a live tape.
+ *
+ * The app runs dark by default. Semantic tokens (background/card/border/...)
+ * resolve to the ink palette so token-based components inherit it; explicit
+ * line tokens (pass/brass/ink/line) are exposed to Tailwind as utilities
+ * (bg-pass, text-brass, border-line, ...).
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* "the line" palette → Tailwind utilities */
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-panel: var(--ink-panel);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-pass: var(--pass);
+  --color-pass-hi: var(--pass-hi);
+  --color-brass: var(--brass);
+  --color-brass-hi: var(--brass-hi);
+  --color-haze: var(--haze);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -43,73 +68,79 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ---- the line palette (raw) ---- */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --ink: #0b1220;
+  --ink-2: #111a2b;
+  --ink-panel: #0e1626;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-soft: rgba(255, 255, 255, 0.045);
+  --pass: #0e9f6e;
+  --pass-hi: #34e0a1;
+  --brass: #b07a1e;
+  --brass-hi: #d8a24a;
+  --haze: #aeb6c6;
 }
 
+/* ---- semantic tokens: DARK by default (ink canvas) ---- */
+:root {
+  --radius: 0.75rem;
+  --background: #0b1220;
+  --foreground: #e7ebf2;
+  --card: #0e1626;
+  --card-foreground: #e7ebf2;
+  --popover: #111a2b;
+  --popover-foreground: #e7ebf2;
+  --primary: #0e9f6e;
+  --primary-foreground: #04140d;
+  --secondary: #131d30;
+  --secondary-foreground: #e7ebf2;
+  --muted: #131d30;
+  --muted-foreground: #8a93a6;
+  --accent: #34e0a1;
+  --accent-foreground: #04140d;
+  --destructive: #e0564a;
+  --border: rgba(255, 255, 255, 0.09);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #34e0a1;
+  --chart-1: #34e0a1;
+  --chart-2: #d8a24a;
+  --chart-3: #5b86c4;
+  --chart-4: #b07a1e;
+  --chart-5: #0e9f6e;
+  --sidebar: #0e1626;
+  --sidebar-foreground: #e7ebf2;
+  --sidebar-primary: #0e9f6e;
+  --sidebar-primary-foreground: #04140d;
+  --sidebar-accent: #131d30;
+  --sidebar-accent-foreground: #e7ebf2;
+  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-ring: #34e0a1;
+}
+
+/* next-themes adds .dark; keep it identical so dark: variants resolve. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0b1220;
+  --foreground: #e7ebf2;
+  --card: #0e1626;
+  --card-foreground: #e7ebf2;
+  --popover: #111a2b;
+  --popover-foreground: #e7ebf2;
+  --primary: #0e9f6e;
+  --primary-foreground: #04140d;
+  --secondary: #131d30;
+  --secondary-foreground: #e7ebf2;
+  --muted: #131d30;
+  --muted-foreground: #8a93a6;
+  --accent: #34e0a1;
+  --accent-foreground: #04140d;
+  --destructive: #e0564a;
+  --border: rgba(255, 255, 255, 0.09);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #34e0a1;
+  --sidebar: #0e1626;
+  --sidebar-foreground: #e7ebf2;
+  --sidebar-border: rgba(255, 255, 255, 0.09);
 }
 
 @layer base {
@@ -118,5 +149,25 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-variant-numeric: slashed-zero;
   }
+  ::selection {
+    background: var(--pass);
+    color: #fff;
+  }
+  /* tabular numerals everywhere mono is used — the "tape" feel */
+  .font-mono {
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+}
+
+/* the dashed rule line + glow, reusable */
+@utility line-rule {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--pass-hi) 0,
+    var(--pass-hi) 3px,
+    transparent 3px,
+    transparent 6px
+  );
 }

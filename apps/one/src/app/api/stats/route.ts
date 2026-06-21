@@ -5,8 +5,9 @@ import { withSpan } from '@/lib/tracing';
 
 export const dynamic = 'force-dynamic';
 
-const CACHE_KEY = 'home:stats:v1';
+const CACHE_KEY = 'home:stats:v2';
 const CACHE_TTL_S = 120;
+const STRATEGY_WHITELIST = new Set(['buy_hold', 'brrrr', 'flip', 'str']);
 
 interface HistogramBin {
   loPct: number; // inclusive lower edge, in percent (e.g. 0.6)
@@ -23,7 +24,8 @@ interface StatsResponse {
   rentCalcPending: number;
   // Distribution of rent/price ratio for the "market pulse" / hero tape.
   histogram: HistogramBin[];
-  thresholdPct: number; // the 1% line, in percent (1.0)
+  thresholdPct: number; // the resolved rule line for `strategy`, in percent
+  strategy: string;
   lastUpdated: string;
 }
 
@@ -33,9 +35,13 @@ const HIST_HI = 1.7;
 const HIST_BINS = 15;
 const HIST_STEP = (HIST_HI - HIST_LO) / HIST_BINS;
 
-export async function GET() {
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const strategyParam = url.searchParams.get('strategy') || 'buy_hold';
+  const strategy = STRATEGY_WHITELIST.has(strategyParam) ? strategyParam : 'buy_hold';
+  const cacheKey = `${CACHE_KEY}:${strategy}`;
   try {
-    const cached = await redis.get(CACHE_KEY).catch(() => null);
+    const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) {
       return NextResponse.json(JSON.parse(cached), {
         headers: { 'X-Cache': 'HIT', 'Cache-Control': 'public, max-age=30, s-maxage=120' },
@@ -53,23 +59,34 @@ export async function GET() {
         //   1. rent_calc_status = 'done' (rent has been computed)
         //   2. property type is rentable (not land/vacant/farm)
         // Total stays unfiltered so users see the full inventory size.
+        // Per-distinct-property-type resolved target for the selected strategy
+        // (resolve_rule is called ~13× here, then joined — not 688k× per row).
         const sql = `
-          WITH base AS (
+          WITH rules AS (
+            SELECT pt,
+                   (SELECT target_ratio FROM resolve_rule(pt, 'standard', $1)) AS tr
+            FROM (
+              SELECT DISTINCT property_type AS pt
+              FROM listings WHERE listing_type = 'for_sale' AND sale_type = 'standard'
+            ) d
+          ),
+          base AS (
             SELECT
               l.price,
               l.estimated_rent,
               l.state,
               l.property_type,
               l.rent_calc_status,
-              ptr.target_ratio,
+              r.tr AS target_ratio,
               CASE WHEN l.price > 0 AND l.estimated_rent IS NOT NULL AND l.estimated_rent > 0
                         AND l.rent_calc_status = 'done'
                         AND public.is_rentable(l.property_type)
                    THEN l.estimated_rent / l.price END AS ratio
             FROM listings l
-            LEFT JOIN property_type_rules ptr ON ptr.property_type = l.property_type
+            LEFT JOIN rules r ON r.pt = l.property_type
             WHERE l.listing_type = 'for_sale'
               AND l.sale_type = 'standard'
+              AND l.price > 10000
           )
           SELECT
             count(*)::int AS total,
@@ -82,6 +99,7 @@ export async function GET() {
             count(DISTINCT state) FILTER (WHERE state IS NOT NULL)::int AS markets,
             count(*) FILTER (WHERE rent_calc_status = 'done' AND public.is_rentable(property_type))::int AS rentable,
             count(*) FILTER (WHERE rent_calc_status = 'pending')::int AS rent_calc_pending,
+            (COALESCE((SELECT target_ratio FROM resolve_rule('DEFAULT', 'standard', $1)), 0.01) * 100)::numeric(6,2) AS threshold_pct,
             (
               SELECT coalesce(jsonb_agg(jsonb_build_object('bucket', bucket, 'count', c) ORDER BY bucket), '[]'::jsonb)
               FROM (
@@ -93,7 +111,7 @@ export async function GET() {
             ) AS histogram
           FROM base
         `;
-        return client.query(sql);
+        return client.query(sql, [strategy]);
       } finally {
         client.release();
       }
@@ -125,11 +143,12 @@ export async function GET() {
       rentable: Number(row.rentable) || 0,
       rentCalcPending: Number(row.rent_calc_pending) || 0,
       histogram,
-      thresholdPct: 1.0,
+      thresholdPct: row.threshold_pct != null ? Number(row.threshold_pct) : 1.0,
+      strategy,
       lastUpdated: new Date().toISOString(),
     };
 
-    redis.setex(CACHE_KEY, CACHE_TTL_S, JSON.stringify(payload)).catch(() => {});
+    redis.setex(cacheKey, CACHE_TTL_S, JSON.stringify(payload)).catch(() => {});
 
     return NextResponse.json(payload, {
       headers: { 'X-Cache': 'MISS', 'Cache-Control': 'public, max-age=30, s-maxage=120' },

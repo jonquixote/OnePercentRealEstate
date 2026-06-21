@@ -1,115 +1,178 @@
 'use client';
 
-import Link from 'next/link';
-import { ArrowDown, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search, ArrowRight, ArrowDown } from 'lucide-react';
+import { RatioTape } from './RatioTape';
+import { STRATEGIES, STRATEGY_BY_ID, type Strategy } from '@/lib/strategies';
 
-interface HomeHeroProps {
-  onCtaClick?: () => void;
-  stats?: {
-    total: number;
-    markets: number;
-    rentCalcPending: number;
-  } | null;
+interface HistogramBin {
+  loPct: number;
+  hiPct: number;
+  count: number;
+}
+interface Stats {
+  total: number;
+  onePercentPasses: number;
+  medianRatioPct: number | null;
+  markets: number;
+  rentCalcPending: number;
+  histogram: HistogramBin[];
+  thresholdPct: number;
 }
 
-/**
- * Landing-style hero for the consumer homepage.
- *
- * Premium-Zillow direction: photo-forward isn't possible without a
- * paid editorial budget, so we lean on typography, generous space, and
- * one signature financial sentence as the visual hook.
- */
-export function HomeHero({ onCtaClick, stats }: HomeHeroProps) {
-  const badgeText = stats
-    ? `Live MLS data · ${stats.markets} markets · ${new Intl.NumberFormat('en-US').format(stats.total)} listings`
-    : 'Live MLS data · nationwide coverage';
+interface HomeHeroProps {
+  strategy: Strategy;
+  onStrategy: (s: Strategy) => void;
+  stats: Stats | null;
+  onBrowse?: () => void;
+}
+
+const num = new Intl.NumberFormat('en-US');
+function fmtPct(n: number | null): string {
+  return n == null || !Number.isFinite(n) ? '—' : `${n.toFixed(2)}%`;
+}
+
+export function HomeHero({ strategy, onStrategy, stats, onBrowse }: HomeHeroProps) {
+  const router = useRouter();
+  const [q, setQ] = useState('');
+  const meta = STRATEGY_BY_ID[strategy];
+
+  const threshold = stats?.thresholdPct ?? 1.0;
+  const ticker: Array<[string, string, boolean]> = [
+    ['Active listings', stats ? num.format(stats.total) : '—', false],
+    ['Clear the line', stats ? num.format(stats.onePercentPasses) : '—', true],
+    ['Median rent / price', fmtPct(stats?.medianRatioPct ?? null), false],
+    ['Markets covered', stats ? num.format(stats.markets) : '—', false],
+  ];
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const term = q.trim();
+    router.push(term ? `/search?q=${encodeURIComponent(term)}` : '/search');
+  }
 
   return (
-    <section
-      aria-labelledby="hero-headline"
-      className="relative isolate overflow-hidden border-b border-slate-200/70 bg-gradient-to-br from-white via-white to-emerald-50/40"
-    >
-      {/* Subtle dot grid for texture. SVG inline so no extra request. */}
+    <section aria-labelledby="hero-headline" className="relative isolate overflow-hidden bg-ink">
+      {/* faint grid, masked toward the corner */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10 opacity-[0.05]"
         style={{
           backgroundImage:
-            'radial-gradient(rgb(15 23 42) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
+            'linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)',
+          backgroundSize: '64px 64px',
+          maskImage: 'radial-gradient(120% 100% at 25% 0%, black, transparent 75%)',
+          WebkitMaskImage: 'radial-gradient(120% 100% at 25% 0%, black, transparent 75%)',
         }}
       />
 
-      <div className="mx-auto max-w-7xl px-6 pt-16 pb-12 sm:pt-20 sm:pb-16 lg:px-8 lg:pt-24 lg:pb-20">
-        <div className="mx-auto max-w-4xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-900">
-            <Sparkles className="h-3.5 w-3.5" />
-            {badgeText}
+      <div className="mx-auto max-w-7xl px-6 lg:px-8">
+        <div className="grid grid-cols-1 items-center gap-12 py-16 lg:grid-cols-2 lg:py-20">
+          {/* left */}
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.03] px-3 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-pass-hi shadow-[0_0_8px_var(--pass-hi)]" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-haze">
+                Live MLS · {stats ? num.format(stats.markets) : '50'} markets · {stats ? num.format(stats.total) : '—'} listings
+              </span>
+            </div>
+
+            <h1
+              id="hero-headline"
+              className="mt-6 text-balance font-sans text-[clamp(40px,6vw,66px)] font-semibold leading-[1.02] tracking-[-0.03em] text-white"
+            >
+              Underwrite less.
+              <br />
+              Buy what <span className="text-pass-hi">clears</span>.
+            </h1>
+
+            {/* strategy lens */}
+            <div className="mt-7">
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                Your strategy · the line moves with it
+              </p>
+              <div className="flex flex-wrap gap-2" role="tablist" aria-label="Investing strategy">
+                {STRATEGIES.map((s) => {
+                  const active = s.id === strategy;
+                  return (
+                    <button
+                      key={s.id}
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => onStrategy(s.id)}
+                      className={`rounded-full border px-3.5 py-1.5 font-mono text-[12px] font-medium transition-colors ${
+                        active
+                          ? 'border-pass bg-pass/15 text-pass-hi'
+                          : 'border-line bg-white/[0.02] text-haze hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <p className="mt-5 max-w-md text-pretty text-[15.5px] leading-7 text-haze">
+              {meta.thesis}
+              {meta.provisional && (
+                <span className="ml-2 rounded bg-brass/20 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-brass-hi">
+                  provisional
+                </span>
+              )}
+            </p>
+
+            {/* command search */}
+            <form onSubmit={submitSearch} className="mt-7 flex max-w-md items-center gap-2 rounded-xl bg-white p-1.5 shadow-[0_12px_30px_-16px_rgba(0,0,0,0.6)] focus-within:ring-2 focus-within:ring-pass">
+              <Search className="ml-2 h-[18px] w-[18px] text-slate-500" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search a city, ZIP, or address"
+                aria-label="Search a city, ZIP, or address"
+                className="flex-1 border-0 bg-transparent px-1 py-2 text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+              />
+              <button
+                type="submit"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-4 py-2.5 font-sans text-[14px] font-semibold text-white transition-colors hover:bg-ink-2"
+              >
+                Score it <ArrowRight className="h-[15px] w-[15px]" />
+              </button>
+            </form>
+
+            <div className="mt-5 flex flex-wrap gap-5">
+              <button onClick={onBrowse} className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-white hover:text-pass-hi">
+                Browse the map <ArrowDown className="h-[15px] w-[15px]" />
+              </button>
+              <a href="#pulse" className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-haze hover:text-white">
+                See the market distribution
+              </a>
+            </div>
           </div>
 
-          <h1
-            id="hero-headline"
-            className="mt-6 text-balance text-4xl font-medium tracking-tight text-slate-900 sm:text-5xl lg:text-6xl"
-          >
-            Find the cashflow.
-            <br className="hidden sm:inline" />{' '}
-            <span className="text-emerald-700">Skip the spreadsheet.</span>
-          </h1>
-
-          <p className="mt-6 max-w-2xl text-pretty text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
-            Every listing scored against the rules that matter for your play —
-            1% and 2% rule, cap rate, cash-on-cash, DSCR, the 70% flip rule —
-            before you click. Triangulated rent from HUD SAFMR, scraped comps,
-            and ML, so the number you see is the number that matters.
-          </p>
-
-          <div className="mt-10 flex flex-wrap items-center gap-4">
-            <button
-              type="button"
-              onClick={onCtaClick}
-              className="group inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 ring-1 ring-slate-900/10 transition hover:bg-slate-800 hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
-            >
-              Browse opportunities
-              <ArrowDown className="h-4 w-4 transition-transform group-hover:translate-y-0.5" />
-            </button>
-
-            <Link
-              href="/analytics"
-              className="text-sm font-semibold leading-6 text-slate-700 hover:text-slate-900"
-            >
-              See market analytics <span aria-hidden>→</span>
-            </Link>
+          {/* right: the tape */}
+          <div>
+            <RatioTape
+              bins={stats?.histogram ?? []}
+              thresholdPct={threshold}
+              clears={stats?.onePercentPasses ?? 0}
+              total={stats?.total ?? 0}
+              loading={!stats}
+            />
           </div>
+        </div>
+      </div>
 
-          {/* Three vertical 'how it works' beats — keeps the hero tall on
-              desktop without filling it with stock imagery. */}
-          <dl className="mt-14 grid max-w-3xl grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-3">
-            {[
-              {
-                k: '1',
-                t: 'Score',
-                d: 'Triangulated rent · ML + HUD + scraped comps',
-              },
-              {
-                k: '2',
-                t: 'Filter',
-                d: 'Buy-hold · BRRRR · flip · by rule + deal type',
-              },
-              {
-                k: '3',
-                t: 'Compare',
-                d: 'Side-by-side analysis up to 3 deals',
-              },
-            ].map((step) => (
-              <div key={step.k} className="border-l-2 border-emerald-600/30 pl-4">
-                <dt className="font-mono text-[11px] uppercase tracking-widest text-emerald-700">
-                  Step {step.k}
-                </dt>
-                <dd className="mt-1 text-base font-semibold text-slate-900">
-                  {step.t}
-                </dd>
-                <dd className="mt-1 text-sm leading-6 text-slate-600">
-                  {step.d}
+      {/* ticker */}
+      <div className="border-t border-line bg-white/[0.015]">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <dl className="grid grid-cols-2 md:grid-cols-4">
+            {ticker.map(([label, value, pass], i) => (
+              <div key={label} className={`py-5 ${i === 0 ? '' : 'border-l border-line pl-5'}`}>
+                <dt className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</dt>
+                <dd className={`mt-1.5 font-mono text-[26px] font-semibold tabular-nums ${pass ? 'text-pass-hi' : 'text-white'}`}>
+                  {value}
                 </dd>
               </div>
             ))}
