@@ -19,6 +19,7 @@ interface FeaturedItem {
   primary_photo: string | null;
   property_type: string | null;
   ratio_pct: number | null;
+  target_ratio_pct: number | null;
 }
 
 function formatPrice(n: number | null): string {
@@ -30,10 +31,10 @@ function formatPrice(n: number | null): string {
   }).format(n);
 }
 
-function ratioColor(pct: number | null): string {
+function ratioColor(pct: number | null, threshold = 1.0): string {
   if (pct == null) return 'bg-slate-900/80 text-white';
-  if (pct >= 1.5) return 'bg-emerald-600 text-white';
-  if (pct >= 1.0) return 'bg-emerald-500 text-white';
+  if (pct >= threshold * 1.5) return 'bg-emerald-600 text-white';
+  if (pct >= threshold) return 'bg-emerald-500 text-white';
   return 'bg-amber-500 text-white';
 }
 
@@ -156,7 +157,7 @@ export function FeaturedDeals({ rentCalcPending = 0 }: FeaturedDealsProps) {
                     )}
                     {it.ratio_pct != null && (
                       <span
-                        className={`absolute left-3 top-3 rounded-full px-2.5 py-1 font-mono text-[11px] font-semibold tracking-tight tabular-nums shadow-md backdrop-blur ${ratioColor(it.ratio_pct)}`}
+                        className={`absolute left-3 top-3 rounded-full px-2.5 py-1 font-mono text-[11px] font-semibold tracking-tight tabular-nums shadow-md backdrop-blur ${ratioColor(it.ratio_pct, it.target_ratio_pct ?? 1)}`}
                       >
                         rent ratio · {it.ratio_pct.toFixed(2)}%
                       </span>
@@ -189,12 +190,12 @@ export function FeaturedDeals({ rentCalcPending = 0 }: FeaturedDealsProps) {
                           .join(' · ')}
                       </span>
                     </div>
-                    {/* The line motif at deal scale — where this listing sits vs the rule. */}
+                    {/* The line motif at deal scale — where this listing sits vs its rule. */}
                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
                       <span className="font-mono text-[10px] uppercase tracking-widest text-slate-400">
-                        vs 1% line
+                        vs {(it.target_ratio_pct ?? 1).toFixed(2)}% line
                       </span>
-                      <RatioGauge ratioPct={it.ratio_pct} />
+                      <RatioGauge ratioPct={it.ratio_pct} thresholdPct={it.target_ratio_pct ?? 1} />
                     </div>
                   </div>
                 </Link>

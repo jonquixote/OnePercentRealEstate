@@ -87,7 +87,10 @@ export default function PropertyPage({ params }: { params: Promise<{ id: string 
 
     const { address = '', listing_price = 0, estimated_rent = 0, status = 'watch', images = [], raw_data: rawData = {} } = property;
     const listingUrl = rawData?.property_url || rawData?.url || null;
-    const { isOnePercentRule, monthlyCashflow, capRate, cashOnCash } = calculatePropertyMetrics(listing_price, estimated_rent);
+    // Feed the resolved per-(type, sale_type) buy-hold target so the 1%-rule
+    // badge on the Financials tab matches the rules engine (not a flat 1%).
+    const ruleCfg = property?.target_ratio != null ? { targetRatio: Number(property.target_ratio) } : undefined;
+    const { isOnePercentRule, monthlyCashflow, capRate, cashOnCash } = calculatePropertyMetrics(listing_price, estimated_rent, {}, {}, ruleCfg);
     const schemaData = buildSchemaData(property, id);
 
     return (

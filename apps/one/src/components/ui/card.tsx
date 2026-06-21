@@ -68,17 +68,21 @@ const DISTRESS_LABELS: Record<string, string> = {
 export const PropertyCard = React.memo(function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {
     const { address, listing_price, estimated_rent, financial_snapshot, status } = property;
 
-    const { isOnePercentRule, monthlyCashflow } = calculatePropertyMetrics(listing_price, estimated_rent);
+    const { monthlyCashflow } = calculatePropertyMetrics(listing_price, estimated_rent);
     const hasRent = !!estimated_rent && estimated_rent > 0;
     const hasPrice = !!listing_price && listing_price > 0;
 
     const ratioPct = hasRent && hasPrice ? (estimated_rent / listing_price) * 100 : null;
 
-    // Tier the 1% chip: emerald >= 1, amber 0.85–1, zinc below.
+    // Per-(type, sale_type) buy-hold target, as percent (resolve_rule); default 1%.
+    const targetPct = property.target_ratio != null ? Number(property.target_ratio) * 100 : 1.0;
+
+    // Tier the rule chip relative to the listing's actual target: emerald clears,
+    // amber within 85% of target, zinc below.
     const ratioTone: 'emerald' | 'amber' | 'zinc' = (() => {
         if (ratioPct == null) return 'zinc';
-        if (ratioPct >= 1) return 'emerald';
-        if (ratioPct >= 0.85) return 'amber';
+        if (ratioPct >= targetPct) return 'emerald';
+        if (ratioPct >= targetPct * 0.85) return 'amber';
         return 'zinc';
     })();
 

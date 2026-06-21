@@ -53,21 +53,22 @@ export async function GET(req: Request) {
               l.property_type,
               l.created_at,
               CASE WHEN l.price > 0 AND l.estimated_rent IS NOT NULL AND l.estimated_rent > 0
-                   THEN (l.estimated_rent / l.price * 100)::numeric(6,2) END AS ratio_pct
+                   THEN (l.estimated_rent / l.price * 100)::numeric(6,2) END AS ratio_pct,
+              -- resolved per-(type, sale_type) buy-hold target, as percent, so the
+              -- gauge draws the listing's actual rule line (not a flat 1%).
+              (COALESCE((SELECT target_ratio FROM resolve_rule(l.property_type, l.sale_type, 'buy_hold')), 0.01) * 100)::numeric(6,2) AS target_ratio_pct
             FROM listings l
-            LEFT JOIN property_type_rules ptr ON ptr.property_type = l.property_type
             WHERE l.listing_type = 'for_sale'
               AND l.sale_type = 'standard'
               AND l.price > 0
               AND l.primary_photo IS NOT NULL
               AND public.is_rentable(l.property_type)
               AND l.rent_calc_status = 'done'
-              AND l.price > 0
               AND l.estimated_rent > 0
-              AND (l.estimated_rent / l.price) >= COALESCE(ptr.target_ratio, 0.01)
+              AND (l.estimated_rent / l.price) >= COALESCE((SELECT target_ratio FROM resolve_rule(l.property_type, l.sale_type, 'buy_hold')), 0.01)
           )
           SELECT id, address, city, state, price, estimated_rent,
-                 bedrooms, bathrooms, sqft, primary_photo, property_type, ratio_pct
+                 bedrooms, bathrooms, sqft, primary_photo, property_type, ratio_pct, target_ratio_pct
           FROM ranked
           ORDER BY
             (ratio_pct IS NOT NULL) DESC,
@@ -94,6 +95,7 @@ export async function GET(req: Request) {
       primary_photo: row.primary_photo,
       property_type: row.property_type ?? null,
       ratio_pct: row.ratio_pct != null ? Number(row.ratio_pct) : null,
+      target_ratio_pct: row.target_ratio_pct != null ? Number(row.target_ratio_pct) : null,
     }));
 
     const payload = { items };

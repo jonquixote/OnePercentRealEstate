@@ -46,6 +46,7 @@ export async function GET(req: Request) {
              FROM listings
              WHERE longitude BETWEEN $1 AND $2 AND latitude BETWEEN $3 AND $4
                AND listing_status = 'FOR_SALE'
+               AND sale_type = 'standard'
              GROUP BY ST_SnapToGrid(geometry, $5)
            `;
             params = [minLng, maxLng, minLat, maxLat, 2.0]; // Larger grid for overview

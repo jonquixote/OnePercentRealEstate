@@ -297,6 +297,10 @@ function buildFilterClause(params: ViewportParams) {
     if (params.saleType && params.saleType !== '') {
         parts.push(`LOWER(sale_type) = LOWER($${idx++})`);
         values.push(params.saleType);
+    } else {
+        // Canonical display: default to standard so coexisting distress rows
+        // never double-count clusters / pins (mirrors actions.ts + stats/featured).
+        parts.push(`sale_type = 'standard'`);
     }
 
     if (params.status) {

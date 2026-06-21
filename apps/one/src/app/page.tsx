@@ -308,6 +308,7 @@ export default function Dashboard() {
                 minBeds: filters.minBeds,
                 minBaths: filters.minBaths,
                 status: filters.showSold ? 'sold' : 'for_sale',
+                saleType: filters.saleType,
               }}
             />
             <button

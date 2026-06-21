@@ -1,14 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Check, X, Award, Bookmark, GitCompare, FileDown } from 'lucide-react';
-import { Button, resolveRuleFrom, type RuleConfig } from '@oper/primitives';
+import {
+    Button,
+    resolveRuleFrom,
+    evaluateRules,
+    type RuleConfig,
+    type PropertyInputs,
+    type Strategy,
+    type SaleType,
+    type Grade,
+} from '@oper/primitives';
 import { Card, CardContent } from '@/components/ui/card';
-import { calculatePropertyMetrics } from '@/lib/calculators';
-import { gradeProperty, type Grade } from '@/lib/grading';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
+
+const STRATEGIES: Strategy[] = ['buy_hold', 'brrrr', 'flip', 'str'];
 
 const STRATEGY_LABELS: Record<string, string> = {
     buy_hold: 'Buy & Hold',
@@ -56,6 +65,20 @@ function computeDaysOnMarket(property: any): number | null {
     return days < 0 ? 0 : days;
 }
 
+function fmtByRule(rule: string, v: number): string {
+    if (rule === 'grm' || rule === 'price_to_rent') return `${v.toFixed(1)}×`;
+    if (rule === 'dscr') return v.toFixed(2);
+    if (rule === 'seventy_rule' || rule === 'brrrr_recycle')
+        return `$${Math.round(v).toLocaleString()}`;
+    return `${(v * 100).toFixed(2)}%`;
+}
+function formatRuleValue(r: { rule: string; value: number | null }): string {
+    return r.value != null ? fmtByRule(r.rule, r.value) : '—';
+}
+function formatRuleThreshold(r: { rule: string; threshold: number | null }): string {
+    return r.threshold != null ? fmtByRule(r.rule, r.threshold) : '—';
+}
+
 export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
     const { showToast, ToastView } = useToast();
 
@@ -64,60 +87,89 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
     const rawData = property?.raw_data || {};
     const fin = property?.financial_snapshot || {};
 
-    // Resolve the applicable underwriting rule (per property type + sale type)
-    // from the single source of truth, so the grade + thresholds match the
-    // rules engine rather than a flat 1%.
-    const [cfg, setCfg] = useState<RuleConfig | null>(null);
+    // Underwrite this property for a chosen strategy against the single source of
+    // truth (resolve_rule → evaluateRules). The grade, the per-rule pass/fail
+    // breakdown, and the provisional flag all derive from ONE evaluation.
+    const [strategy, setStrategy] = useState<Strategy>('buy_hold');
+    const [rules, setRules] = useState<RuleConfig[] | null>(null);
     useEffect(() => {
         let cancelled = false;
         fetch('/api/underwriting-rules', { cache: 'no-store' })
             .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
             .then((rows: RuleConfig[]) => {
-                if (cancelled) return;
-                const propType =
-                    property?.property_type ?? rawData?.style ?? rawData?.property_type ?? null;
-                const saleType = property?.sale_type ?? 'standard';
-                setCfg(
-                    resolveRuleFrom(rows, { propertyType: propType, saleType, strategy: 'buy_hold' })
-                );
+                if (!cancelled) setRules(rows);
             })
             .catch(() => {});
         return () => {
             cancelled = true;
         };
-    }, [property, rawData?.style, rawData?.property_type]);
+    }, []);
 
-    const metrics = calculatePropertyMetrics(listing_price, estimated_rent, {}, {}, cfg ?? undefined);
+    const propType: string | null =
+        property?.property_type ?? rawData?.style ?? rawData?.property_type ?? null;
+    const saleType = (property?.sale_type ?? 'standard') as SaleType;
 
-    const sqft = fin?.sqft ?? rawData?.sqft ?? null;
-    const yearBuilt = fin?.year_built ?? rawData?.year_built ?? null;
-    const hoaFee = rawData?.hoa_fee ?? null;
-    const taxAnnual = rawData?.tax_annual_amount ?? null;
-    const daysOnMarket = computeDaysOnMarket(property);
+    const num = (v: unknown): number | null => (v != null && v !== '' ? Number(v) : null);
+    const inputs: PropertyInputs = {
+        price: listing_price,
+        monthlyRent: estimated_rent,
+        sqft: num(fin?.sqft ?? rawData?.sqft),
+        hoaMonthly: num(rawData?.hoa_fee),
+        yearBuilt: num(fin?.year_built ?? rawData?.year_built),
+        daysOnMarket: computeDaysOnMarket(property),
+    };
 
-    const grade = gradeProperty({
-        listing_price: listing_price > 0 ? listing_price : null,
-        estimated_rent: estimated_rent > 0 ? estimated_rent : null,
-        // calculator now returns fractions, matching grading's contract.
-        capRate: metrics.capRate || 0,
-        cashOnCash: metrics.cashOnCash || 0,
-        targetRatio: cfg?.targetRatio ?? undefined,
-        isOnePercentRule: metrics.isOnePercentRule,
-        monthlyCashflow: metrics.monthlyCashflow || 0,
-        daysOnMarket,
-        hoaFee: hoaFee != null ? Number(hoaFee) : null,
-        taxAnnual: taxAnnual != null ? Number(taxAnnual) : null,
-        sqft: sqft != null ? Number(sqft) : null,
-        yearBuilt: yearBuilt != null ? Number(yearBuilt) : null,
-    });
+    const cfg = useMemo(
+        () => (rules ? resolveRuleFrom(rules, { propertyType: propType, saleType, strategy }) : null),
+        [rules, propType, saleType, strategy]
+    );
+    const evaluation = useMemo(
+        () => (cfg ? evaluateRules(inputs, cfg, { propertyType: propType, saleType }) : null),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [cfg, listing_price, estimated_rent, inputs.sqft, inputs.hoaMonthly, inputs.yearBuilt, inputs.daysOnMarket]
+    );
 
-    // Top 3 categories by weight for the inline summary cards.
-    const featured = grade.breakdown
+    const compareHref = `/compare?ids=${encodeURIComponent(property?.id ?? '')}`;
+
+    const strategyChips = (
+        <div className="flex flex-wrap gap-2">
+            {STRATEGIES.map((s) => (
+                <button
+                    key={s}
+                    onClick={() => setStrategy(s)}
+                    className={cn(
+                        'rounded-full px-3 py-1 font-mono text-[11px] font-medium transition-colors',
+                        strategy === s ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    )}
+                >
+                    {STRATEGY_LABELS[s] ?? s}
+                </button>
+            ))}
+        </div>
+    );
+
+    if (!evaluation || !evaluation.grade) {
+        return (
+            <div id="tabpanel-scorecard" role="tabpanel" aria-labelledby="tab-scorecard" className="space-y-6">
+                <div className="flex justify-between">{strategyChips}</div>
+                <div className="h-40 animate-pulse rounded-2xl bg-gray-100" />
+                <div className="h-64 animate-pulse rounded-2xl bg-gray-100" />
+            </div>
+        );
+    }
+
+    const grade = {
+        grade: evaluation.grade,
+        score: evaluation.score ?? 0,
+        headline: evaluation.headline ?? '',
+        breakdown: evaluation.breakdown,
+        pros: evaluation.pros,
+        cons: evaluation.cons,
+    };
+    const featured = [...grade.breakdown]
         .filter((c) => c.available)
         .sort((a, b) => b.weight - a.weight)
         .slice(0, 3);
-
-    const compareHref = `/compare?ids=${encodeURIComponent(property?.id ?? '')}`;
 
     return (
         <div
@@ -126,6 +178,13 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
             aria-labelledby="tab-scorecard"
             className="space-y-8 animate-in fade-in duration-300"
         >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-mono text-[11px] uppercase tracking-widest text-gray-500">
+                    Underwrite as
+                </p>
+                {strategyChips}
+            </div>
+
             <Card className="overflow-hidden">
                 <CardContent className="p-8 sm:p-10">
                     <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-center sm:text-left">
@@ -291,6 +350,54 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
                             </li>
                         ))}
                     </ul>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardContent className="p-6">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                            {STRATEGY_LABELS[strategy] ?? strategy} rule checklist
+                        </h3>
+                        <span className="font-mono text-xs text-gray-500">
+                            {evaluation.passedRules}/{evaluation.applicableRules} cleared
+                        </span>
+                    </div>
+                    {evaluation.rules.length > 0 ? (
+                        <ul className="divide-y divide-gray-100">
+                            {evaluation.rules.map((r) => (
+                                <li key={r.rule} className="flex items-center justify-between gap-4 py-3">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <span
+                                            className={cn(
+                                                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
+                                                !r.available
+                                                    ? 'bg-gray-100 text-gray-400'
+                                                    : r.passes
+                                                      ? 'bg-emerald-100 text-emerald-700'
+                                                      : 'bg-rose-100 text-rose-700'
+                                            )}
+                                        >
+                                            {!r.available ? '–' : r.passes ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                                        </span>
+                                        <span className="truncate text-sm font-medium text-gray-900">{r.label}</span>
+                                    </div>
+                                    <span className="shrink-0 font-mono text-xs text-gray-500">
+                                        {r.available && r.value != null && r.threshold != null
+                                            ? `${formatRuleValue(r)} ${r.comparator === 'gte' ? '≥' : '≤'} ${formatRuleThreshold(r)}`
+                                            : 'no data'}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-sm text-gray-500">No rules evaluated for this strategy.</p>
+                    )}
+                    {evaluation.isProvisional && (
+                        <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            This strategy uses provisional assumptions — treat the result as directional.
+                        </p>
+                    )}
                 </CardContent>
             </Card>
 

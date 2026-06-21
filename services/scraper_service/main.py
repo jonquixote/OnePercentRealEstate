@@ -138,6 +138,7 @@ def scrape_listings(req: ScrapeRequest):
 
         cursor = conn.cursor()
         inserted = 0
+        updated = 0
         skipped = 0
 
         try:
@@ -220,7 +221,8 @@ def scrape_listings(req: ScrapeRequest):
                             address, city, state, zip_code, price, bedrooms, bathrooms,
                             sqft, year_built, property_type, listing_type, images, raw_data,
                             latitude, longitude, status, user_id,
-                            sale_type, sale_type_source, sale_type_signal, address_norm, address_hash
+                            sale_type, sale_type_source, sale_type_signal, sale_type_confidence,
+                            address_norm, address_hash
                         )
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s,
@@ -229,6 +231,7 @@ def scrape_listings(req: ScrapeRequest):
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'foreclosure' ELSE c.sale_type END,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest_flag' ELSE c.sale_type_source END,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest foreclosure filter' ELSE c.sale_type_signal END,
+                            CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 0.95 ELSE c.sale_type_confidence END,
                             n.address_norm,
                             md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), ''))
                         FROM classify_sale_type(%s::jsonb, %s) c,
@@ -249,6 +252,7 @@ def scrape_listings(req: ScrapeRequest):
                             longitude = EXCLUDED.longitude,
                             sale_type_source = EXCLUDED.sale_type_source,
                             sale_type_signal = EXCLUDED.sale_type_signal,
+                            sale_type_confidence = EXCLUDED.sale_type_confidence,
                             address_norm = EXCLUDED.address_norm,
                             address_hash = EXCLUDED.address_hash,
                             updated_at = NOW()
@@ -262,19 +266,22 @@ def scrape_listings(req: ScrapeRequest):
                         bedrooms, bathrooms, sqft, year_built, get_property_type(row),
                         req.listing_type, Json(images), Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
                         'watch', DEFAULT_USER_ID,
-                        req.foreclosure, req.foreclosure, req.foreclosure,
+                        req.foreclosure, req.foreclosure, req.foreclosure, req.foreclosure,
                         row.get('city'), row.get('state'),
                         Json(raw_data), get_property_type(row),
                         address
                     ))
                     result = cursor.fetchone()
                     if result:
-                        inserted += 1
+                        if result[1]:  # was_inserted (xmax = 0)
+                            inserted += 1
+                        else:
+                            updated += 1
                     else:
                         skipped += 1
 
                 # Batch commit every 50 rows to reduce WAL overhead
-                if (inserted + skipped) % 50 == 0:
+                if (inserted + updated + skipped) % 50 == 0:
                     conn.commit()
 
             # Final commit for any remaining rows
@@ -288,8 +295,8 @@ def scrape_listings(req: ScrapeRequest):
             cursor.close()
             conn.close()
 
-        print(f"Completed {req.location}: {inserted} inserted/updated, {skipped} skipped")
-        return {"count": len(clean_records), "inserted": inserted, "skipped": skipped}
+        print(f"Completed {req.location}: {inserted} inserted, {updated} updated, {skipped} skipped")
+        return {"count": len(clean_records), "inserted": inserted, "updated": updated, "skipped": skipped}
 
     except HTTPException:
         raise

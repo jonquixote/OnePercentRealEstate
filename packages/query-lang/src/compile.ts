@@ -33,6 +33,8 @@ const ALLOWED_COLUMNS = new Set([
   'state',
   'city',
   'zip_code',
+  'sale_type',
+  'property_type',
 ]);
 
 export interface CompileResult {

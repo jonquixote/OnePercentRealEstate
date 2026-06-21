@@ -48,4 +48,6 @@ export type {
   Comparator,
   RuleResult,
   RuleEvaluation,
+  GradeCategory,
+  ScoreResult,
 } from "./underwriting";
