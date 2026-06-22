@@ -201,16 +201,21 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       if (!f) return;
       const p = f.properties as any;
       const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates as [number, number];
-      popup
-        .setLngLat([lng, lat])
-        .setHTML(
-          `<div style="font-family:var(--font-geist-sans);min-width:150px">
-             <div style="font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px">${p.address ?? ''}</div>
-             <div style="font-family:var(--font-geist-mono);font-size:14px;font-weight:600;color:#34e0a1;margin-top:2px">${usd0.format(p.price || 0)}</div>
-             <div style="font-size:10px;color:#8a93a6;margin-top:1px">${p.bedrooms ?? '–'} bd · ${p.bathrooms ?? '–'} ba</div>
-           </div>`
-        )
-        .addTo(map);
+      // Build the popup with textContent (auto-escaped) — `address` is scraped
+      // MLS data and must never be injected as raw HTML.
+      const root = document.createElement('div');
+      root.style.cssText = 'font-family:var(--font-geist-sans);min-width:150px';
+      const addr = document.createElement('div');
+      addr.style.cssText = 'font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px';
+      addr.textContent = p.address ?? '';
+      const price = document.createElement('div');
+      price.style.cssText = 'font-family:var(--font-geist-mono);font-size:14px;font-weight:600;color:#34e0a1;margin-top:2px';
+      price.textContent = usd0.format(Number(p.price) || 0);
+      const specs = document.createElement('div');
+      specs.style.cssText = 'font-size:10px;color:#8a93a6;margin-top:1px';
+      specs.textContent = `${p.bedrooms ?? '–'} bd · ${p.bathrooms ?? '–'} ba`;
+      root.append(addr, price, specs);
+      popup.setLngLat([lng, lat]).setDOMContent(root).addTo(map);
     });
     map.on('mouseleave', 'points', () => {
       map.getCanvas().style.cursor = '';
