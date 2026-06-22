@@ -161,6 +161,19 @@
   }
 }
 
+/* dark map popup (raw mapbox-gl) */
+.op-map-popup .mapboxgl-popup-content {
+  background: var(--ink-panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.7);
+}
+.op-map-popup .mapboxgl-popup-tip {
+  border-top-color: var(--ink-panel) !important;
+  border-bottom-color: var(--ink-panel) !important;
+}
+
 /* the dashed rule line + glow, reusable */
 @utility line-rule {
   background-image: repeating-linear-gradient(
