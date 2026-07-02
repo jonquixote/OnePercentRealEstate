@@ -431,7 +431,7 @@ services:
         max-file: "3"
 
   pg_tileserv:
-    image: pramsey/pg_tileserv:v1.4.8
+    image: pramsey/pg_tileserv:latest
     restart: always
     env_file:
       - ../.env
