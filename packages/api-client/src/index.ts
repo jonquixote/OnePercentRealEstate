@@ -19,5 +19,5 @@ export type {
   DeleteSavedSearchInput,
 } from "./hooks";
 export * from "./schemas";
-export { TokenBucket, MapboxGeocoder, CachedGeocoder } from "./geocode";
+export { TokenBucket, CensusGeocoder, NominatimGeocoder, FallbackGeocoder, CachedGeocoder } from "./geocode";
 export type { GeocodeResult, GeocodeProvider } from "./geocode";

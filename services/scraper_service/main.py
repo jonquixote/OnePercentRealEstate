@@ -8,6 +8,8 @@ from psycopg2.extras import Json
 import os
 import urllib.parse
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import sleep
 
 app = FastAPI()
 
@@ -21,8 +23,9 @@ if not DATABASE_URL:
     DB_NAME = os.getenv("DB_NAME", "postgres")
     DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-MAPBOX_TOKEN = os.getenv("NEXT_PUBLIC_MAPBOX_TOKEN")
 DEFAULT_USER_ID = os.getenv("DEFAULT_USER_ID")
+
+CENSUS_BENCHMARK = 'Public_AR_Currenty'
 
 def get_db_connection():
     try:
@@ -31,23 +34,64 @@ def get_db_connection():
         print(f"DB Connect Error: {e}")
         return None
 
-def geocode_address(address):
-    """Geocodes an address using Mapbox."""
-    if not MAPBOX_TOKEN:
+def geocode_address_census(address):
+    if not address:
         return None
     try:
         encoded = urllib.parse.quote(address)
-        url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{encoded}.json"
-        params = {"access_token": MAPBOX_TOKEN, "country": "US", "limit": 1}
-        resp = requests.get(url, params=params, timeout=5)
+        url = f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address={encoded}&benchmark={CENSUS_BENCHMARK}&format=json"
+        resp = requests.get(url, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
-            if data.get("features") and len(data["features"]) > 0:
-                coords = data["features"][0]["center"]
-                return (coords[1], coords[0])  # [lon, lat] -> (lat, lon)
+            matches = data.get('result', {}).get('addressMatches', [])
+            if matches:
+                c = matches[0]['coordinates']
+                return (c['y'], c['x'])
     except Exception as e:
-        print(f"Geocode error: {e}")
+        print(f"Census geocode error: {e}")
     return None
+
+def geocode_address_nominatim(address):
+    if not address:
+        return None
+    try:
+        encoded = urllib.parse.quote(address)
+        url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
+        resp = requests.get(url, headers={'User-Agent': 'OnePercentRealEstate/1.0'}, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                return (float(data[0]['lat']), float(data[0]['lon']))
+    except Exception as e:
+        print(f"Nominatim geocode error: {e}")
+    return None
+
+def batch_geocode(address_list):
+    """Batch geocode: Census (parallel) then Nominatim fallback (sequential, 1 req/sec).
+    
+    address_list: list of (index, address_string) tuples
+    Returns: dict index -> (lat, lon)
+    """
+    results = {}
+    fallback_list = []
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        fut_map = {pool.submit(geocode_address_census, addr): idx for idx, addr in address_list}
+        for fut in as_completed(fut_map):
+            idx = fut_map[fut]
+            coords = fut.result()
+            if coords:
+                results[idx] = coords
+            else:
+                fallback_list.append((idx, dict(address_list)[idx]))
+
+    for idx, addr in fallback_list:
+        coords = geocode_address_nominatim(addr)
+        if coords:
+            results[idx] = coords
+        sleep(1.1)
+
+    return results
 
 def get_property_type(row):
     return row.get('style') or row.get('property_type') or row.get('home_type') or row.get('prop_type')
@@ -82,7 +126,6 @@ def scrape_listings(req: ScrapeRequest):
             foreclosure=req.foreclosure
         )
         
-        # Determine target table based on listing type
         is_rental = req.listing_type == 'for_rent'
         target_table = 'rental_listings' if is_rental else 'listings'
         print(f"Target table: {target_table}")
@@ -93,10 +136,8 @@ def scrape_listings(req: ScrapeRequest):
 
         print(f"df shape: {df.shape}")
 
-        # Deduplicate columns
         df = df.loc[:, ~df.columns.duplicated()]
 
-        # Calculate baths
         if 'full_baths' in df.columns and 'half_baths' in df.columns:
             df['baths'] = df['full_baths'].fillna(0) + df['half_baths'].fillna(0) * 0.5
         elif 'full_baths' in df.columns:
@@ -104,7 +145,6 @@ def scrape_listings(req: ScrapeRequest):
         else:
             df['baths'] = 0
 
-        # Apply filters
         if req.min_price is not None:
             df = df[df['list_price'] >= req.min_price]
         if req.max_price is not None:
@@ -112,10 +152,8 @@ def scrape_listings(req: ScrapeRequest):
         if req.beds_min is not None:
             df = df[df['beds'] >= req.beds_min]
 
-        # Convert to records
         records = df.to_dict(orient='records')
         
-        # Clean NaN values
         clean_records = []
         for rec in records:
             clean_rec = {}
@@ -131,7 +169,21 @@ def scrape_listings(req: ScrapeRequest):
         if not clean_records:
             return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0}
 
-        # Connect to DB
+        # Phase 1: Collect all addresses for batch geocoding
+        address_list = []
+        for i, row in enumerate(clean_records):
+            zip_raw = row.get('zip_code')
+            zip_code = str(zip_raw).split('.')[0] if zip_raw else ""
+            address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
+            if address:
+                address_list.append((i, address))
+
+        # Phase 2: Batch geocode (Census parallel + Nominatim fallback)
+        print(f"Batch geocoding {len(address_list)} addresses...")
+        coords_map = batch_geocode(address_list)
+        print(f"Geocoded {len(coords_map)}/{len(address_list)} addresses")
+
+        # Phase 3: Process and insert
         conn = get_db_connection()
         if not conn:
             raise HTTPException(status_code=500, detail="Database connection failed")
@@ -142,8 +194,7 @@ def scrape_listings(req: ScrapeRequest):
         skipped = 0
 
         try:
-            for row in clean_records:
-                # Build address
+            for i, row in enumerate(clean_records):
                 zip_raw = row.get('zip_code')
                 zip_code = str(zip_raw).split('.')[0] if zip_raw else ""
                 address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
@@ -152,14 +203,12 @@ def scrape_listings(req: ScrapeRequest):
                     skipped += 1
                     continue
 
-                # Extract data from row
                 price = row.get('list_price') or 0
                 bedrooms = row.get('beds')
                 bathrooms = row.get('baths')
                 sqft = row.get('sqft')
                 year_built = row.get('year_built')
 
-                # Prepare raw_data
                 raw_data = dict(row)
                 for k, v in raw_data.items():
                     if isinstance(v, (list, tuple, dict, set)):
@@ -169,15 +218,14 @@ def scrape_listings(req: ScrapeRequest):
                     elif hasattr(v, 'isoformat'):
                         raw_data[k] = v.isoformat()
 
-                # Geocode
-                coords = geocode_address(address)
+                # Use geocoded coordinates, fall back to source coords
+                coords = coords_map.get(i)
                 if coords:
                     raw_data["lat"], raw_data["lon"] = coords
                 else:
                     raw_data["lat"] = row.get('latitude')
                     raw_data["lon"] = row.get('longitude')
 
-                # Images (for sale listings)
                 images = []
                 if row.get('primary_photo'):
                     images.append(row['primary_photo'])
@@ -186,18 +234,14 @@ def scrape_listings(req: ScrapeRequest):
                     if alts and alts.lower() != 'nan':
                         images.extend([u.strip() for u in alts.split(',') if u.strip()])
 
-                # Route to correct table based on listing type
                 if is_rental:
-                    # RENTAL LISTINGS TABLE
                     cursor.execute("SELECT id, price FROM rental_listings WHERE address = %s AND listing_date = CURRENT_DATE", (address,))
                     existing = cursor.fetchone()
                     
                     if existing:
-                        # Already scraped today, skip
                         skipped += 1
                         continue
                     else:
-                        # Insert into rental_listings
                         cursor.execute("""
                             INSERT INTO rental_listings (
                                 address, city, state, zip_code, price, bedrooms, bathrooms,
@@ -211,11 +255,6 @@ def scrape_listings(req: ScrapeRequest):
                         ))
                         inserted += 1
                 else:
-                    # SALES LISTINGS TABLE - Use INSERT ON CONFLICT for atomic upsert.
-                    # sale_type + provenance + address identity are computed IN SQL
-                    # (classify_sale_type + md5) so they match the backfill byte-for-byte.
-                    # The homeharvest foreclosure flag is ground truth, but only coerces
-                    # when the text classifier found nothing more specific (reo/auction/etc).
                     cursor.execute("""
                         INSERT INTO listings (
                             address, city, state, zip_code, price, bedrooms, bathrooms,
@@ -273,18 +312,16 @@ def scrape_listings(req: ScrapeRequest):
                     ))
                     result = cursor.fetchone()
                     if result:
-                        if result[1]:  # was_inserted (xmax = 0)
+                        if result[1]:
                             inserted += 1
                         else:
                             updated += 1
                     else:
                         skipped += 1
 
-                # Batch commit every 50 rows to reduce WAL overhead
                 if (inserted + updated + skipped) % 50 == 0:
                     conn.commit()
 
-            # Final commit for any remaining rows
             conn.commit()
 
         except Exception as e:

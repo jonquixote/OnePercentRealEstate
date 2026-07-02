@@ -8,7 +8,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
   REDIS_URL: z.string().optional(),
   ADMIN_API_KEY: z.string().optional(),
-  NEXT_PUBLIC_MAPBOX_TOKEN: z.string().optional(),
+
   HUD_API_TOKEN: z.string().optional(),
   FRED_API_KEY: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),

@@ -16,8 +16,6 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 DEFAULT_USER_ID = os.getenv("DEFAULT_USER_ID")
-MAPBOX_TOKEN = os.getenv("NEXT_PUBLIC_MAPBOX_TOKEN")
-
 if not DATABASE_URL:
     # Construct from parts as fallback
     DB_USER = os.getenv("DB_USER", "postgres")
@@ -35,30 +33,39 @@ def get_db_connection():
         print(f"Error connecting to database: {e}", file=sys.stderr)
         return None
 
+CENSUS_BENCHMARK = 'Public_AR_Currenty'
+
 def geocode_address(address):
-    """Geocodes an address using Mapbox."""
-    if not MAPBOX_TOKEN:
+    """Geocodes an address using Census Bureau (primary) + Nominatim (fallback)."""
+    if not address:
         return None
-        
+
+    # Census (no meaningful rate limit)
     try:
         encoded = urllib.parse.quote(address)
-        url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{encoded}.json"
-        params = {
-            "access_token": MAPBOX_TOKEN,
-            "country": "US",
-            "limit": 1
-        }
-        
-        resp = requests.get(url, params=params, timeout=5)
-        
+        url = f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address={encoded}&benchmark={CENSUS_BENCHMARK}&format=json"
+        resp = requests.get(url, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
-            if data.get("features") and len(data["features"]) > 0:
-                coords = data["features"][0]["center"]
-                return (coords[1], coords[0])  # [lon, lat] -> (lat, lon)
+            matches = data.get('result', {}).get('addressMatches', [])
+            if matches:
+                c = matches[0]['coordinates']
+                return (c['y'], c['x'])
     except Exception as e:
-        print(f"Geocode error: {e}", file=sys.stderr)
-    
+        print(f"Census geocode error: {e}", file=sys.stderr)
+
+    # Nominatim fallback (1 req/sec)
+    try:
+        encoded = urllib.parse.quote(address)
+        url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
+        resp = requests.get(url, headers={'User-Agent': 'OnePercentRealEstate/1.0'}, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                return (float(data[0]['lat']), float(data[0]['lon']))
+    except Exception as e:
+        print(f"Nominatim geocode error: {e}", file=sys.stderr)
+
     return None
 
 def get_property_type(row):

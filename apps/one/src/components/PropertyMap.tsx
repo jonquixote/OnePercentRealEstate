@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
-
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import type * as GeoJSON from 'geojson';
 
 interface PropertyMapProps {
   filters?: {
@@ -37,14 +36,14 @@ const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: 
  */
 export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-  const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const popupRef = useRef<maplibregl.Popup | null>(null);
   const router = useRouter();
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const reqIdRef = useRef(0);
 
-  const buildUrl = useCallback((map: mapboxgl.Map) => {
+  const buildUrl = useCallback((map: maplibregl.Map) => {
     const b = map.getBounds()!;
     const zoom = Math.floor(map.getZoom());
     const f = filtersRef.current ?? {};
@@ -94,7 +93,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
           });
         }
       }
-      (map.getSource('listings') as mapboxgl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
+      (map.getSource('listings') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
     } catch {
       /* ignore */
     }
@@ -102,16 +101,15 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    mapboxgl.accessToken = MAPBOX_TOKEN;
-    const map = new mapboxgl.Map({
+    const map = new maplibregl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
+      style: 'https://tiles.openfreemap.org/styles/dark',
       center: [-98.6, 39.8],
       zoom: 3.5,
       attributionControl: false,
     });
     mapRef.current = map;
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
     // The map lives in a sticky / calc()-height column that may not have its
     // final size when Mapbox measures the container at construction (canvas can
@@ -193,7 +191,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
     });
 
     // hover popup on points
-    const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, className: 'op-map-popup', offset: 12 });
+    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'op-map-popup', offset: 12 });
     popupRef.current = popup;
     map.on('mouseenter', 'points', (e) => {
       map.getCanvas().style.cursor = 'pointer';

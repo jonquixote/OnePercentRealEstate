@@ -1,15 +1,15 @@
 /**
- * Mapbox geocoding with token bucket rate limit + permanent cache.
+ * Geocoding with Census Bureau (primary) + Nominatim (fallback).
+ * Cached in geocode_cache table.
  *
- * Token bucket: 10 req/sec ceiling per Mapbox SLA. Implement async
- * token-taking so workers can yield while waiting for capacity.
+ * Token bucket: 10 req/sec default. Census has no documented rate limit
+ * but we pace to be a good citizen. Nominatim fallback adds 1 req/sec
+ * delay via its own limiter.
  *
  * Cache: permanent storage of (query_hash -> lat/lon). Misses expire
  * after 7d so transient outages don't poison the cache forever.
  *
- * This module is consumed by Node workers (today: future; tomorrow: scraper).
- * The Python scraper currently talks to Mapbox directly; Wave 8 will
- * retrofit it to use this service via HTTP.
+ * This module is consumed by Node workers.
  */
 
 import type { Pool } from 'pg';
@@ -40,8 +40,8 @@ export class TokenBucket {
       throw new Error('TokenBucket capacity and refillPerSec must be positive');
     }
     this.capacity = capacity;
-    this.available = capacity;
     this.refillPerSec = refillPerSec;
+    this.available = capacity;
     this.lastRefillTime = Date.now();
   }
 
@@ -99,60 +99,85 @@ export interface GeocodeProvider {
 }
 
 // ---------------------------------------------------------------------------
-// Mapbox Geocoder
+// Census Bureau Geocoder (primary)
 // ---------------------------------------------------------------------------
 
-/**
- * Fetch-based Mapbox geocoding. Calls the Places API forward search endpoint.
- * Returns the first feature's [lng, lat]; treats network errors and HTTP
- * errors as null (no throw).
- */
-export class MapboxGeocoder implements GeocodeProvider {
-  constructor(private token: string) {
-    if (!token || token.length === 0) {
-      throw new Error('Mapbox token required');
-    }
-  }
+const CENSUS_BENCHMARK = 'Public_AR_Currenty';
 
+export class CensusGeocoder implements GeocodeProvider {
   async lookup(query: string): Promise<GeocodeResult | null> {
     try {
       const encoded = encodeURIComponent(query);
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encoded}.json?access_token=${this.token}`;
+      const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encoded}&benchmark=${CENSUS_BENCHMARK}&format=json`;
 
       const response = await fetch(url, {
-        method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000), // 5s timeout
+        signal: AbortSignal.timeout(5000),
       });
 
-      if (!response.ok) {
-        // 4xx, 5xx — treat as null, log if necessary
-        return null;
-      }
+      if (!response.ok) return null;
 
       const json = (await response.json()) as {
-        features?: Array<{ geometry?: { coordinates?: [number, number] } }>;
+        result?: { addressMatches?: Array<{ coordinates: { x: number; y: number } }> };
       };
 
-      const features = json.features || [];
-      if (features.length === 0) {
-        return null;
-      }
+      const match = json?.result?.addressMatches?.[0];
+      if (!match?.coordinates) return null;
 
-      const coords = features[0].geometry?.coordinates;
-      if (!coords || coords.length < 2) {
-        return null;
-      }
-
-      const [lng, lat] = coords;
       return {
-        latitude: lat,
-        longitude: lng,
+        latitude: match.coordinates.y,
+        longitude: match.coordinates.x,
       };
     } catch {
-      // Network error, timeout, or parse error — return null
       return null;
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Nominatim Geocoder (fallback for addresses Census rejects)
+// ---------------------------------------------------------------------------
+
+export class NominatimGeocoder implements GeocodeProvider {
+  async lookup(query: string): Promise<GeocodeResult | null> {
+    try {
+      const encoded = encodeURIComponent(query);
+      const url = `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`;
+
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'OnePercentRealEstate/1.0' },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!response.ok) return null;
+
+      const json = (await response.json()) as Array<{ lat: string; lon: string }>;
+      if (!json?.[0]) return null;
+
+      return {
+        latitude: parseFloat(json[0].lat),
+        longitude: parseFloat(json[0].lon),
+      };
+    } catch {
+      return null;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fallback Geocoder (primary → fallback chain)
+// ---------------------------------------------------------------------------
+
+export class FallbackGeocoder implements GeocodeProvider {
+  constructor(
+    private primary: GeocodeProvider,
+    private fallback: GeocodeProvider
+  ) {}
+
+  async lookup(query: string): Promise<GeocodeResult | null> {
+    const result = await this.primary.lookup(query);
+    if (result) return result;
+    return this.fallback.lookup(query);
   }
 }
 
@@ -166,8 +191,7 @@ export class MapboxGeocoder implements GeocodeProvider {
  *  2. On hit: return cached result (ignore expiry for successful lookups).
  *  3. On miss: acquire a token, call provider, upsert result into cache, return.
  *
- * Token bucket: one global instance per CachedGeocoder. Workers can share
- * a single CachedGeocoder to coordinate rate limiting.
+ * Accepts an optional provider name for the cache table (default 'census').
  */
 export class CachedGeocoder {
   private bucket: TokenBucket;
@@ -175,27 +199,24 @@ export class CachedGeocoder {
   constructor(
     private pool: Pool,
     private provider: GeocodeProvider,
+    private providerName: string = 'census',
     bucket?: TokenBucket
   ) {
-    // Default: 10 req/sec per Mapbox SLA. Caller can override via ctor param.
     this.bucket = bucket || new TokenBucket(10, 10);
   }
 
   async lookup(query: string): Promise<GeocodeResult | null> {
     const queryHash = this.hashQuery(query);
 
-    // Check cache
     const cached = await this.checkCache(queryHash);
     if (cached !== undefined) {
       return cached;
     }
 
-    // Cache miss: acquire token, call provider, write result
     await this.bucket.take();
 
     const result = await this.provider.lookup(query);
 
-    // Write to cache
     await this.writeCache(queryHash, query, result);
 
     return result;
@@ -217,7 +238,7 @@ export class CachedGeocoder {
       );
 
       if (result.rows.length === 0) {
-        return undefined; // Not in cache
+        return undefined;
       }
 
       const row = result.rows[0] as {
@@ -227,7 +248,6 @@ export class CachedGeocoder {
         expires_at: string | null;
       };
 
-      // If it's a miss and expired, treat as cache miss
       if (row.miss && row.expires_at) {
         const expiresAt = new Date(row.expires_at);
         if (expiresAt < new Date()) {
@@ -235,7 +255,6 @@ export class CachedGeocoder {
         }
       }
 
-      // Successful lookup or non-expired miss
       if (!row.miss && row.latitude && row.longitude) {
         return {
           latitude: row.latitude,
@@ -243,10 +262,9 @@ export class CachedGeocoder {
         };
       }
 
-      // Expired miss or successful null
       return null;
     } catch {
-      return undefined; // Cache query failed; treat as miss
+      return undefined;
     }
   }
 
@@ -257,7 +275,6 @@ export class CachedGeocoder {
   ): Promise<void> {
     try {
       if (result) {
-        // Successful lookup — no expiry
         await this.pool.query(
           `INSERT INTO geocode_cache (query_hash, query, latitude, longitude, provider, miss, attempts)
            VALUES ($1, $2, $3, $4, $5, false, 1)
@@ -265,10 +282,9 @@ export class CachedGeocoder {
              attempts = geocode_cache.attempts + 1,
              resolved_at = now()
            WHERE geocode_cache.miss = false`,
-          [queryHash, query, result.latitude, result.longitude, 'mapbox']
+          [queryHash, query, result.latitude, result.longitude, this.providerName]
         );
       } else {
-        // Miss — expires after 7 days
         await this.pool.query(
           `INSERT INTO geocode_cache (query_hash, query, miss, attempts, expires_at)
            VALUES ($1, $2, true, 1, now() + interval '7 days')

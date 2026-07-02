@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Geocoding script using Mapbox API.
+Geocoding script using Census Bureau (primary) + Nominatim (fallback).
 """
 import os
 import time
@@ -9,53 +9,57 @@ import requests
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-# Load environment variables
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../.env.local')
 load_dotenv(dotenv_path=env_path)
 
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")
-MAPBOX_TOKEN = os.getenv("NEXT_PUBLIC_MAPBOX_TOKEN")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("Error: Missing Supabase credentials")
     exit(1)
 
-if not MAPBOX_TOKEN:
-    print("Error: Missing NEXT_PUBLIC_MAPBOX_TOKEN")
-    exit(1)
-
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+CENSUS_BENCHMARK = 'Public_AR_Currenty'
+
 def geocode_address(address):
-    """Geocodes an address using Mapbox."""
+    """Geocodes via Census Bureau (no rate limit), falls back to Nominatim (1 req/sec)."""
+    if not address:
+        return None
+
+    # Census
     try:
         encoded = urllib.parse.quote(address)
-        url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{encoded}.json"
-        params = {
-            "access_token": MAPBOX_TOKEN,
-            "country": "US",
-            "limit": 1
-        }
-        
-        resp = requests.get(url, params=params, timeout=10)
-        
+        url = f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address={encoded}&benchmark={CENSUS_BENCHMARK}&format=json"
+        resp = requests.get(url, timeout=10)
         if resp.status_code == 200:
             data = resp.json()
-            if data.get("features") and len(data["features"]) > 0:
-                coords = data["features"][0]["center"]
-                return (coords[1], coords[0])  # [lon, lat] -> (lat, lon)
+            matches = data.get('result', {}).get('addressMatches', [])
+            if matches:
+                c = matches[0]['coordinates']
+                return (c['y'], c['x'])
     except Exception as e:
-        print(f"  Error: {e}")
-    
+        print(f"  Census error: {e}")
+
+    # Nominatim fallback
+    try:
+        encoded = urllib.parse.quote(address)
+        url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
+        resp = requests.get(url, headers={'User-Agent': 'OnePercentRealEstate/1.0'}, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                return (float(data[0]['lat']), float(data[0]['lon']))
+    except Exception as e:
+        print(f"  Nominatim error: {e}")
+
     return None
 
 def backfill():
-    print("Starting Mapbox geocode backfill (Newest First)...")
+    print("Starting geocode backfill (Census + Nominatim)...")
     
-    # Process mostly the newest ones first as they appear on the dashboard
     response = supabase.table("properties").select("id, address, raw_data").order("created_at", desc=True).limit(1000).execute()
-    
     
     if not response.data:
         print("No properties found.")
@@ -103,8 +107,8 @@ def backfill():
                 fail += 1
         else:
             fail += 1
-        
-        time.sleep(0.1)  # Mapbox allows 600/min
+
+        time.sleep(0.05)
     
     print(f"\n=== Done ===")
     print(f"Success: {success}")

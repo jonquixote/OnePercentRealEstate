@@ -37,7 +37,7 @@ jobs:
       ADMIN_API_KEY: ci_test_admin_key_16_chars
       STRIPE_SECRET_KEY: sk_test_ci
       STRIPE_WEBHOOK_SECRET: whsec_ci
-      NEXT_PUBLIC_MAPBOX_TOKEN: ci_token
+
 
     steps:
       - uses: actions/checkout@v4

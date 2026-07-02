@@ -3,12 +3,6 @@ services:
     build:
       context: ../
       dockerfile: Dockerfile
-      args:
-        # Next.js inlines NEXT_PUBLIC_* into the client bundle at build
-        # time, so the value at runtime is irrelevant. The .env* files
-        # are excluded by .dockerignore to keep secrets out of the image,
-        # so we must pass the public mapbox token explicitly.
-        NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN}
     restart: always
     ports:
       - "3001:3000"

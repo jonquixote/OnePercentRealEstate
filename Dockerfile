@@ -21,13 +21,6 @@ COPY --from=deps /app/packages/primitives/node_modules ./packages/primitives/nod
 COPY --from=deps /app/packages/api-client/node_modules ./packages/api-client/node_modules
 COPY . .
 
-# .env* is in .dockerignore, so we pass the only NEXT_PUBLIC_ var we
-# need at build time as a build arg. Next.js inlines NEXT_PUBLIC_*
-# references into the client bundle, so without this the map would
-# fail with "Mapbox Token Missing" in production.
-ARG NEXT_PUBLIC_MAPBOX_TOKEN=missing
-ENV NEXT_PUBLIC_MAPBOX_TOKEN=${NEXT_PUBLIC_MAPBOX_TOKEN}
-
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=postgresql://placeholder:placeholder@db:5432/db
 ENV REDIS_URL=redis://:placeholder@redis:6379
