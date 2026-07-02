@@ -129,3 +129,47 @@ export const FilteredListingsResponseSchema = z.object({
 export type FilteredListingsResponse = z.infer<
   typeof FilteredListingsResponseSchema
 >;
+
+// -----------------------------------------------------------------------------
+// Stats & Featured — homepage (Phase 3, Plan 6)
+// -----------------------------------------------------------------------------
+
+export const StatsResponseSchema = z.object({
+  total: z.number(),
+  onePercentPasses: z.number(),
+  medianRatioPct: z.number().nullable(),
+  markets: z.number(),
+  rentable: z.number(),
+  rentCalcPending: z.number(),
+  histogram: z.array(z.object({
+    loPct: z.number(),
+    hiPct: z.number(),
+    count: z.number(),
+  })),
+  thresholdPct: z.number(),
+  strategy: z.string(),
+  lastUpdated: z.string().nullable(),
+});
+export type StatsResponse = z.infer<typeof StatsResponseSchema>;
+
+export const FeaturedItemSchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  address: z.string(),
+  city: z.string().nullable(),
+  state: z.string().nullable(),
+  price: z.number(),
+  estimated_rent: z.number().nullable(),
+  bedrooms: z.number().nullable(),
+  bathrooms: z.number().nullable(),
+  sqft: z.number().nullable(),
+  primary_photo: z.string().nullable(),
+  property_type: z.string().nullable(),
+  ratio_pct: z.number().nullable(),
+  target_ratio_pct: z.number().nullable(),
+});
+export type FeaturedItem = z.infer<typeof FeaturedItemSchema>;
+
+export const FeaturedResponseSchema = z.object({
+  items: z.array(FeaturedItemSchema),
+});
+export type FeaturedResponse = z.infer<typeof FeaturedResponseSchema>;

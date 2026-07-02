@@ -11,6 +11,8 @@ export {
   useSaveSearch,
   useDeleteSavedSearch,
   useFilteredListings,
+  useStats,
+  useFeatured,
 } from "./hooks";
 export type {
   ViewportParams,
@@ -18,6 +20,7 @@ export type {
   SaveSearchInput,
   DeleteSavedSearchInput,
 } from "./hooks";
+export type { StatsResponse, FeaturedItem, FeaturedResponse } from "./schemas";
 export * from "./schemas";
 export { TokenBucket, CensusGeocoder, NominatimGeocoder, FallbackGeocoder, CachedGeocoder } from "./geocode";
 export type { GeocodeResult, GeocodeProvider } from "./geocode";

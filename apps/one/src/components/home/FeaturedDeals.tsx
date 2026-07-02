@@ -1,27 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 import { RatioGauge } from './RatioGauge';
 import { STRATEGY_BY_ID, type Strategy } from '@/lib/strategies';
-
-interface FeaturedItem {
-  id: string;
-  address: string;
-  city: string | null;
-  state: string | null;
-  price: number | null;
-  estimated_rent: number | null;
-  bedrooms: number | null;
-  bathrooms: number | null;
-  sqft: number | null;
-  primary_photo: string | null;
-  property_type: string | null;
-  ratio_pct: number | null;
-  target_ratio_pct: number | null;
-}
+import { useFeatured } from '@oper/api-client';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -37,28 +21,19 @@ interface FeaturedDealsProps {
 }
 
 export function FeaturedDeals({ strategy, rentCalcPending = 0 }: FeaturedDealsProps) {
-  const [items, setItems] = useState<FeaturedItem[] | null>(null);
-  const [errored, setErrored] = useState(false);
+  const { data, error } = useFeatured(strategy, 6);
   const meta = STRATEGY_BY_ID[strategy];
+  const items = data?.items ?? null;
 
-  useEffect(() => {
-    let cancelled = false;
-    setItems(null);
-    setErrored(false);
-    fetch(`/api/featured?limit=6&strategy=${strategy}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((j) => {
-        if (!cancelled) setItems(j.items);
-      })
-      .catch(() => {
-        if (!cancelled) setErrored(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [strategy]);
-
-  if (errored) return null;
+  if (error) {
+    return (
+      <section aria-labelledby="featured-headline" className="border-t border-line bg-ink">
+        <div className="mx-auto max-w-7xl px-6 py-16 lg:px-8">
+          <p className="text-sm text-muted-foreground">Failed to load featured deals.</p>
+        </div>
+      </section>
+    );
+  }
   const hasItems = items && items.length > 0;
 
   return (

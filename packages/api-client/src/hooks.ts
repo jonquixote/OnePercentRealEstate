@@ -16,6 +16,8 @@ import {
   SavedSearchListSchema,
   SavedSearchSchema,
   FilteredListingsResponseSchema,
+  StatsResponseSchema,
+  FeaturedResponseSchema,
   type PropertyListItem,
   type PropertyListResponseWithCursor,
   type ViewportResponse,
@@ -233,6 +235,37 @@ export function useFilteredListings(
     enabled,
     staleTime: 30_000,
     ...rest,
+  });
+}
+
+/** Fetch homepage stats for a given strategy. Polls every 120s. */
+export function useStats(strategy: string = "buy_hold") {
+  return useQuery({
+    queryKey: ["stats", strategy],
+    queryFn: async () => {
+      const res = await fetch(`/api/stats?strategy=${encodeURIComponent(strategy)}`);
+      if (!res.ok) throw new Error("Failed to fetch stats");
+      return StatsResponseSchema.parse(await res.json());
+    },
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+    retry: 3,
+  });
+}
+
+/** Fetch featured deals for a given strategy. */
+export function useFeatured(strategy: string = "buy_hold", limit: number = 6) {
+  return useQuery({
+    queryKey: ["featured", strategy, limit],
+    queryFn: async () => {
+      const res = await fetch(`/api/featured?limit=${limit}&strategy=${encodeURIComponent(strategy)}`);
+      if (!res.ok) throw new Error("Failed to fetch featured");
+      const json = await res.json();
+      return FeaturedResponseSchema.parse(json);
+    },
+    refetchInterval: 600_000,
+    staleTime: 300_000,
+    retry: 3,
   });
 }
 

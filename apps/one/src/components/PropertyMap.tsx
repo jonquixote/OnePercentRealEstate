@@ -121,6 +121,12 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
     map.on('load', () => {
       map.resize();
       map.addSource('listings', { type: 'geojson', data: EMPTY });
+      map.addSource('listings-mvt', {
+        type: 'vector',
+        tiles: ['/tiles/public.listings_mvt/{z}/{x}/{y}.pbf?p_listing_status=for_sale'],
+        minzoom: 0,
+        maxzoom: 20,
+      });
 
       // cluster circles
       map.addLayer({
@@ -156,6 +162,21 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
         type: 'circle',
         source: 'listings',
         filter: ['!', ['has', 'cluster']],
+        paint: {
+          'circle-color': '#34e0a1',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 14, 8, 16, 11],
+          'circle-stroke-color': '#0b1220',
+          'circle-stroke-width': 1.5,
+          'circle-opacity': 0.95,
+        },
+      });
+
+      map.addLayer({
+        id: 'mvt-points',
+        type: 'circle',
+        source: 'listings-mvt',
+        'source-layer': 'public.listings_mvt',
+        minzoom: 10,
         paint: {
           'circle-color': '#34e0a1',
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 14, 8, 16, 11],

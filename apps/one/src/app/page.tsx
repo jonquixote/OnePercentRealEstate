@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useStats } from '@oper/api-client';
 import { PropertyCard } from '@/components/ui/card';
 import Header from '@/components/Header';
 import { Loader2, Search, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
@@ -33,19 +34,6 @@ interface Property {
   created_at?: string;
 }
 
-interface HistogramBin { loPct: number; hiPct: number; count: number }
-interface Stats {
-  total: number;
-  onePercentPasses: number;
-  medianRatioPct: number | null;
-  markets: number;
-  rentable: number;
-  rentCalcPending: number;
-  histogram: HistogramBin[];
-  thresholdPct: number;
-  strategy: string;
-}
-
 import { getProperties } from '@/app/actions';
 
 export default function Dashboard() {
@@ -57,7 +45,6 @@ export default function Dashboard() {
   const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
   const [showMap, setShowMap] = useState(true);
   const [sortBy, setSortBy] = useState('one_percent_high');
-  const [stats, setStats] = useState<Stats | null>(null);
 
   const opportunitiesRef = useRef<HTMLDivElement | null>(null);
   const scrollToOpportunities = useCallback(() => {
@@ -69,23 +56,10 @@ export default function Dashboard() {
   const filters = useMemo(() => toFilterState(qs), [qs]);
   const strategy = asStrategy(qs.strat);
   const stratMeta = STRATEGY_BY_ID[strategy];
+  const { data: stats } = useStats(strategy);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast, ToastView } = useToast();
-
-  // Strategy-aware stats (drives hero tape + ticker + pulse). Polls every 120s.
-  useEffect(() => {
-    let cancelled = false;
-    const fetchStats = () => {
-      fetch(`/api/stats?strategy=${strategy}`, { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-        .then((j: Stats) => { if (!cancelled) setStats(j); })
-        .catch(() => {});
-    };
-    fetchStats();
-    const t = setInterval(fetchStats, 120_000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, [strategy]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -150,7 +124,7 @@ export default function Dashboard() {
       <HomeHero
         strategy={strategy}
         onStrategy={(s) => setQs({ strat: s })}
-        stats={stats}
+        stats={stats ?? null}
         onBrowse={scrollToOpportunities}
       />
       <FeaturedDeals strategy={strategy} rentCalcPending={stats?.rentCalcPending ?? 0} />
