@@ -18,7 +18,7 @@ CREATE OR REPLACE FUNCTION public.listings_mvt(
     p_min_price numeric DEFAULT NULL,
     p_max_price numeric DEFAULT NULL,
     p_min_beds integer DEFAULT NULL,
-    p_min_baths integer DEFAULT NULL,
+    p_min_baths numeric DEFAULT NULL,
     p_property_type text DEFAULT NULL
 )
 RETURNS bytea
@@ -35,7 +35,10 @@ BEGIN
     bounds     := ST_TileEnvelope(z, x, y);
     bounds4326 := ST_Transform(bounds, 4326);
 
-    IF z <= 7 AND p_listing_status = 'for_sale' AND p_sale_type = 'standard' THEN
+    IF z <= 7 AND p_listing_status = 'for_sale' AND p_sale_type = 'standard'
+       AND p_min_price IS NULL AND p_max_price IS NULL
+       AND p_min_beds IS NULL AND p_min_baths IS NULL
+       AND p_property_type IS NULL THEN
         -- LOW ZOOM, standard view: pre-computed MV (standard-only) — fast path.
         -- Note: MV does not support dynamic per-request filters; the MV is used
         -- as-is. This is acceptable since zoomed-out tiles are small and the

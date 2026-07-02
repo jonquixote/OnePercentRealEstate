@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 import { RatioGauge } from './RatioGauge';
 import { STRATEGY_BY_ID, type Strategy } from '@/lib/strategies';
-import { useFeatured } from '@oper/api-client';
+import { useFeatured, type FeaturedItem } from '@oper/api-client';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -60,7 +60,7 @@ export function FeaturedDeals({ strategy, rentCalcPending = 0 }: FeaturedDealsPr
               <p className="mt-1 text-[14px] text-muted-foreground">Top deals appear here once rent estimates complete.</p>
             </div>
           ) : (
-            (items ?? Array.from({ length: 6 })).map((it: any, idx) => {
+            (items ?? Array.from({ length: 6 })).map((it: FeaturedItem | null, idx) => {
               if (!it) {
                 return (
                   <div key={`s-${idx}`} className="overflow-hidden rounded-2xl border border-line bg-ink-panel">

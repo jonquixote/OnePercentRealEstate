@@ -18,6 +18,9 @@ import {
   FilteredListingsResponseSchema,
   StatsResponseSchema,
   FeaturedResponseSchema,
+  type StatsResponse,
+  type FeaturedItem,
+  type FeaturedResponse,
   type PropertyListItem,
   type PropertyListResponseWithCursor,
   type ViewportResponse,
@@ -242,11 +245,11 @@ export function useFilteredListings(
 export function useStats(strategy: string = "buy_hold") {
   return useQuery({
     queryKey: ["stats", strategy],
-    queryFn: async () => {
-      const res = await fetch(`/api/stats?strategy=${encodeURIComponent(strategy)}`);
-      if (!res.ok) throw new Error("Failed to fetch stats");
-      return StatsResponseSchema.parse(await res.json());
-    },
+    queryFn: ({ signal }) =>
+      fetchJson<StatsResponse>(
+        `/api/stats?strategy=${encodeURIComponent(strategy)}`,
+        { signal, schema: StatsResponseSchema },
+      ),
     refetchInterval: 120_000,
     staleTime: 60_000,
     retry: 3,
@@ -257,12 +260,11 @@ export function useStats(strategy: string = "buy_hold") {
 export function useFeatured(strategy: string = "buy_hold", limit: number = 6) {
   return useQuery({
     queryKey: ["featured", strategy, limit],
-    queryFn: async () => {
-      const res = await fetch(`/api/featured?limit=${limit}&strategy=${encodeURIComponent(strategy)}`);
-      if (!res.ok) throw new Error("Failed to fetch featured");
-      const json = await res.json();
-      return FeaturedResponseSchema.parse(json);
-    },
+    queryFn: ({ signal }) =>
+      fetchJson<FeaturedResponse>(
+        `/api/featured?limit=${limit}&strategy=${encodeURIComponent(strategy)}`,
+        { signal, schema: FeaturedResponseSchema },
+      ),
     refetchInterval: 600_000,
     staleTime: 300_000,
     retry: 3,
