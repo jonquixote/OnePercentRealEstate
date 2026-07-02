@@ -111,7 +111,7 @@ Middleware is a pass-through. All API routes are publicly accessible. The matche
 
 | Secret | Location | Action |
 |--------|----------|--------|
-| Server root password `appo0-buXbym-cijzy` | All `.exp` files, `setup_server.sh` | Rotate VPS password immediately |
+| Server root password `[REDACTED]` | All `.exp` files, `setup_server.sh` | Rotate VPS password immediately |
 | Postgres password `root_password_change_me_please` | `db.ts:12`, `docker-compose.yml:18,59,103`, 8 Python files | Generate new, update all references |
 | n8n password `n8n_password_change_me_please` | `docker-compose.yml:43` | Rotate |
 | Stripe live keys (`sk_live_...`, `pk_live_...`) | `.env.local:3-4` | Rotate in Stripe dashboard |

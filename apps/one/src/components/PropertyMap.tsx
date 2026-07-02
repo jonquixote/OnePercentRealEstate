@@ -28,12 +28,6 @@ type ViewportResponse =
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-/**
- * Map rebuilt on raw Mapbox GL + the /api/properties/viewport GeoJSON API.
- * No pg_tileserv / vector tiles / nginx tile proxy — a plain geojson source
- * whose data we refresh on every move. Server clusters below z14, individual
- * points at z14+. This is the canonical, reliable Mapbox clustering pattern.
- */
 export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -62,6 +56,17 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
     if (f.status) p.set('status', f.status);
     if (f.saleType) p.set('saleType', f.saleType);
     return `/api/properties/viewport?${p.toString()}`;
+  }, []);
+
+  const getTileUrl = useCallback(() => {
+    const f = filtersRef.current ?? {};
+    const p = new URLSearchParams({ p_listing_status: f.status ?? 'for_sale' });
+    if (f.minPrice) p.set('p_min_price', String(f.minPrice));
+    if (f.maxPrice && f.maxPrice < 10000000) p.set('p_max_price', String(f.maxPrice));
+    if (f.minBeds) p.set('p_min_beds', String(f.minBeds));
+    if (f.minBaths) p.set('p_min_baths', String(f.minBaths));
+    if (f.propertyType) p.set('p_property_type', f.propertyType);
+    return `/tiles/public.listings_mvt/{z}/{x}/{y}.pbf?${p.toString()}`;
   }, []);
 
   const refresh = useCallback(async () => {
@@ -121,12 +126,19 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
     map.on('load', () => {
       map.resize();
       map.addSource('listings', { type: 'geojson', data: EMPTY });
+      map.addSource('listings-mvt', {
+        type: 'vector',
+        tiles: [getTileUrl()],
+        minzoom: 0,
+        maxzoom: 20,
+      });
 
-      // cluster circles
+      // cluster circles — low zoom only (MVT takes over at z10+)
       map.addLayer({
         id: 'clusters',
         type: 'circle',
         source: 'listings',
+        maxzoom: 10,
         filter: ['==', ['get', 'cluster'], true],
         paint: {
           'circle-color': '#0e9f6e',
@@ -136,11 +148,12 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
           'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 12, 50, 18, 500, 26, 5000, 36, 50000, 48],
         },
       });
-      // cluster counts
+      // cluster counts — low zoom only
       map.addLayer({
         id: 'cluster-count',
         type: 'symbol',
         source: 'listings',
+        maxzoom: 10,
         filter: ['==', ['get', 'cluster'], true],
         layout: {
           'text-field': ['to-string', ['get', 'count']],
@@ -150,12 +163,14 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
         },
         paint: { 'text-color': '#04140d' },
       });
-      // individual points
+
+      // MVT individual points at zoom >= 10
       map.addLayer({
-        id: 'points',
+        id: 'mvt-points',
         type: 'circle',
-        source: 'listings',
-        filter: ['!', ['has', 'cluster']],
+        source: 'listings-mvt',
+        'source-layer': 'listings',
+        minzoom: 10,
         paint: {
           'circle-color': '#34e0a1',
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 14, 8, 16, 11],
@@ -181,8 +196,8 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates as [number, number];
       map.easeTo({ center: [lng, lat], zoom: Math.min(map.getZoom() + 2.5, 15), duration: 500 });
     });
-    // point click → navigate
-    map.on('click', 'points', (e) => {
+    // MVT point click → navigate
+    map.on('click', 'mvt-points', (e) => {
       const f = e.features?.[0];
       const id = f?.properties?.id;
       if (!id) return;
@@ -190,17 +205,17 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       else router.push(`/property/${id}`);
     });
 
-    // hover popup on points
+    // hover popup on MVT points
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'op-map-popup', offset: 12 });
     popupRef.current = popup;
-    map.on('mouseenter', 'points', (e) => {
+    const showPopup = (e: maplibregl.MapMouseEvent & { features?: GeoJSON.Feature[] | undefined }) => {
       map.getCanvas().style.cursor = 'pointer';
       const f = e.features?.[0];
       if (!f) return;
       const p = f.properties as any;
-      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates as [number, number];
-      // Build the popup with textContent (auto-escaped) — `address` is scraped
-      // MLS data and must never be injected as raw HTML.
+      const geom = f.geometry as GeoJSON.Point;
+      if (!geom?.coordinates) return;
+      const [lng, lat] = geom.coordinates as [number, number];
       const root = document.createElement('div');
       root.style.cssText = 'font-family:var(--font-geist-sans);min-width:150px';
       const addr = document.createElement('div');
@@ -214,8 +229,9 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       specs.textContent = `${p.bedrooms ?? '–'} bd · ${p.bathrooms ?? '–'} ba`;
       root.append(addr, price, specs);
       popup.setLngLat([lng, lat]).setDOMContent(root).addTo(map);
-    });
-    map.on('mouseleave', 'points', () => {
+    };
+    map.on('mouseenter', 'mvt-points', showPopup);
+    map.on('mouseleave', 'mvt-points', () => {
       map.getCanvas().style.cursor = '';
       popup.remove();
     });
@@ -234,8 +250,12 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
 
   // refetch when filters change
   useEffect(() => {
-    if (mapRef.current?.isStyleLoaded()) refresh();
-  }, [filters?.minPrice, filters?.maxPrice, filters?.minBeds, filters?.minBaths, filters?.status, filters?.saleType, filters?.propertyType, refresh]);
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    const src = map.getSource('listings-mvt');
+    if (src) (src as maplibregl.VectorTileSource).setTiles([getTileUrl()]);
+    refresh();
+  }, [filters?.minPrice, filters?.maxPrice, filters?.minBeds, filters?.minBaths, filters?.status, filters?.saleType, filters?.propertyType, refresh, getTileUrl]);
 
   return (
     <div className="relative h-full w-full" aria-label="Property map" role="application">

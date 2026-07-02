@@ -15,7 +15,7 @@ Track here, not in code comments — that way a single grep for
   3. Recreate the n8n service: `docker compose -f infrastructure/docker-compose.yml up -d --no-deps n8n`.
   4. Optionally purge git history (see `infrastructure/n8n_credentials/README.md` → "Optional: purge history").
 
-- [ ] **URGENT — Rotate the FRED API key** (`95f42f356f5131f13257eac54897e96a` was committed at the previous fallback in `apps/one/src/app/api/mortgage-rates/route.ts`; the fallback was removed and the key now fails closed if `FRED_API_KEY` is unset). Steps:
+- [ ] **URGENT — Rotate the FRED API key** (`[REDACTED]` was committed at the previous fallback in `apps/one/src/app/api/mortgage-rates/route.ts`; the fallback was removed and the key now fails closed if `FRED_API_KEY` is unset). Steps:
   1. FRED account → Account → API keys → rotate.
   2. Update `/opt/onepercent/.env` `FRED_API_KEY=<NEW>`.
   3. Restart app: `docker compose -f infrastructure/docker-compose.yml up -d --no-deps app`.

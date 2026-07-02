@@ -32,7 +32,7 @@
 |--------|----------|--------|
 | Stripe live keys (`sk_live_...`, `pk_live_...`) | `.env.local:3-4` | Rotate immediately in Stripe dashboard |
 | FRED API key | `.env.local:12` | Rotate at api.stlouisfed.org |
-| Server password (`appo0-buXbym-cijzy`) | `infrastructure/setup_server.sh:9` | Rotate VPS password, remove from file |
+| Server password (`[REDACTED]`) | `infrastructure/setup_server.sh:9` | Rotate VPS password, remove from file |
 | Postgres password (`root_password_change_me_please`) | `src/lib/db.ts:13`, `docker-compose.yml:18,59` | Generate new password, update all references |
 
 ### 1.2 Fix OS Command Injection (CRITICAL)
@@ -55,7 +55,7 @@ execFile('python3', ['scraper.py', '--location', location, '--min_price', String
 
 **Files:**
 - `src/lib/db.ts:12` — Remove `|| 'root_password_change_me_please'`, throw if no credentials
-- `src/app/api/mortgage-rates/route.ts:6` — Remove `|| '95f42f356f5131f13257eac54897e96a'`
+- `src/app/api/mortgage-rates/route.ts:6` — Remove `|| '[REDACTED]'`
 
 ### 1.4 Restrict Docker Service Exposure
 

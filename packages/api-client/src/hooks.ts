@@ -16,6 +16,11 @@ import {
   SavedSearchListSchema,
   SavedSearchSchema,
   FilteredListingsResponseSchema,
+  StatsResponseSchema,
+  FeaturedResponseSchema,
+  type StatsResponse,
+  type FeaturedItem,
+  type FeaturedResponse,
   type PropertyListItem,
   type PropertyListResponseWithCursor,
   type ViewportResponse,
@@ -233,6 +238,36 @@ export function useFilteredListings(
     enabled,
     staleTime: 30_000,
     ...rest,
+  });
+}
+
+/** Fetch homepage stats for a given strategy. Polls every 120s. */
+export function useStats(strategy: string = "buy_hold") {
+  return useQuery({
+    queryKey: ["stats", strategy],
+    queryFn: ({ signal }) =>
+      fetchJson<StatsResponse>(
+        `/api/stats?strategy=${encodeURIComponent(strategy)}`,
+        { signal, schema: StatsResponseSchema },
+      ),
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+    retry: 3,
+  });
+}
+
+/** Fetch featured deals for a given strategy. */
+export function useFeatured(strategy: string = "buy_hold", limit: number = 6) {
+  return useQuery({
+    queryKey: ["featured", strategy, limit],
+    queryFn: ({ signal }) =>
+      fetchJson<FeaturedResponse>(
+        `/api/featured?limit=${limit}&strategy=${encodeURIComponent(strategy)}`,
+        { signal, schema: FeaturedResponseSchema },
+      ),
+    refetchInterval: 600_000,
+    staleTime: 300_000,
+    retry: 3,
   });
 }
 

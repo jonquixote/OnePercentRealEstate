@@ -27,7 +27,7 @@ These issues represent active security vulnerabilities or data loss risks. Fix b
 **Severity:** CRITICAL  
 **Files:** 76 `.exp` files + 8 Python files + `docker-compose.yml`  
 **What's exposed:**
-- Root SSH password `appo0-buXbym-cijzy` (plaintext in all `.exp` files)
+- Root SSH password `[REDACTED]` (plaintext in all `.exp` files)
 - Production server IP `157.245.184.89`
 - `StrictHostKeyChecking=no` + password-only auth (MITM vulnerability)
 - Default Postgres password `root_password_change_me_please` (8 Python files, docker-compose.yml)
