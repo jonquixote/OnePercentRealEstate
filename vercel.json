@@ -1,6 +1,5 @@
 {
-  "buildCommand": "pnpm build",
+  "buildCommand": "cd apps/one && pnpm build",
   "installCommand": "pnpm install",
-  "framework": "nextjs",
-  "rootDirectory": "apps/one"
+  "framework": "nextjs"
 }
