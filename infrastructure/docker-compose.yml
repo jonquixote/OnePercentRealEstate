@@ -280,11 +280,13 @@ services:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - ML_URL=http://ml:8000
-      # Wave 0: drain the ~784K backlog. Continuous drain loop + breaker
-      # means higher concurrency is safe (transient ML errors no longer
-      # mass-fail rows). ~8 concurrent x ~2s/prediction ~= 4 rows/s.
+      # Wave 0: drain the ~790K backlog. The ML service is a single-uvicorn
+      # sync-triangulation process — its per-prediction cost (comps DB scan
+      # + CPU) is the bottleneck, not the worker. Concurrency 8 saturated it
+      # (2G OOM + 30s timeouts, measured). 4 matches ML capacity without
+      # timeouts. Real throughput fix is the Wave 2 batch-scoring path.
       - RENT_BACKFILL_BATCH=200
-      - RENT_WORKER_CONCURRENCY=8
+      - RENT_WORKER_CONCURRENCY=6
       - RENT_DRAIN_INTERVAL_MS=30000
       - LOG_LEVEL=info
     command: ["node", "apps/worker/dist/rent-estimator.js"]
@@ -353,6 +355,20 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
       - ML_PORT=8000
+    # 3 uvicorn worker processes: the estimator is sync CPU+DB work, so a
+    # single process is GIL-bound (~6s/prediction serialized). 3 processes
+    # give real parallelism to drain the backlog. Each caches version +
+    # estimator independently (no shared state). Wave 2's batch path
+    # supersedes per-row HTTP entirely.
+    command:
+      - uvicorn
+      - services.ml.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "3"
     expose:
       - "8000"
     depends_on:
@@ -363,7 +379,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
           cpus: '2'
     logging:
       driver: "json-file"

@@ -39,6 +39,12 @@ export class CircuitBreaker {
   }
 
   recordTransientFailure(now: number = Date.now()): void {
+    // While open, in-flight stragglers from the SAME outage keep failing.
+    // Counting them escalates the window without new information — that
+    // drove a ~15s deploy blip to the 300s cap on 2026-07-05 (a batch of
+    // 200 concurrent requests all connection-refused at once). Only
+    // failures after the window has closed carry signal.
+    if (now < this.openUntil) return;
     this.consecutiveFailures += 1;
     if (this.consecutiveFailures >= this.threshold) {
       const openMs = Math.min(this.baseOpenMs * 2 ** this.trips, this.maxOpenMs);

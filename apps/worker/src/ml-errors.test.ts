@@ -60,6 +60,18 @@ describe('CircuitBreaker', () => {
     expect(b.isOpen(330_000)).toBe(false);
   });
 
+  it('does NOT escalate the open window from in-flight stragglers of the same outage', () => {
+    // Regression for the 2026-07-05 incident: a batch of 200 concurrent
+    // requests all connection-refused during a ~15s ML deploy blip and
+    // escalated the breaker to its 300s cap.
+    const b = new CircuitBreaker(5, 30_000, 300_000);
+    for (let i = 0; i < 5; i++) b.recordTransientFailure(0); // trip -> open 30s
+    expect(b.msUntilClose(0)).toBe(30_000);
+    for (let i = 0; i < 200; i++) b.recordTransientFailure(1_000); // stragglers
+    // Window unchanged: still closing at t=30000, not pushed to the cap.
+    expect(b.msUntilClose(1_000)).toBe(29_000);
+  });
+
   it('a success resets both the failure count and the trip escalation', () => {
     const b = new CircuitBreaker(2, 30_000, 300_000);
     b.recordTransientFailure(0);
