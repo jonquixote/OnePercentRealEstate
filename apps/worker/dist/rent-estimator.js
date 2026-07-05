@@ -66,12 +66,6 @@ async function bustFrontendCaches() {
         log.warn({ err: err.message }, 'failed to bust frontend caches');
     }
 }
-// Non-rentable property types — skip ML for these
-const NON_RENTABLE_TYPES = new Set([
-    'LAND', 'LOT', 'LOTS', 'VACANT', 'VACANT LAND', 'VACANT LOT',
-    'FARM', 'RANCH', 'COMMERCIAL', 'INDUSTRIAL', 'OTHER',
-    'PARKING', 'BOAT SLIP',
-]);
 // ---------------------------------------------------------------------------
 // Pool
 // ---------------------------------------------------------------------------
@@ -136,7 +130,8 @@ async function loadListing(listingId, parentLog) {
             year_built,
             latitude,
             longitude,
-            property_type
+            property_type,
+            public.is_rentable(property_type) AS is_rentable
        FROM listings
       WHERE id = $1`, [listingId]);
     if (res.rowCount === 0) {
@@ -157,6 +152,7 @@ async function loadListing(listingId, parentLog) {
         latitude: r.latitude != null ? Number(r.latitude) : null,
         longitude: r.longitude != null ? Number(r.longitude) : null,
         property_type: r.property_type,
+        is_rentable: r.is_rentable,
     };
 }
 async function callMlService(payload, parentLog) {
@@ -246,9 +242,9 @@ async function processListing(listingId, parentLog) {
         await markFailed(payload.listing_id, 'missing lat/lon');
         return;
     }
-    // Skip ML call for non-rentable property types — set rent to 0 directly
-    const typeUpper = (payload.property_type ?? '').toUpperCase().trim();
-    if (NON_RENTABLE_TYPES.has(typeUpper)) {
+    // Skip ML call for non-rentable property types — set rent to 0 directly.
+    // Single source of truth: DB is_rentable() (property_type_rules), resolved in loadListing.
+    if (payload.is_rentable === false) {
         await markDone(payload.listing_id, 0, 'non_rentable_skip', payload);
         jobLog.info({ property_type: payload.property_type }, 'skipped non-rentable type');
         completionsSinceLastBust++;
