@@ -280,8 +280,12 @@ services:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - ML_URL=http://ml:8000
-      - RENT_BACKFILL_BATCH=50
-      - RENT_WORKER_CONCURRENCY=4
+      # Wave 0: drain the ~784K backlog. Continuous drain loop + breaker
+      # means higher concurrency is safe (transient ML errors no longer
+      # mass-fail rows). ~8 concurrent x ~2s/prediction ~= 4 rows/s.
+      - RENT_BACKFILL_BATCH=200
+      - RENT_WORKER_CONCURRENCY=8
+      - RENT_DRAIN_INTERVAL_MS=30000
       - LOG_LEVEL=info
     command: ["node", "apps/worker/dist/rent-estimator.js"]
     depends_on:
@@ -294,8 +298,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
-          cpus: '0.5'
+          memory: 512M
+          cpus: '1'
     logging:
       driver: "json-file"
       options:

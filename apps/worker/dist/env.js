@@ -57,6 +57,10 @@ export function loadEnv() {
         // independently — rent calls a downstream HTTP service while crawl
         // spawns a heavy scrape, so their concurrency profiles differ.
         RENT_WORKER_CONCURRENCY: readInt('RENT_WORKER_CONCURRENCY', 4),
+        // Wave 0 — continuous backlog drain. When the pending queue is empty
+        // the drain loop sleeps this long before re-checking. Realtime inserts
+        // still arrive via LISTEN; this only paces the backlog sweep.
+        RENT_DRAIN_INTERVAL_MS: readInt('RENT_DRAIN_INTERVAL_MS', 30 * 1000),
         // Wave 7 — media health crawler. 8 concurrent URL checks; recheck every 5 min.
         MEDIA_HEALTH_CONCURRENCY: readInt('MEDIA_HEALTH_CONCURRENCY', 8),
         MEDIA_HEALTH_INTERVAL_MS: readInt('MEDIA_HEALTH_INTERVAL_MS', 5 * 60 * 1000),
