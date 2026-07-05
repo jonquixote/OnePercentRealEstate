@@ -62,6 +62,25 @@ pending=613,433, failed=171,245, done=151,728, audit_6h=453.
 - **Hot query still full parallel seq scan + sort** (`SELECT … WHERE sale_type/listing_type/price ORDER BY rent_price_ratio`) — no supporting index. Tuning helps sort/cache; the composite index is the Wave 7 `pg_stat_statements`-driven audit target.
 - pg mem right after restart: 366 MB (shared_buffers pages allocate lazily as touched).
 
-## 24-hour acceptance (Task 10)
+## Acceptance — T+~1 h snapshot (Task 10) + 24 h gate baseline
 
-_(appended by Task 10 Step 1)_
+Captured 2026-07-05 23:18 UTC, ~1 h after the clean 3-ML-worker deploy.
+
+| Criterion | Target (24 h) | T+1 h reading | Status |
+|---|---|---|---|
+| ML RestartCount | delta 0 over window | **0** (baseline for the 24 h delta) | ✅ on track |
+| ML memory | no climb | 1.16 GB / 3 GB, flat | ✅ (was OOM-climbing to 668 MB/768 MB pre-fix) |
+| `failed` rows | < 5,000 | **5** | ✅ (mass-fail mode eliminated; fire-drill proven) |
+| `pending` trajectory | falling | 788,027, falling at ~1.27/s clean-state | ✅ draining (~110K/day; full drain is Wave 2) |
+| Nightly backup | overnight `ok` | 2 dumps on disk; cron `17 3 * * *` armed | ⏳ overnight cron fires 03:17 UTC |
+| PG tuning | held | `shared_buffers=4GB` | ✅ |
+| Apps | 200 | app 200, two-root 200 | ✅ |
+
+**24 h gate remains open on two passive items:** (1) confirm ML RestartCount is still 0
+at ~2026-07-06 23:18 UTC; (2) confirm `backup.log` shows an overnight `ok` line dated 07-06.
+Every *mechanism* is already verified (OOM root-caused + fixed, breaker fire-drill passed,
+restore tested at 233 s) — the gate is a watch, not new work.
+
+**Throughput caveat:** the "last 60 min" audit count at snapshot time (2,040) is depressed by
+the earlier in-hour tuning churn (concurrency-8 timeout storm, the 5-min breaker park, several
+redeploys). The clean steady-state rate is 1.27/s (measured over an uninterrupted 180 s window).
