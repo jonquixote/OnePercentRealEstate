@@ -85,13 +85,14 @@ Every wave: own branch → tests + typecheck → deploy via `/opt/onepercent/inf
 
 ### Wave 0 — Stop the bleeding (1–2 days, solo, blocks everything)
 
-**Pre-flight:** reconcile in-flight work by other agents — `rent_estimator_v2.py` on server (not in git) and locally modified `apps/worker/dist/*`. Adopt-or-archive explicitly before touching ML.
+**Pre-flight:** reconcile in-flight work by other agents — `rent_estimator_v2.py` on server (not in git) and locally modified `apps/worker/dist/*`. Adopt-or-archive explicitly before touching ML. **Acceptance: v2 file is either committed to git under `services/ml/` and wired, or removed from the server and archived in a `graveyard/` directory with a note in AGENTS.md; local `dist/*` modifications likewise adopted or reverted. No ghost state remains.**
 
 1. **Backups.** Day-1 stopgap: nightly `pg_dump -Fc` to local disk (113 GB free) with 7-day rotation + failure alert. Then activate repo pgbackrest scaffolding (full weekly + incr daily + WAL archiving). Offsite (B2) when bucket decision lands — listed as owner action, not a blocker. **Acceptance: restore tested into a scratch container, documented timing.**
 2. **ML crash root-cause.** Diagnose the 2-min death cycle (scheduler container vs v2 file vs healthcheck interplay). Fix so ML stays up unsupervised. **Acceptance: RestartCount stable over 24 h.**
 3. **Rent worker resilience.** ML connection-refused / timeout = transient ⇒ keep `pending` + exponential backoff; circuit-break during ML outage instead of mass-failing. One-time sweep: re-pend the 171,245 stuck `failed` rows. **Acceptance: ML restart under load produces 0 new permanent `failed` rows.**
 4. **Postgres tuning.** `shared_buffers=4GB`, `effective_cache_size=10GB`, `work_mem=64MB`, `maintenance_work_mem=1GB`, `random_page_cost=1.1`, `wal_compression=on`, enable `pg_stat_statements`. One coordinated restart, backup taken first. **Acceptance: settings live; MV refresh + viewport p95 measured before/after.**
-5. **Secrets rotation** (owner actions, tracked not blocking): n8n PG password, FRED key, server root password, Stripe live key + real `STRIPE_PRICE_*`.
+5. **n8n interference freeze.** Audit n8n for active crawl workflows; if any are writing to `listings` or the crawl queue, disable the workflow triggers (leave container running) for the duration of Waves 0–3. Re-enable or decommission at Wave 8. **Acceptance: no n8n-originated writes observed during the freeze window.**
+6. **Secrets rotation** (owner actions, tracked not blocking — except FRED, which gates Wave 3): n8n PG password, FRED key, server root password, Stripe live key + real `STRIPE_PRICE_*`.
 
 ### Track D — data truth
 
@@ -102,7 +103,7 @@ Every wave: own branch → tests + typecheck → deploy via `/opt/onepercent/inf
 3. **Backfill 936K existing rows from `raw_data` via SQL only** — no re-scrape. Keyset-batched procedure in `infrastructure/migrations/out-of-band/` (same pattern as the rules-engine backfill).
 4. **`listings_history` trigger** on UPDATE OF price / status / mls_status → history row. Derived cols: `last_price_change_pct`, `price_cut_count`. History starts now (no retroactive data exists).
 5. **External free sources:** Census ACS ZIP demographics (median income, rent burden), FEMA flood zone by point, FRED mortgage rate wired into underwriting config.
-6. **Hygiene:** drop dead `status` column; coverage observability view (per-column % by scrape date); `estimated_rent=0` → NULL semantics fix rides Wave 2.
+6. **Hygiene:** drop dead `status` column; coverage observability as a **Postgres view** (e.g. `vw_field_coverage`: per-column % by scrape date — not a one-off script; it is the input to the Wave 7 `raw_data` retention gate); `estimated_rent=0` → NULL semantics fix rides Wave 2.
 
 **Acceptance:** new scrapes populate all fields; backfill coverage matches raw_data availability (hoa ~65%, est_value ~80%); history rows accrue; coverage view live.
 
@@ -120,7 +121,7 @@ Every wave: own branch → tests + typecheck → deploy via `/opt/onepercent/inf
 ### Wave 3 — Underwriting truth (3–4 days)
 
 1. Real `tax_annual_amount` (from extra_property_data; fallback `assessed_value ×` county millage table) and real `hoa_fee` into NOI in `underwriting.ts`. Per-input **provenance flag: real vs estimated**.
-2. FRED live 30-yr rate replaces hardcoded mortgage rate (rate source + refresh in `underwriting_rules` config).
+2. FRED live 30-yr rate replaces hardcoded mortgage rate (rate source + refresh in `underwriting_rules` config). **Gate: a working FRED key must be live before this wave deploys. If unavailable, this line item is a Wave 3 blocker — surface to owner; do not silently ship the hardcoded rate under an "underwriting truth" banner.**
 3. State-level insurance estimate table (public averages) replaces flat %.
 4. Scorecard chips: "from tax records" vs "estimated". One-truth constraint holds: all math in `@oper/primitives/underwriting.ts`, SQL parity test extended for new inputs.
 5. Flip ARV: derive from `estimated_value` or comps P75 $/sqft × sqft; STR stays provisional.
@@ -135,6 +136,7 @@ Every wave: own branch → tests + typecheck → deploy via `/opt/onepercent/inf
 2. Watchlists + saved searches activated in `one` UI; `worker-watchlist-alerts` wired to Resend; digest email = price cuts + new matches on watched criteria. **The retention loop.**
 3. Stripe: real price IDs (owner supplies), checkout + webhook (DLQ already built) verified in test mode; paywall boundary decided at wave time (default: free browse, paid alerts/exports).
 4. `two` gets `/api/healthz`; uptime checks for both apps.
+5. **Null-safety note:** Wave 2 converts `estimated_rent=0` → NULL. All Track P UI built in this wave must null-guard rent-derived displays (no "$NaN", no 0-as-real-value) since Track P can deploy before/while Wave 2 drains.
 
 **Acceptance:** signup → watchlist → triggered email works on prod; Stripe test-mode checkout completes.
 
@@ -154,7 +156,7 @@ Every wave: own branch → tests + typecheck → deploy via `/opt/onepercent/inf
 1. Price-cut everywhere: badge (−X% since list), history sparkline on detail, "reduced" rail on home, sort by biggest cut. **Motivated-seller score** = cuts + DOM + distress type.
 2. Detail enrichment: source link (`property_url`), schools, neighborhood, last-sold, est-value-vs-list gap badge ("listed 8% under estimate"), sanitized description.
 3. Filters: HOA max, price-cut, DOM, min rent confidence.
-4. **Verify MapLibre migration end-to-end** (fresh Mapbox→MapLibre swap is unverified; tiles via pg_tileserv; screenshot pass).
+4. **Verify MapLibre migration end-to-end** (fresh Mapbox→MapLibre swap is unverified; tiles via pg_tileserv). **Pass = all four observable facts: tiles load at zoom 8–14; property pins render from the viewport query; zero console errors referencing `mapbox-gl`; Mapbox token removed from prod env.**
 5. SEO enrichment of `/market/[zipcode]` pages (ACS + FMR trend), sitemap, OG images — free growth channel.
 
 **Acceptance:** screenshot-verified on prod; price-cut data flows list→detail→map consistently.
@@ -163,7 +165,7 @@ Every wave: own branch → tests + typecheck → deploy via `/opt/onepercent/inf
 
 1. Index audit from `pg_stat_statements` (expected: composite (sale_type, listing_type, price); zip; partial index on ratio sorts; history (listing_id, changed_at); verify geom GIST).
 2. MV refresh cost measured; refresh-on-threshold or cadence tuning; nginx cache headers for pg_tileserv (~60 s).
-3. **`raw_data` decision gate (owner):** after Wave 1 extraction, keep / cold-table / drop with 90-day retention. Biggest storage lever.
+3. **`raw_data` decision gate (owner):** after Wave 1 extraction, keep / cold-table / drop with 90-day retention. Biggest storage lever. Decision input = the Wave 1 `vw_field_coverage` view (proves extraction completeness before anything is discarded).
 4. Cursor pagination coverage, Redis hit-rate check; targets: viewport p95 <300 ms.
 5. Bundle audit both apps (map chunk-split, lazy images); LCP <2.5 s on 4G.
 6. Partitioning plan documented only (by state or created_at; trigger ~3M rows).
@@ -175,7 +177,7 @@ Every wave: own branch → tests + typecheck → deploy via `/opt/onepercent/inf
 3. CI gates on PR: typecheck, vitest, next build, migration dry-run against shadow DB.
 4. DR drill: timed restore to scratch; targets RPO ≤24 h (≤5 min once WAL archiving live), RTO ≤2 h; runbook updated.
 5. **Deployment consolidation:** remove/park Vercel configs, fix `NEXT_PUBLIC_SITE_URL`, document the single deploy path.
-6. n8n decommission investigation: worker owns crawl; if the ZIP iterator is redundant, retire container (frees RAM); keep only if ad-hoc value found.
+6. n8n decommission decision (workflows disabled since the Wave 0 freeze): worker owns crawl; if the ZIP iterator is redundant, retire container (frees RAM); re-enable only if ad-hoc value found.
 
 ---
 
@@ -206,7 +208,7 @@ W0 ──► W1 ──► W2 ──► W3 ──► W4 ──► W7 ──► W8
 
 ## 7. Owner actions (tracked, non-blocking)
 
-1. Rotate: n8n PG password, FRED key, server root password, Stripe live key (all outstanding since Wave 7).
+1. Rotate: n8n PG password, FRED key, server root password, Stripe live key (all outstanding since Wave 7). **Exception to "non-blocking": the FRED key gates the Wave 3 deploy** (see Wave 3 item 2).
 2. Supply real `STRIPE_PRICE_*` IDs (Wave 5).
 3. B2 (or other) offsite bucket decision (Wave 0 follow-up).
 4. `raw_data` retention decision at the Wave 7 gate.
