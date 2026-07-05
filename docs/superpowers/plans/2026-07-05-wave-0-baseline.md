@@ -45,7 +45,22 @@ pending=613,433, failed=171,245, done=151,728, audit_6h=453.
 
 ## Postgres before/after (Task 6)
 
-_(appended by Task 6 Steps 1 + 4)_
+| Setting | Before | After |
+|---|---|---|
+| shared_buffers | 128 MB | **4 GB** |
+| work_mem | 4 MB | **64 MB** |
+| effective_cache_size | 4 GB | **10 GB** |
+| maintenance_work_mem | 64 MB | **1 GB** |
+| random_page_cost | 4 (HDD default) | **1.1 (SSD)** |
+| wal_compression | off | **on** |
+| pg_stat_statements | absent | **preloaded + extension created** |
+| container mem limit | 4 G | 6 G |
+
+- Restart: `deploy.sh up -d postgres`, fresh 1.6 GB backup taken first, ~25 s downtime.
+- **All dependents reconnected:** app `/api/healthz` 200; worker-rent reconnected and drained 76 rows within 90 s; `two` root page 200 (healthy, 0 restarts).
+- **Pre-existing (NOT a restart regression):** `two /api/healthz` returns 500 — its healthz route proxies to `localhost:3000` and ECONNRESETs (was `000` at the pre-plan audit). This is the Wave 5 "two gets a real /api/healthz" item.
+- **Hot query still full parallel seq scan + sort** (`SELECT … WHERE sale_type/listing_type/price ORDER BY rent_price_ratio`) — no supporting index. Tuning helps sort/cache; the composite index is the Wave 7 `pg_stat_statements`-driven audit target.
+- pg mem right after restart: 366 MB (shared_buffers pages allocate lazily as touched).
 
 ## 24-hour acceptance (Task 10)
 

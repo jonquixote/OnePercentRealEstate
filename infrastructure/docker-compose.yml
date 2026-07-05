@@ -88,6 +88,28 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=postgres
+    # Wave 0 tuning for a 15GB / 2-core host where PG is the primary tenant.
+    # Stock was shared_buffers=128MB, work_mem=4MB, random_page_cost=4 (HDD).
+    # 4GB buffers / 10GB effective cache = ~25%/65% rule; random_page_cost
+    # 1.1 for SSD; pg_stat_statements feeds the Wave 7 index audit.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=4GB
+      - -c
+      - effective_cache_size=10GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - wal_compression=on
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - shared_preload_libraries=pg_stat_statements
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../init-scripts:/docker-entrypoint-initdb.d
@@ -103,7 +125,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          # 4GB shared_buffers + work_mem/maintenance/connection overhead;
+          # 6G ceiling leaves headroom. Box is 15G with ~11G free.
+          memory: 6G
           cpus: '2'
     logging:
       driver: "json-file"
