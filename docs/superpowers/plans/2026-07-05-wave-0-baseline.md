@@ -25,7 +25,13 @@ pending=613,433, failed=171,245, done=151,728, audit_6h=453.
 
 ## Restore-test evidence (Task 1)
 
-_(appended by Task 1 Step 4)_
+- First backup: `pg_20260705_221449.dump`, **1.6 GB**, custom-format `-Z 6`, `pg_dump` wall-clock ~2.5 min, TOC integrity gate passed.
+- Cron installed: `17 3 * * *` (03:17 UTC nightly) → `backup.log` + `cron.log`.
+- **Restore test into a scratch `postgis:16-3.4-alpine` container:**
+  - `listings` = **943,020** (within one day's churn of the ~936K prod baseline ✓)
+  - `underwriting_rules` = **21** ✓
+  - restore wall-clock = **233 s (~4 min)** with `--jobs 2` — this is the RTO evidence for the Wave 8 DR drill.
+- `spatial_ref_sys` duplicate-key noise on restore is expected (postgis template pre-seeds it) and does not affect the data tables above.
 
 ## Postgres before/after (Task 6)
 
