@@ -4,9 +4,15 @@
 # rotates 7 days. Wave 8 wires backup.log FAIL lines into alerting.
 set -euo pipefail
 
+# Dumps contain the entire database (listing PII, agent contact details).
+# umask 077 => new files are 0600; the dir is locked to the owner. Keeps a
+# full-DB dump off any other account on the host.
+umask 077
+
 DIR=/opt/onepercent/backups
 LOG="$DIR/backup.log"
 mkdir -p "$DIR"
+chmod 700 "$DIR"
 trap 'echo "$(date -Is) FAIL" >> "$LOG"' ERR
 
 STAMP=$(date +%Y%m%d_%H%M%S)
