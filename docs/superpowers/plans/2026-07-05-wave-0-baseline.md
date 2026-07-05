@@ -33,6 +33,16 @@ pending=613,433, failed=171,245, done=151,728, audit_6h=453.
   - restore wall-clock = **233 s (~4 min)** with `--jobs 2` — this is the RTO evidence for the Wave 8 DR drill.
 - `spatial_ref_sys` duplicate-key noise on restore is expected (postgis template pre-seeds it) and does not affect the data tables above.
 
+## Rent worker throughput + fire-drill (Task 5)
+
+- **Sweep:** `UPDATE 176307` — all stranded `failed` rows re-pended. Post-sweep `failed` settled to **3** (genuine permanents: missing lat/lon).
+- **Tuning path (measured, not guessed):**
+  - concurrency 8 / 1 ML worker → ML OOM at 2G + 30s timeouts (over-provisioned).
+  - concurrency 4 / 1 ML worker → stable, 0 timeouts, **0.67/s**.
+  - concurrency 6 / **3 ML uvicorn workers** / ML 3G → **1.27/s ≈ 110K/day**, 0 timeouts, 0 breaker trips, ML mem 1.1G/3G, 0 restarts.
+- **vs baseline 453/6h (0.021/s): ~60× throughput.** Backlog drains in ~7 days (was ~436). Full drain-to-zero is Wave 2's batch-scoring path; Wave 0's bar is "drains instead of mass-failing" — met.
+- **Breaker fire-drill (spec Wave 0 item-3 acceptance):** restarted `infrastructure-ml-1` under load → `failed` **3 → 3 (delta 0)**. 80 in-flight requests stayed `pending`; breaker opened exactly once (guard prevented same-outage escalation); recovered to ~1.37/s within 30s of ML returning. **The mass-fail-on-outage failure mode is eliminated.**
+
 ## Postgres before/after (Task 6)
 
 _(appended by Task 6 Steps 1 + 4)_
