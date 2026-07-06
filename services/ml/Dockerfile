@@ -28,6 +28,9 @@ COPY services/ml /app/services/ml
 # rent_estimator_v2 next to it via sys.path[0]='/app'.
 ENV PYTHONPATH=/app
 ENV PORT=8000
+# Wave 2: model artifacts live on a volume, not in the image — retrains
+# don't require image rebuilds. Compose mounts ml_models here.
+ENV MODEL_DIR=/models
 
 EXPOSE 8000
 

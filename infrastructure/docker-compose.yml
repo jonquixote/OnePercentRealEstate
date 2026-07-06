@@ -395,6 +395,10 @@ services:
       - "3"
     expose:
       - "8000"
+    volumes:
+      # Wave 2: model artifacts survive image rebuilds; retrain writes,
+      # serving reads.
+      - ml_models:/models
     depends_on:
       postgres:
         condition: service_healthy
@@ -637,3 +641,5 @@ volumes:
   prometheus_data:
   alertmanager_data:
   grafana_data:
+  # Wave 2: rent model artifacts — retrain writes, serving reads.
+  ml_models:
