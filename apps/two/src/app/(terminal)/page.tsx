@@ -29,9 +29,56 @@ export default function TerminalPage() {
   const { data, isLoading, isError, error } = useViewport(VIEWPORT);
   const { selected, setSelected } = useSelection();
 
+  // ---- Wave 6: SQL expression results ------------------------------------
+  // The top-bar FilterExpression (layout) broadcasts valid expressions via
+  // the `two:filter-change` CustomEvent. A non-empty expression switches the
+  // grid's data source from the viewport feed to /api/properties/query
+  // (same-origin via nginx; the server re-parses + re-compiles — client
+  // output is never trusted). Empty expression -> back to the viewport tape.
+  const [queryRows, setQueryRows] = React.useState<unknown[] | null>(null);
+  const [queryState, setQueryState] = React.useState<'idle' | 'loading' | 'error'>('idle');
+  const queryAbort = React.useRef<AbortController | null>(null);
+
+  React.useEffect(() => {
+    const onFilter = (e: Event) => {
+      const expression = String((e as CustomEvent).detail ?? '').trim();
+      queryAbort.current?.abort();
+      if (!expression) {
+        setQueryRows(null);
+        setQueryState('idle');
+        return;
+      }
+      const ctrl = new AbortController();
+      queryAbort.current = ctrl;
+      setQueryState('loading');
+      fetch('/api/properties/query', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ expression, limit: 500 }),
+        signal: ctrl.signal,
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`query ${r.status}`))))
+        .then((d) => {
+          setQueryRows(Array.isArray(d?.items) ? d.items : []);
+          setQueryState('idle');
+        })
+        .catch((err) => {
+          if (err?.name === 'AbortError') return;
+          setQueryState('error');
+        });
+    };
+    window.addEventListener('two:filter-change', onFilter);
+    return () => window.removeEventListener('two:filter-change', onFilter);
+  }, []);
+
   // One pass to coerce numeric strings -> numbers and derive 1%/cap/$/sqft.
   // Memoised so the table + StatBar don't recompute on every selection change.
-  const rows = React.useMemo(() => toRows(data), [data]);
+  const rows = React.useMemo(() => {
+    if (queryRows !== null) {
+      return toRows({ type: 'properties', data: queryRows } as never);
+    }
+    return toRows(data);
+  }, [data, queryRows]);
 
   // ---- j/k row navigation ----------------------------------------------
   // Re-derive the current index off the live rows array so sort changes
@@ -123,10 +170,36 @@ export default function TerminalPage() {
   // it from here so the header chrome stays a layout-time concern and the
   // data is page-driven.
   const status = React.useMemo(() => {
+    if (queryState === 'loading') return 'query…';
+    if (queryState === 'error') return 'query error';
+    if (queryRows !== null) return `${rows.length.toLocaleString()} matches · expression`;
     if (isLoading) return "loading…";
     if (isError) return "error";
     return `${rows.length.toLocaleString()} listings · zoom ${VIEWPORT.zoom}`;
-  }, [isLoading, isError, rows.length]);
+  }, [isLoading, isError, rows.length, queryState, queryRows]);
+
+  // ---- Wave 6: CSV export (e) --------------------------------------------
+  useHotkey(
+    "e",
+    () => {
+      if (rows.length === 0) return;
+      const cols = ["id", "address", "price", "bedrooms", "bathrooms", "sqft", "estimated_rent"] as const;
+      const esc = (v: unknown) => {
+        const s = v == null ? "" : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = [cols.join(",")]
+        .concat(rows.map((r) => cols.map((c) => esc((r as unknown as Record<string, unknown>)[c])).join(",")))
+        .join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `octavo-terminal-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },
+    { description: "Export current rows to CSV", group: "Data" },
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-zinc-950">
