@@ -10,6 +10,7 @@ import urllib.parse
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import sleep
+from enrichment import extract_enrichment
 
 app = FastAPI()
 
@@ -226,6 +227,9 @@ def scrape_listings(req: ScrapeRequest):
                     raw_data["lat"] = row.get('latitude')
                     raw_data["lon"] = row.get('longitude')
 
+                # Extract enrichment fields for insertion
+                enr = extract_enrichment(raw_data)
+
                 images = []
                 if row.get('primary_photo'):
                     images.append(row['primary_photo'])
@@ -261,7 +265,10 @@ def scrape_listings(req: ScrapeRequest):
                             sqft, year_built, property_type, listing_type, images, raw_data,
                             latitude, longitude, status, user_id,
                             sale_type, sale_type_source, sale_type_signal, sale_type_confidence,
-                            address_norm, address_hash
+                            address_norm, address_hash,
+                            county, fips_code, neighborhoods, last_sold_price, last_sold_date,
+                            assessed_value, estimated_value, description, style, new_construction,
+                            list_date, price_per_sqft, hoa_fee, tax_annual_amount, property_url
                         )
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s,
@@ -272,7 +279,8 @@ def scrape_listings(req: ScrapeRequest):
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest foreclosure filter' ELSE c.sale_type_signal END,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 0.95 ELSE c.sale_type_confidence END,
                             n.address_norm,
-                            md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), ''))
+                            md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), '')),
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                         FROM classify_sale_type(%s::jsonb, %s) c,
                              LATERAL (
                                  SELECT NULLIF(regexp_replace(regexp_replace(lower(trim(%s)), '[.,#]', '', 'g'), '\\s+', ' ', 'g'), '') AS address_norm
@@ -294,6 +302,21 @@ def scrape_listings(req: ScrapeRequest):
                             sale_type_confidence = EXCLUDED.sale_type_confidence,
                             address_norm = EXCLUDED.address_norm,
                             address_hash = EXCLUDED.address_hash,
+                            county = EXCLUDED.county,
+                            fips_code = EXCLUDED.fips_code,
+                            neighborhoods = EXCLUDED.neighborhoods,
+                            last_sold_price = EXCLUDED.last_sold_price,
+                            last_sold_date = EXCLUDED.last_sold_date,
+                            assessed_value = EXCLUDED.assessed_value,
+                            estimated_value = EXCLUDED.estimated_value,
+                            description = EXCLUDED.description,
+                            style = EXCLUDED.style,
+                            new_construction = EXCLUDED.new_construction,
+                            list_date = EXCLUDED.list_date,
+                            price_per_sqft = EXCLUDED.price_per_sqft,
+                            hoa_fee = EXCLUDED.hoa_fee,
+                            tax_annual_amount = EXCLUDED.tax_annual_amount,
+                            property_url = EXCLUDED.property_url,
                             updated_at = NOW()
                         WHERE listings.price IS DISTINCT FROM EXCLUDED.price
                            OR listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms
@@ -307,6 +330,11 @@ def scrape_listings(req: ScrapeRequest):
                         'watch', DEFAULT_USER_ID,
                         req.foreclosure, req.foreclosure, req.foreclosure, req.foreclosure,
                         row.get('city'), row.get('state'),
+                        enr["county"], enr["fips_code"], enr["neighborhoods"],
+                        enr["last_sold_price"], enr["last_sold_date"], enr["assessed_value"],
+                        enr["estimated_value"], enr["description"], enr["style"],
+                        enr["new_construction"], enr["list_date"], enr["price_per_sqft"],
+                        enr["hoa_fee"], enr["tax_annual_amount"], enr["property_url"],
                         Json(raw_data), get_property_type(row),
                         address
                     ))
