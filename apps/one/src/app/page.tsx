@@ -19,6 +19,7 @@ import { useToast } from '@/components/ui/toast';
 import { SavedSearches } from '@/components/SavedSearches';
 import { HomeHero } from '@/components/home/HomeHero';
 import { FeaturedDeals } from '@/components/home/FeaturedDeals';
+import { ReducedRail } from '@/components/home/ReducedRail';
 import { MarketPulse } from '@/components/home/MarketPulse';
 import { asStrategy, STRATEGY_BY_ID } from '@/lib/strategies';
 
@@ -132,6 +133,7 @@ export default function Dashboard() {
         onBrowse={scrollToOpportunities}
       />
       <FeaturedDeals strategy={strategy} rentCalcPending={stats?.rentCalcPending ?? 0} />
+      <ReducedRail />
       {stats && (
         <MarketPulse
           strategy={strategy}

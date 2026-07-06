@@ -2,6 +2,7 @@
 
 import { Bed, Bath, Square, Calendar, Home, DollarSign, TrendingUp, MapPin, School, Percent, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { PriceSparkline } from '@/components/property/PriceSparkline';
 
 const formatCurrency = (val: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
@@ -83,6 +84,7 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
                                     <span className={`font-semibold ${motivatedScore >= 60 ? 'text-brass-hi' : 'text-white'}`}>{motivatedScore}/100</span>
                                 </span>
                             )}
+                            <PriceSparkline propertyId={property?.id} />
                             {(neighborhoods || county) && (
                                 <span className="inline-flex items-center gap-1 text-muted-foreground">
                                     <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
