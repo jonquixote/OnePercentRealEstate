@@ -196,35 +196,44 @@ def is_non_rentable(property_type: Optional[str]) -> bool:
 
 
 def get_hud_safmr(zip_code: str, bedrooms: int) -> Optional[float]:
-    """Fetch HUD SAFMR from market_benchmarks table."""
+    """Fetch HUD SAFMR from the hud_safmr table (ZIP x bedrooms x FY).
+
+    Wave 2: previously read market_benchmarks, which held exactly 1 row —
+    the federal floor never fired. hud_safmr is loaded from the huduser.gov
+    SAFMR file (193K rows, 38.6K ZIPs) by ml_rent_estimator/load_hud_safmr.py.
+    """
     conn = get_db_connection()
     if not conn:
         return None
-    
+
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
+
         # Clean zip code
         if isinstance(zip_code, float):
             zip_code = str(int(zip_code))
         else:
             zip_code = str(zip_code).split('.')[0].strip()
-        
-        cur.execute("""
-            SELECT safmr_data FROM market_benchmarks 
-            WHERE zip_code = %s
-        """, (zip_code,))
-        
+
+        cur.execute(
+            """
+            SELECT safmr FROM hud_safmr
+            WHERE zip_code = %s AND bedrooms = LEAST(GREATEST(%s, 0), 4)
+            ORDER BY fy DESC
+            LIMIT 1
+            """,
+            (zip_code, int(bedrooms or 0)),
+        )
+
         row = cur.fetchone()
-        if row and row['safmr_data']:
-            key = f"{int(bedrooms)}br"
-            return row['safmr_data'].get(key)
-            
+        if row and row["safmr"] is not None:
+            return float(row["safmr"])
+
     except Exception as e:
         print(f"Error fetching HUD SAFMR: {e}")
     finally:
         release_db_connection(conn)
-    
+
     return None
 
 
