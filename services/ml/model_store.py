@@ -145,5 +145,5 @@ def predict_rows(reqs: list[Any]) -> Optional[list[dict]]:
             )
         return out
     except Exception as exc:
-        log.warning("v1 predict_rows failed \u2014 falling back to v2: %s", exc)
+        log.warning("v1 predict_rows failed \u2014 falling back to v2: %s", exc, exc_info=True)
         return None
