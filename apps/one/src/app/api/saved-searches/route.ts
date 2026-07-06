@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { getSessionUser } from '@/lib/auth';
 
 /**
  * Wave 5 minimal saved searches endpoint.
@@ -55,11 +56,17 @@ function readUserId(request: NextRequest, fallback?: string): string | null {
 }
 
 export async function GET(request: NextRequest) {
-  const gate = devGateBlocked(request);
-  if (gate) return gate;
+  // Wave 5: a real session is the primary identity; the ADMIN_API_KEY gate
+  // only guards the legacy header/query fallback path.
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
 
   try {
-    const userId = readUserId(request);
+    const session = await getSessionUser();
+    const userId = session?.id ?? readUserId(request);
     if (!userId) {
       return NextResponse.json(
         { error: 'user_id required (alphanumeric, max 64 chars)' },
@@ -83,14 +90,18 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = devGateBlocked(request);
-  if (gate) return gate;
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
 
   try {
     const body = await request.json().catch(() => ({}));
     const { user_id, name, params } = body ?? {};
 
-    const userId = readUserId(request, typeof user_id === 'string' ? user_id : undefined);
+    const session = await getSessionUser();
+    const userId = session?.id ?? readUserId(request, typeof user_id === 'string' ? user_id : undefined);
 
     if (!userId) {
       return NextResponse.json(
@@ -131,12 +142,16 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const gate = devGateBlocked(request);
-  if (gate) return gate;
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
 
   try {
     const id = request.nextUrl.searchParams.get('id');
-    const userId = readUserId(request);
+    const session = await getSessionUser();
+    const userId = session?.id ?? readUserId(request);
 
     if (!id || !/^\d+$/.test(id) || !userId) {
       return NextResponse.json(

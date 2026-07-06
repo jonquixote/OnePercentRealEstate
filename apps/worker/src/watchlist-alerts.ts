@@ -49,6 +49,12 @@ function validateWatchlistColumn(col: string): boolean {
     'state',
     'city',
     'zip_code',
+    // Wave 5 — price-cut alerts are the headline digest content. MUST stay
+    // in sync with ALLOWED_COLUMNS in apps/one api/watchlists/route.ts.
+    'sale_type',
+    'price_cut_pct',
+    'days_on_market',
+    'property_type',
   ]);
   return allowed.has(col);
 }
