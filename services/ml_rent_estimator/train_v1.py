@@ -8,7 +8,7 @@ Reads DATABASE_URL. Writes artifacts to $MODEL_DIR/rent_v1/:
     p10.txt, p50.txt, p90.txt   (LightGBM native — no pickle)
     metadata.json               (feature names + encoders + train stats)
 
-Split: holdout = last 30 days by listing_date; encoders fit on train only.
+Split: deterministic address-hash 90/10 (see below); encoders fit on train only.
 Sample weights: exp(-age_days/180) recency decay.
 """
 from __future__ import annotations

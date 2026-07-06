@@ -92,6 +92,8 @@ interface ListingPayload {
   readonly longitude: number | null;
   readonly property_type: string | null;
   readonly is_rentable: boolean | null;
+  readonly hoa_fee: number | null;
+  readonly lot_sqft: number | null;
 }
 
 interface PredictResponse {
@@ -198,6 +200,8 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     longitude: number | null;
     property_type: string | null;
     is_rentable: boolean | null;
+    hoa_fee: string | null;
+    lot_size_acres: string | null;
   }>(
     `SELECT id,
             address,
@@ -212,7 +216,9 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
             latitude,
             longitude,
             property_type,
-            public.is_rentable(property_type) AS is_rentable
+            public.is_rentable(property_type) AS is_rentable,
+            hoa_fee,
+            lot_size_acres
        FROM listings
       WHERE id = $1`,
     [listingId],
@@ -238,6 +244,8 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     longitude: r.longitude != null ? Number(r.longitude) : null,
     property_type: r.property_type,
     is_rentable: r.is_rentable,
+    hoa_fee: r.hoa_fee != null ? Number(r.hoa_fee) : null,
+    lot_sqft: r.lot_size_acres != null ? Number(r.lot_size_acres) * 43_560 : null,
   };
 }
 
@@ -522,6 +530,9 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
        FROM ng WHERE l.id = ng.id`,
     [env.RENT_BATCH_SIZE],
   );
+  if (noGeo.rowCount && noGeo.rowCount > 0) {
+    parentLog.warn({ noGeo: noGeo.rowCount }, `marked ${noGeo.rowCount} no-geo listings as failed`);
+  }
 
   // 2. Pull a scoreable page with features.
   const page = await pool.query<BatchRow>(
