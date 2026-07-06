@@ -45,6 +45,8 @@ else:
 
 import psycopg2  # noqa: E402
 
+from . import model_store  # noqa: E402
+
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format='{"ts":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s","service":"ml"}',
@@ -70,12 +72,35 @@ class PredictRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     property_type: Optional[str] = None
+    # Wave 2 (optional — the batch path supplies them, the LISTEN path may not)
+    lot_sqft: Optional[float] = None
+    hoa_fee: Optional[float] = None
 
 
 class PredictResponse(BaseModel):
     predicted_rent: float
     model_version: str
     features_hash: str
+    # Wave 2: quantile band (present when the v1 model served the request)
+    rent_low: Optional[float] = None
+    rent_high: Optional[float] = None
+
+
+class BatchPredictRequest(BaseModel):
+    items: list[PredictRequest] = Field(..., min_length=1, max_length=1000)
+
+
+class BatchPredictItem(BaseModel):
+    listing_id: int
+    predicted_rent: float
+    rent_low: Optional[float] = None
+    rent_high: Optional[float] = None
+    model_version: str
+    features_hash: str
+
+
+class BatchPredictResponse(BaseModel):
+    results: list[BatchPredictItem]
 
 
 # ---------------------------------------------------------------------------
@@ -170,24 +195,26 @@ def healthz() -> dict:
     }
 
 
-@app.post("/predict", response_model=PredictResponse)
-def predict(req: PredictRequest) -> PredictResponse:
+def _try_model_predict(reqs: list[PredictRequest]) -> Optional[list[dict]]:
+    """Score with the active v1 model via the model store. Returns None when
+    v1 isn't active/loadable — callers fall back to the v2 triangulation."""
+    version = _get_active_version()
+    if not version.startswith("v1"):
+        return None
+    if not model_store.refresh(version, _DATABASE_URL):
+        return None
+    return model_store.predict_rows(reqs)
+
+
+def _v2_predict(req: PredictRequest) -> float:
     if estimate_rent_v2 is None:
         raise HTTPException(
             status_code=503,
             detail=f"rent_estimator_v2 not importable: {_IMPORT_ERR}",
         )
-
     if req.latitude is None or req.longitude is None:
-        # Caller (worker) already screens this, but defense-in-depth: the
-        # estimator can't do anything without geometry.
         raise HTTPException(status_code=400, detail="latitude and longitude required")
-
     try:
-        # No type annotation: RentEstimate may be None at runtime if the
-        # legacy module failed to import (we guard above with the `is None`
-        # check), and pyright won't let us use a possibly-None symbol as a
-        # type. Behavior is unchanged.
         estimate = estimate_rent_v2(
             lat=float(req.latitude),
             lon=float(req.longitude),
@@ -201,12 +228,74 @@ def predict(req: PredictRequest) -> PredictResponse:
     except Exception as exc:  # noqa: BLE001 — surface as 5xx
         log.exception("estimator raised for listing_id=%s", req.listing_id)
         raise HTTPException(status_code=500, detail=f"estimator error: {exc}") from exc
+    return round(float(estimate.estimated_rent or 0.0), 2)
+
+
+@app.post("/predict", response_model=PredictResponse)
+def predict(req: PredictRequest) -> PredictResponse:
+    if req.latitude is None or req.longitude is None:
+        # Caller (worker) already screens this, but defense-in-depth: neither
+        # path can do anything meaningful without geometry.
+        raise HTTPException(status_code=400, detail="latitude and longitude required")
+
+    version = _get_active_version()
+    scored = _try_model_predict([req])
+    if scored is not None:
+        s = scored[0]
+        return PredictResponse(
+            predicted_rent=s["predicted_rent"],
+            rent_low=s["rent_low"],
+            rent_high=s["rent_high"],
+            model_version=version,
+            features_hash=_features_hash(req),
+        )
 
     return PredictResponse(
-        predicted_rent=round(float(estimate.estimated_rent or 0.0), 2),
-        model_version=_get_active_version(),
+        predicted_rent=_v2_predict(req),
+        model_version=version if not version.startswith("v1") else "v0-fallback",
         features_hash=_features_hash(req),
     )
+
+
+@app.post("/predict_batch", response_model=BatchPredictResponse)
+def predict_batch(req: BatchPredictRequest) -> BatchPredictResponse:
+    """Vectorized scoring for the worker's backlog drain. v1 scores the whole
+    batch in one matrix pass; the v2 fallback loops (slow but correct)."""
+    version = _get_active_version()
+    valid = [r for r in req.items if r.latitude is not None and r.longitude is not None]
+    if not valid:
+        return BatchPredictResponse(results=[])
+
+    scored = _try_model_predict(valid)
+    results: list[BatchPredictItem] = []
+    if scored is not None:
+        for r, s in zip(valid, scored):
+            results.append(
+                BatchPredictItem(
+                    listing_id=r.listing_id,
+                    predicted_rent=s["predicted_rent"],
+                    rent_low=s["rent_low"],
+                    rent_high=s["rent_high"],
+                    model_version=version,
+                    features_hash=_features_hash(r),
+                )
+            )
+        return BatchPredictResponse(results=results)
+
+    for r in valid:
+        try:
+            rent = _v2_predict(r)
+        except HTTPException:
+            continue  # skip the bad row, keep the batch alive
+        results.append(
+            BatchPredictItem(
+                listing_id=r.listing_id,
+                predicted_rent=rent,
+                model_version=version if not version.startswith("v1") else "v0-fallback",
+                features_hash=_features_hash(r),
+            )
+        )
+    return BatchPredictResponse(results=results)
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +310,7 @@ class OpResponse(BaseModel):
     exit_code: Optional[int] = None
 
 
-async def _run_subprocess(cmd: list[str]) -> tuple[bool, list[str], int]:
+async def _run_subprocess(cmd: list[str], timeout_s: float = 120.0) -> tuple[bool, list[str], int]:
     """Run a subprocess and capture stdout/stderr. Return (ok, lines, exit_code)."""
     import asyncio
 
@@ -232,17 +321,17 @@ async def _run_subprocess(cmd: list[str]) -> tuple[bool, list[str], int]:
             stderr=asyncio.subprocess.STDOUT,
         )
 
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120.0)
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
         output = stdout.decode("utf-8", errors="replace").strip()
         lines = output.split("\n") if output else []
 
         if proc.returncode == 0:
             return True, lines, 0
         else:
-            return False, lines, proc.returncode
+            return False, lines, proc.returncode if proc.returncode is not None else 1
 
     except asyncio.TimeoutError:
-        return False, ["timeout: subprocess exceeded 120s"], 124
+        return False, [f"timeout: subprocess exceeded {timeout_s:.0f}s"], 124
     except Exception as exc:
         return False, [f"subprocess error: {exc}"], 1
 
@@ -250,7 +339,7 @@ async def _run_subprocess(cmd: list[str]) -> tuple[bool, list[str], int]:
 @app.post("/ops/run-drift", response_model=OpResponse)
 async def run_drift() -> OpResponse:
     """Trigger the drift monitor. Captures stdout and returns JSON."""
-    ok, lines, exit_code = await _run_subprocess(["python", "-m", "drift"])
+    ok, lines, exit_code = await _run_subprocess(["python", "-m", "services.ml.drift"])
 
     # Simple heuristic: if there are "WARNING" or "ERROR" lines, alert.
     alert = any("WARNING" in line or "ERROR" in line for line in lines)
@@ -261,9 +350,83 @@ async def run_drift() -> OpResponse:
 @app.post("/ops/run-eval", response_model=OpResponse)
 async def run_eval() -> OpResponse:
     """Trigger model evaluation. Captures stdout and returns JSON."""
-    ok, lines, exit_code = await _run_subprocess(["python", "-m", "eval"])
+    ok, lines, exit_code = await _run_subprocess(["python", "-m", "services.ml.eval"])
 
     # Simple heuristic: if there are "WARNING" or "ERROR" lines, alert.
     alert = any("WARNING" in line or "ERROR" in line for line in lines)
 
     return OpResponse(ok=ok, lines=lines, exit_code=exit_code, alert=alert)
+
+
+@app.post("/ops/run-train", response_model=OpResponse)
+async def run_train() -> OpResponse:
+    """Wave 2 nightly retrain: train into a staging dir, run the eval gate
+    against staging, and promote by atomic directory swap only on gate PASS.
+    The previous artifacts are kept as rent_v1_backup (manual rollback:
+    swap the directories back). The eval gate IS the auto-rollback — a worse
+    candidate never reaches the serving path.
+    """
+    import shutil
+
+    model_dir = os.environ.get("MODEL_DIR", "/models")
+    staging = os.path.join(model_dir, "rent_v1_staging")
+    live = os.path.join(model_dir, "rent_v1")
+    backup = os.path.join(model_dir, "rent_v1_backup")
+
+    lines: list[str] = []
+
+    ok, out, code = await _run_subprocess(
+        ["python", "-m", "ml_rent_estimator.train_v1", "rent_v1_staging"], timeout_s=1800.0
+    )
+    lines += out[-8:]
+    if not ok:
+        return OpResponse(ok=False, lines=["TRAIN FAILED"] + lines, exit_code=code, alert=True)
+
+    gate_ok, out, code = await _run_subprocess(
+        ["python", "-m", "ml_rent_estimator.eval_v1", "rent_v1_staging"], timeout_s=900.0
+    )
+    lines += out[-12:]
+    if not gate_ok:
+        # Candidate lost to the gate. Keep serving the current model; leave
+        # staging on disk for inspection.
+        return OpResponse(
+            ok=True, lines=["GATE FAIL — kept current model"] + lines, exit_code=code, alert=True
+        )
+
+    try:
+        if os.path.isdir(backup):
+            shutil.rmtree(backup)
+        if os.path.isdir(live):
+            os.rename(live, backup)
+        os.rename(staging, live)
+    except OSError as exc:
+        return OpResponse(
+            ok=False, lines=[f"PROMOTE SWAP FAILED: {exc}"] + lines, exit_code=1, alert=True
+        )
+
+    # Ensure the registry row is active (it usually already is; idempotent).
+    # Must set promoted_at so the ops team knows when the model went live.
+    activation_ok = True
+    if _DATABASE_URL:
+        conn = None
+        try:
+            conn = psycopg2.connect(_DATABASE_URL)
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE rent_models SET active = (version = 'v1'), "
+                    "promoted_at = CASE WHEN version = 'v1' THEN NOW() ELSE promoted_at END"
+                )
+            conn.commit()
+        except Exception as exc:  # pragma: no cover
+            log.critical("activation update failed: %s", exc)
+            activation_ok = False
+        finally:
+            if conn is not None:
+                conn.close()
+
+    if not activation_ok:
+        return OpResponse(
+            ok=False, lines=["PROMOTED ON DISK BUT ACTIVATION FAILED"] + lines, exit_code=1, alert=True
+        )
+
+    return OpResponse(ok=True, lines=["PROMOTED"] + lines, exit_code=0, alert=False)

@@ -17,7 +17,7 @@ def extract_features(property_data: Dict[str, Any]) -> Dict[str, Any]:
     features = {}
     
     # Core property features
-    features['bedrooms'] = float(property_data.get('bedrooms') or 3)
+    features['bedrooms'] = float(property_data.get('bedrooms') if property_data.get('bedrooms') is not None else 3)
     features['bathrooms'] = float(property_data.get('bathrooms') or 2)
     features['sqft'] = float(property_data.get('sqft') or 1500)
     features['year_built'] = float(property_data.get('year_built') or 1990)

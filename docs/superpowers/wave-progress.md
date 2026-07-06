@@ -1,6 +1,6 @@
 # Wave Progress
 
-## Wave 0 — Bleed-Stop (Merged: 2026-07-06)
+## Wave 0 — Bleed-Stop (Shipped: 2026-07-06)
 - ML circuit breaker + error taxonomy (TDD, 10 tests)
 - 171K stranded rent rows re-pended (fire-drill: 60x throughput, 0 mass-fails)
 - Postgres tuned for 15GB/2-core host + pg_stat_statements
@@ -38,8 +38,27 @@
 - FEMA flood zones
 - FRED mortgage rate (owned by Wave 3)
 
+## Wave 2 — Rent Engine (Shipped: 2026-07-06)
+- v1 LightGBM model (3 quantile heads, 11 features from 306K comps)
+- HUD SAFMR ingest: 193K rows / 38K ZIPs (FY2026)
+- ML service: `/predict` + `/predict_batch` (vectorized, cap 1000)
+- Async rent worker: batch drain (~200 rows/s, 6 concurrent, circuit breaker)
+- ml-scheduler: nightly retrain (01:00), drift (02:00), eval (Sun 03:00)
+- Promotion gate: v1 MAE ≤85% of HUD baseline + ≥10/15 state wins
+- `rent_models` registry, `rent_predictions_audit` audit trail
+- `rent_low`/`rent_high` confidence bands (p10–p90, coverage 0.77)
+- Backlog cleared from 613K to <32K (target <10K, still draining)
+- `estimated_rent=0` → NULL migration applied
+- Drift monitoring live (5 features, PSI)
+- Bugs fixed: `feature_set_hash` determinism, `promoted_at`, HUD SAFMR FY filter, drift/eval module paths
+
+**Performance:**
+- v1 MAE $484 (37% better than HUD $768)
+- 15/15 states beat HUD baseline
+- Batch throughput ~200 rows/s (4× target)
+- Band coverage 76.8% (within acceptable range)
+
 ## Future Waves
-- Wave 2: estimated_rent=0 → NULL
 - Wave 3: Real tax via assessed_value × county millage
 - Wave 4: Investor surfaces (price-cut UI)
 - Wave 5: Track P

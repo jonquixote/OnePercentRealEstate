@@ -98,6 +98,18 @@ interface PredictResponse {
   readonly predicted_rent: number;
   readonly model_version: string;
   readonly features_hash: string;
+  // Wave 2: quantile band, present when the v1 model served the request.
+  readonly rent_low?: number | null;
+  readonly rent_high?: number | null;
+}
+
+interface BatchScoredItem {
+  readonly listing_id: number;
+  readonly predicted_rent: number;
+  readonly rent_low?: number | null;
+  readonly rent_high?: number | null;
+  readonly model_version: string;
+  readonly features_hash: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -272,6 +284,8 @@ async function markDone(
   predictedRent: number,
   modelVersion: string,
   features: ListingPayload,
+  rentLow?: number | null,
+  rentHigh?: number | null,
 ): Promise<void> {
   // Single transaction: update listings + append audit row. If either
   // half fails we want to roll back so the row stays 'pending' for retry
@@ -284,9 +298,11 @@ async function markDone(
           SET estimated_rent = $2,
               rent_calc_status = 'done',
               rent_model_version = $3,
+              rent_low = $4,
+              rent_high = $5,
               updated_at = NOW()
         WHERE id = $1`,
-      [listingId, predictedRent, modelVersion],
+      [listingId, predictedRent, modelVersion, rentLow ?? null, rentHigh ?? null],
     );
     await client.query(
       `INSERT INTO rent_predictions_audit (listing_id, model_version, predicted_rent, features)
@@ -384,7 +400,14 @@ async function processListing(listingId: string, parentLog: WorkerLogger): Promi
   breaker.recordSuccess();
 
   try {
-    await markDone(payload.listing_id, prediction.predicted_rent, prediction.model_version, payload);
+    await markDone(
+      payload.listing_id,
+      prediction.predicted_rent,
+      prediction.model_version,
+      payload,
+      prediction.rent_low,
+      prediction.rent_high,
+    );
     jobLog.info(
       {
         duration_ms: Date.now() - start,
@@ -440,29 +463,201 @@ function runJob(listingId: string, parentLog: WorkerLogger): void {
 }
 
 // ---------------------------------------------------------------------------
-// Drain: pull a bounded batch of pending rows. Uses the partial index
-// from 2026_06_03_rent_calc_async.sql so the scan is cheap even with
-// hundreds of thousands of 'done' rows in the table.
+// Wave 2: batch drain. One SELECT for a page of pending rows (with the
+// features the model wants), one POST to ml /predict_batch, one bulk
+// UPDATE + one bulk audit INSERT. Replaces the per-row HTTP loop for the
+// backlog; the LISTEN path still handles realtime single inserts.
+//
+// Row taxonomy inside a page:
+//   - non-rentable property types  -> settled in SQL (NULL rent, 'done',
+//     'non_rentable_skip') without touching ML. NULL, not 0: Wave 2
+//     retires the rent=0 encoding.
+//   - rentable, missing lat/lng    -> 'failed' in SQL (permanent, same
+//     semantics as the single-row path).
+//   - rentable, scoreable          -> ML batch; rows the ML response
+//     skips are marked 'failed' so they can't recycle forever.
 // ---------------------------------------------------------------------------
 
-async function drain(parentLog: WorkerLogger): Promise<number> {
-  const res = await pool.query<{ id: string }>(
-    `SELECT id::text AS id
+interface BatchRow {
+  readonly id: string;
+  readonly address: string | null;
+  readonly city: string | null;
+  readonly state: string | null;
+  readonly zip_code: string | null;
+  readonly bedrooms: number | null;
+  readonly bathrooms: string | null;
+  readonly sqft: number | null;
+  readonly year_built: number | null;
+  readonly latitude: string | null;
+  readonly longitude: string | null;
+  readonly property_type: string | null;
+  readonly hoa_fee: string | null;
+  readonly lot_size_acres: string | null;
+}
+
+async function drainBatch(parentLog: WorkerLogger): Promise<number> {
+  // 1. Settle non-rentables + geometry-less rows in SQL (bounded pages).
+  const settled = await pool.query(
+    `WITH nr AS (
+       SELECT id FROM listings
+        WHERE rent_calc_status = 'pending' AND NOT public.is_rentable(property_type)
+        ORDER BY id LIMIT $1
+     )
+     UPDATE listings l
+        SET estimated_rent = NULL, rent_low = NULL, rent_high = NULL,
+            rent_calc_status = 'done', rent_model_version = 'non_rentable_skip',
+            updated_at = NOW()
+       FROM nr WHERE l.id = nr.id`,
+    [env.RENT_BATCH_SIZE],
+  );
+  const noGeo = await pool.query(
+    `WITH ng AS (
+       SELECT id FROM listings
+        WHERE rent_calc_status = 'pending' AND public.is_rentable(property_type)
+          AND (latitude IS NULL OR longitude IS NULL)
+        ORDER BY id LIMIT $1
+     )
+     UPDATE listings l
+        SET rent_calc_status = 'failed', updated_at = NOW()
+       FROM ng WHERE l.id = ng.id`,
+    [env.RENT_BATCH_SIZE],
+  );
+
+  // 2. Pull a scoreable page with features.
+  const page = await pool.query<BatchRow>(
+    `SELECT id::text AS id, address, city, state,
+            zip_code, bedrooms, bathrooms, sqft, year_built,
+            latitude, longitude, property_type, hoa_fee, lot_size_acres
        FROM listings
       WHERE rent_calc_status = 'pending'
+        AND public.is_rentable(property_type)
+        AND latitude IS NOT NULL AND longitude IS NOT NULL
       ORDER BY id
       LIMIT $1`,
-    [env.RENT_BACKFILL_BATCH],
+    [env.RENT_BATCH_SIZE],
   );
-  if (res.rowCount === 0) {
-    parentLog.debug('drain: no pending listings');
-    return 0;
+  const sqlSettled = (settled.rowCount ?? 0) + (noGeo.rowCount ?? 0);
+  if (page.rowCount === 0) {
+    return sqlSettled;
   }
-  parentLog.info({ count: res.rowCount }, 'drain: dispatching pending listings');
-  for (const row of res.rows) {
-    runJob(row.id, parentLog);
+
+  const items = page.rows.map((r) => ({
+    listing_id: Number(r.id),
+    address: r.address,
+    city: r.city,
+    state: r.state,
+    zip_code: r.zip_code,
+    bedrooms: r.bedrooms,
+    bathrooms: r.bathrooms != null ? Number(r.bathrooms) : null,
+    sqft: r.sqft,
+    year_built: r.year_built,
+    latitude: r.latitude != null ? Number(r.latitude) : null,
+    longitude: r.longitude != null ? Number(r.longitude) : null,
+    property_type: r.property_type,
+    hoa_fee: r.hoa_fee != null ? Number(r.hoa_fee) : null,
+    lot_sqft: r.lot_size_acres != null ? Number(r.lot_size_acres) * 43_560 : null,
+  }));
+
+  // 3. One HTTP call for the page.
+  let results: BatchScoredItem[];
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), env.RENT_TIMEOUT_MS * 4);
+    try {
+      const res = await fetch(`${env.ML_URL.replace(/\/$/, '')}/predict_batch`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ items }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new Error(`ml ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+      }
+      results = ((await res.json()) as { results: BatchScoredItem[] }).results ?? [];
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // One batch failure = ONE breaker event (not 500) — rows stay pending.
+    breaker.recordTransientFailure();
+    parentLog.warn({ err: message, batch: items.length }, 'batch scoring transient failure');
+    return sqlSettled;
   }
-  return res.rowCount ?? 0;
+  breaker.recordSuccess();
+
+  // 4. Bulk write-back in one transaction.
+  const scored = results.filter((s) => Number.isFinite(s.predicted_rent));
+  const scoredIds = new Set(scored.map((s) => s.listing_id));
+  const skipped = items.filter((i) => !scoredIds.has(i.listing_id)).map((i) => i.listing_id);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (scored.length > 0) {
+      await client.query(
+        `UPDATE listings AS l
+            SET estimated_rent = v.rent,
+                rent_low = v.lo,
+                rent_high = v.hi,
+                rent_calc_status = 'done',
+                rent_model_version = v.mv,
+                updated_at = NOW()
+           FROM (
+             SELECT unnest($1::bigint[])  AS id,
+                    unnest($2::numeric[]) AS rent,
+                    unnest($3::numeric[]) AS lo,
+                    unnest($4::numeric[]) AS hi,
+                    unnest($5::text[])    AS mv
+           ) v
+          WHERE l.id = v.id`,
+        [
+          scored.map((s) => s.listing_id),
+          scored.map((s) => s.predicted_rent),
+          scored.map((s) => s.rent_low ?? null),
+          scored.map((s) => s.rent_high ?? null),
+          scored.map((s) => s.model_version),
+        ],
+      );
+      // Map items by listing_id so features are emitted in scored order,
+      // matching listing_id / model_version / predicted_rent arrays.
+      const itemMap = new Map<number, (typeof items)[number]>(
+        items.map((i) => [i.listing_id, i]),
+      );
+      await client.query(
+        `INSERT INTO rent_predictions_audit (listing_id, model_version, predicted_rent, features)
+         SELECT unnest($1::bigint[]), unnest($2::text[]), unnest($3::numeric[]), unnest($4::jsonb[])`,
+        [
+          scored.map((s) => s.listing_id),
+          scored.map((s) => s.model_version),
+          scored.map((s) => s.predicted_rent),
+          scored.map((s) => JSON.stringify(itemMap.get(s.listing_id) ?? null)),
+        ],
+      );
+    }
+    if (skipped.length > 0) {
+      await client.query(
+        `UPDATE listings SET rent_calc_status = 'failed', updated_at = NOW()
+          WHERE id = ANY($1::bigint[])`,
+        [skipped],
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    // DB write problem, not an ML signal (same taxonomy as the single-row
+    // path) — rows stay pending, no breaker involvement.
+    parentLog.error({ err: (err as Error).message }, 'batch write-back failed — rows stay pending');
+    return sqlSettled;
+  } finally {
+    client.release();
+  }
+
+  parentLog.info(
+    { scored: scored.length, skipped: skipped.length, sql_settled: sqlSettled },
+    'batch drained',
+  );
+  return sqlSettled + scored.length + skipped.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -483,23 +678,21 @@ async function drainForever(parentLog: WorkerLogger): Promise<void> {
       continue;
     }
 
-    let dispatched = 0;
+    let processed = 0;
     try {
-      dispatched = await drain(parentLog);
+      // Wave 2: bulk scoring path. drainBatch awaits its own write-back,
+      // so there is no in-flight settling to wait for — only the LISTEN
+      // singles share the semaphore.
+      processed = await drainBatch(parentLog);
     } catch (err) {
       parentLog.error({ err: (err as Error).message }, 'drain loop error');
       await sleep(5_000);
       continue;
     }
 
-    if (dispatched === 0) {
+    if (processed === 0) {
       await sleep(env.RENT_DRAIN_INTERVAL_MS);
       continue;
-    }
-
-    // Wait for the batch to settle before the next SELECT.
-    while (inFlight > 0 && !shuttingDown) {
-      await sleep(250);
     }
   }
 }

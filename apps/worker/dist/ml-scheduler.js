@@ -58,12 +58,12 @@ function msUntilNextSunday(hour, minute) {
 // ---------------------------------------------------------------------------
 // Run ops endpoint
 // ---------------------------------------------------------------------------
-async function runOps(endpoint) {
+async function runOps(endpoint, timeoutMs = 60_000) {
     try {
         const response = await fetch(`${env.ML_URL}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(60_000), // 60s timeout
+            signal: AbortSignal.timeout(timeoutMs),
         });
         if (!response.ok) {
             return {
@@ -139,6 +139,22 @@ async function runDrift() {
         await sendAlert('drift', response);
     }
 }
+async function runTrain() {
+    const traceId = newTraceId();
+    const traceLog = withTrace(log, traceId, { job: 'train' });
+    traceLog.info('nightly retrain starting');
+    // Train (~7 min) + eval gate (~2 min) + swap. Generous ceiling.
+    const response = await runOps('/ops/run-train', 45 * 60_000);
+    if (response.ok) {
+        traceLog.info({ lines: response.lines }, 'nightly retrain completed');
+    }
+    else {
+        traceLog.error({ lines: response.lines, exit_code: response.exit_code }, 'nightly retrain failed');
+    }
+    if (response.alert) {
+        await sendAlert('train', response);
+    }
+}
 async function runEval() {
     const traceId = newTraceId();
     const traceLog = withTrace(log, traceId, { job: 'eval' });
@@ -159,10 +175,15 @@ async function runEval() {
 // ---------------------------------------------------------------------------
 let shutdownRequested = false;
 const activeTimeouts = [];
-function scheduleNext(name, fn, ms) {
+function scheduleNext(name, fn, nextMs) {
     if (shutdownRequested) {
         return;
     }
+    // nextMs is a FUNCTION recomputed on every re-arm. The previous version
+    // reused the boot-relative delay, so a job that first fired at 02:00
+    // re-armed at 02:00 + (02:00 - boot time) — daily cadence drifted by
+    // however long the process had been up before the first fire.
+    const ms = nextMs();
     const timeout = setTimeout(async () => {
         const index = activeTimeouts.indexOf(timeout);
         if (index !== -1) {
@@ -171,8 +192,8 @@ function scheduleNext(name, fn, ms) {
         if (!shutdownRequested) {
             await fn();
         }
-        // Schedule the next run
-        scheduleNext(name, fn, ms);
+        // Schedule the next run at the freshly-computed next occurrence.
+        scheduleNext(name, fn, nextMs);
     }, ms);
     activeTimeouts.push(timeout);
     log.info({ job: name, next_ms: ms }, 'job scheduled');
@@ -196,16 +217,14 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 (async () => {
     try {
         log.info({ ml_url: env.ML_URL }, 'ml-scheduler starting');
+        // Schedule nightly retrain: 01:00 UTC (before drift at 02:00 so the
+        // drift monitor sees the freshly-promoted model's predictions).
+        scheduleNext('train', runTrain, () => msUntilNextTime(1, 0));
         // Schedule drift job: nightly at 02:00 UTC
-        const msDrift = msUntilNextTime(2, 0);
-        scheduleNext('drift', runDrift, msDrift);
+        scheduleNext('drift', runDrift, () => msUntilNextTime(2, 0));
         // Schedule eval job: Sunday at 03:00 UTC
-        const msEval = msUntilNextSunday(3, 0);
-        scheduleNext('eval', runEval, msEval);
-        log.info({
-            drift_ms: msDrift,
-            eval_ms: msEval,
-        }, 'ml-scheduler ready');
+        scheduleNext('eval', runEval, () => msUntilNextSunday(3, 0));
+        log.info('ml-scheduler ready (train 01:00, drift 02:00, eval Sun 03:00 UTC)');
     }
     catch (err) {
         log.error({ err: String(err) }, 'startup failed');
