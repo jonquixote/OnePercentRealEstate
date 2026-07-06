@@ -56,22 +56,42 @@ SELECT * FROM vw_field_coverage;
 
 ## Task 4: Out-of-Band Backfill Results
 
-### Task 4 Step 3 — Coverage After Backfill
+### Task 4 Step 3 — Backfill Execution
 
-**Command:**
-```sql
-SELECT * FROM vw_field_coverage;
+**Status:** PARTIAL - Stopped at constraint violation
+
+**Backfill Progress:** 750,000 rows backfilled successfully, 194,471 rows remaining
+
+**Error Encountered:**
+```
+ERROR:  numeric field overflow
+DETAIL:  A field with precision 10, scale 2 must round to an absolute value less than 10^8.
 ```
 
-**Results:**
-(To be filled in when Task 4 Step 3 is run)
+**Root Cause:** The pre-existing `hoa_fee` column has NUMERIC(10,2) precision (max 99,999,999.99), but raw_data contains HOA fee values that exceed this limit. The backfill procedure safely casts numeric values but cannot accommodate values exceeding column constraints.
 
-**Expected:**
-- `unenriched_rows` → 0
-- `pct_url` ≈ 100
-- `pct_hoa` ≈ 60–66 (matches hoa_raw from baseline)
-- `pct_est_value` ≈ 80
-- `pct_last_sold` / `pct_county` per source availability
+**Constraint Details:**
+```
+hoa_fee:           NUMERIC(10,2)
+tax_annual_amount: NUMERIC(12,2)
+property_url:      TEXT
+```
+
+The hoa_fee precision is too narrow. The backfill successfully processed ~80% of rows before encountering a row with an oversized hoa_fee value.
+
+**Coverage Before Fix:**
+```
+(Backfill status at time of error)
+Enriched: 750,000 / 944,471 (~79%)
+Unenriched: 194,471 (~21%)
+```
+
+**Recommended Resolution:** 
+- Alter `hoa_fee` column to NUMERIC(15,2) to accommodate larger values
+- Resume backfill to complete remaining 194K rows
+- Re-run acceptance checks
+
+**Current n8n Status:** UNFROZEN (per error handling procedure)
 
 ---
 
