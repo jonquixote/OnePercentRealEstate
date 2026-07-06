@@ -289,59 +289,66 @@ def scrape_listings(req: ScrapeRequest):
                         ON CONFLICT (address, listing_type, sale_type)
                         DO UPDATE SET
                             price = EXCLUDED.price,
-                            bedrooms = EXCLUDED.bedrooms,
-                            bathrooms = EXCLUDED.bathrooms,
-                            sqft = EXCLUDED.sqft,
-                            year_built = EXCLUDED.year_built,
-                            property_type = EXCLUDED.property_type,
+                            bedrooms = COALESCE(EXCLUDED.bedrooms, listings.bedrooms),
+                            bathrooms = COALESCE(EXCLUDED.bathrooms, listings.bathrooms),
+                            sqft = COALESCE(EXCLUDED.sqft, listings.sqft),
+                            year_built = COALESCE(EXCLUDED.year_built, listings.year_built),
+                            property_type = COALESCE(EXCLUDED.property_type, listings.property_type),
                             images = EXCLUDED.images,
                             raw_data = EXCLUDED.raw_data,
-                            latitude = EXCLUDED.latitude,
-                            longitude = EXCLUDED.longitude,
-                            sale_type_source = EXCLUDED.sale_type_source,
-                            sale_type_signal = EXCLUDED.sale_type_signal,
-                            sale_type_confidence = EXCLUDED.sale_type_confidence,
-                            address_norm = EXCLUDED.address_norm,
-                            address_hash = EXCLUDED.address_hash,
-                            county = EXCLUDED.county,
-                            fips_code = EXCLUDED.fips_code,
-                            neighborhoods = EXCLUDED.neighborhoods,
-                            last_sold_price = EXCLUDED.last_sold_price,
-                            last_sold_date = EXCLUDED.last_sold_date,
-                            assessed_value = EXCLUDED.assessed_value,
-                            estimated_value = EXCLUDED.estimated_value,
-                            description = EXCLUDED.description,
-                            style = EXCLUDED.style,
-                            new_construction = EXCLUDED.new_construction,
-                            list_date = EXCLUDED.list_date,
-                            price_per_sqft = EXCLUDED.price_per_sqft,
-                            hoa_fee = EXCLUDED.hoa_fee,
-                            tax_annual_amount = EXCLUDED.tax_annual_amount,
-                            property_url = EXCLUDED.property_url,
-                            parking_garage = EXCLUDED.parking_garage,
-                            lot_sqft = EXCLUDED.lot_sqft,
+                            latitude = COALESCE(EXCLUDED.latitude, listings.latitude),
+                            longitude = COALESCE(EXCLUDED.longitude, listings.longitude),
+                            sale_type_source = COALESCE(EXCLUDED.sale_type_source, listings.sale_type_source),
+                            sale_type_signal = COALESCE(EXCLUDED.sale_type_signal, listings.sale_type_signal),
+                            sale_type_confidence = COALESCE(EXCLUDED.sale_type_confidence, listings.sale_type_confidence),
+                            address_norm = COALESCE(EXCLUDED.address_norm, listings.address_norm),
+                            address_hash = COALESCE(EXCLUDED.address_hash, listings.address_hash),
+                            county = COALESCE(EXCLUDED.county, listings.county),
+                            fips_code = COALESCE(EXCLUDED.fips_code, listings.fips_code),
+                            neighborhoods = COALESCE(EXCLUDED.neighborhoods, listings.neighborhoods),
+                            last_sold_price = COALESCE(EXCLUDED.last_sold_price, listings.last_sold_price),
+                            last_sold_date = COALESCE(EXCLUDED.last_sold_date, listings.last_sold_date),
+                            assessed_value = COALESCE(EXCLUDED.assessed_value, listings.assessed_value),
+                            estimated_value = COALESCE(EXCLUDED.estimated_value, listings.estimated_value),
+                            description = COALESCE(EXCLUDED.description, listings.description),
+                            style = COALESCE(EXCLUDED.style, listings.style),
+                            new_construction = COALESCE(EXCLUDED.new_construction, listings.new_construction),
+                            list_date = COALESCE(EXCLUDED.list_date, listings.list_date),
+                            price_per_sqft = COALESCE(EXCLUDED.price_per_sqft, listings.price_per_sqft),
+                            hoa_fee = COALESCE(EXCLUDED.hoa_fee, listings.hoa_fee),
+                            tax_annual_amount = COALESCE(EXCLUDED.tax_annual_amount, listings.tax_annual_amount),
+                            property_url = COALESCE(EXCLUDED.property_url, listings.property_url),
+                            parking_garage = COALESCE(EXCLUDED.parking_garage, listings.parking_garage),
+                            lot_sqft = COALESCE(EXCLUDED.lot_sqft, listings.lot_sqft),
                             updated_at = NOW()
-                        WHERE listings.price IS DISTINCT FROM EXCLUDED.price
-                           OR listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms
-                           OR listings.bathrooms IS DISTINCT FROM EXCLUDED.bathrooms
-                           OR listings.sqft IS DISTINCT FROM EXCLUDED.sqft
-                           OR listings.county IS DISTINCT FROM EXCLUDED.county
-                           OR listings.fips_code IS DISTINCT FROM EXCLUDED.fips_code
-                           OR listings.neighborhoods IS DISTINCT FROM EXCLUDED.neighborhoods
-                           OR listings.last_sold_price IS DISTINCT FROM EXCLUDED.last_sold_price
-                           OR listings.last_sold_date IS DISTINCT FROM EXCLUDED.last_sold_date
-                           OR listings.assessed_value IS DISTINCT FROM EXCLUDED.assessed_value
-                           OR listings.estimated_value IS DISTINCT FROM EXCLUDED.estimated_value
-                           OR listings.description IS DISTINCT FROM EXCLUDED.description
-                           OR listings.style IS DISTINCT FROM EXCLUDED.style
-                           OR listings.new_construction IS DISTINCT FROM EXCLUDED.new_construction
-                           OR listings.list_date IS DISTINCT FROM EXCLUDED.list_date
-                           OR listings.price_per_sqft IS DISTINCT FROM EXCLUDED.price_per_sqft
-                           OR listings.hoa_fee IS DISTINCT FROM EXCLUDED.hoa_fee
-                           OR listings.tax_annual_amount IS DISTINCT FROM EXCLUDED.tax_annual_amount
-                           OR listings.property_url IS DISTINCT FROM EXCLUDED.property_url
-                           OR listings.parking_garage IS DISTINCT FROM EXCLUDED.parking_garage
-                           OR listings.lot_sqft IS DISTINCT FROM EXCLUDED.lot_sqft
+                        WHERE (EXCLUDED.price IS NOT NULL AND listings.price IS DISTINCT FROM EXCLUDED.price)
+                           OR (EXCLUDED.bedrooms IS NOT NULL AND listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms)
+                           OR (EXCLUDED.bathrooms IS NOT NULL AND listings.bathrooms IS DISTINCT FROM EXCLUDED.bathrooms)
+                           OR (EXCLUDED.sqft IS NOT NULL AND listings.sqft IS DISTINCT FROM EXCLUDED.sqft)
+                           OR (EXCLUDED.year_built IS NOT NULL AND listings.year_built IS DISTINCT FROM EXCLUDED.year_built)
+                           OR (EXCLUDED.property_type IS NOT NULL AND listings.property_type IS DISTINCT FROM EXCLUDED.property_type)
+                           OR (EXCLUDED.sale_type_source IS NOT NULL AND listings.sale_type_source IS DISTINCT FROM EXCLUDED.sale_type_source)
+                           OR (EXCLUDED.sale_type_signal IS NOT NULL AND listings.sale_type_signal IS DISTINCT FROM EXCLUDED.sale_type_signal)
+                           OR (EXCLUDED.sale_type_confidence IS NOT NULL AND listings.sale_type_confidence IS DISTINCT FROM EXCLUDED.sale_type_confidence)
+                           OR (EXCLUDED.latitude IS NOT NULL AND listings.latitude IS DISTINCT FROM EXCLUDED.latitude)
+                           OR (EXCLUDED.longitude IS NOT NULL AND listings.longitude IS DISTINCT FROM EXCLUDED.longitude)
+                           OR (EXCLUDED.county IS NOT NULL AND listings.county IS DISTINCT FROM EXCLUDED.county)
+                           OR (EXCLUDED.fips_code IS NOT NULL AND listings.fips_code IS DISTINCT FROM EXCLUDED.fips_code)
+                           OR (EXCLUDED.neighborhoods IS NOT NULL AND listings.neighborhoods IS DISTINCT FROM EXCLUDED.neighborhoods)
+                           OR (EXCLUDED.last_sold_price IS NOT NULL AND listings.last_sold_price IS DISTINCT FROM EXCLUDED.last_sold_price)
+                           OR (EXCLUDED.last_sold_date IS NOT NULL AND listings.last_sold_date IS DISTINCT FROM EXCLUDED.last_sold_date)
+                           OR (EXCLUDED.assessed_value IS NOT NULL AND listings.assessed_value IS DISTINCT FROM EXCLUDED.assessed_value)
+                           OR (EXCLUDED.estimated_value IS NOT NULL AND listings.estimated_value IS DISTINCT FROM EXCLUDED.estimated_value)
+                           OR (EXCLUDED.description IS NOT NULL AND listings.description IS DISTINCT FROM EXCLUDED.description)
+                           OR (EXCLUDED.style IS NOT NULL AND listings.style IS DISTINCT FROM EXCLUDED.style)
+                           OR (EXCLUDED.new_construction IS NOT NULL AND listings.new_construction IS DISTINCT FROM EXCLUDED.new_construction)
+                           OR (EXCLUDED.list_date IS NOT NULL AND listings.list_date IS DISTINCT FROM EXCLUDED.list_date)
+                           OR (EXCLUDED.price_per_sqft IS NOT NULL AND listings.price_per_sqft IS DISTINCT FROM EXCLUDED.price_per_sqft)
+                           OR (EXCLUDED.hoa_fee IS NOT NULL AND listings.hoa_fee IS DISTINCT FROM EXCLUDED.hoa_fee)
+                           OR (EXCLUDED.tax_annual_amount IS NOT NULL AND listings.tax_annual_amount IS DISTINCT FROM EXCLUDED.tax_annual_amount)
+                           OR (EXCLUDED.property_url IS NOT NULL AND listings.property_url IS DISTINCT FROM EXCLUDED.property_url)
+                           OR (EXCLUDED.parking_garage IS NOT NULL AND listings.parking_garage IS DISTINCT FROM EXCLUDED.parking_garage)
+                           OR (EXCLUDED.lot_sqft IS NOT NULL AND listings.lot_sqft IS DISTINCT FROM EXCLUDED.lot_sqft)
                         RETURNING id, (xmax = 0) as was_inserted
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,

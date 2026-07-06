@@ -16,7 +16,7 @@ def _num(v: Any) -> Optional[float]:
     if v is None:
         return None
     if isinstance(v, (int, float)):
-        return None if v != v else float(v)  # v!=v catches NaN
+        return None if v != v or v < 0 else float(v)  # v!=v catches NaN, v<0 rejects negatives
     s = str(v).strip()
     if not s or s.lower() in ("nan", "none", "n/a", "null"):
         return None
@@ -24,7 +24,8 @@ def _num(v: Any) -> Optional[float]:
     if s in ("", "-", ".", "-."):
         return None
     try:
-        return float(s)
+        val = float(s)
+        return None if val < 0 else val
     except ValueError:
         return None
 
@@ -62,6 +63,8 @@ def _bool(v: Any) -> Optional[bool]:
         return None
     if isinstance(v, bool):
         return v
+    if isinstance(v, (int, float)) and v in (0, 1):
+        return bool(v)
     s = str(v).strip().lower()
     if s in ("true", "t", "1", "yes"):
         return True

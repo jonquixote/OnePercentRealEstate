@@ -1,5 +1,5 @@
 import datetime as dt
-from enrichment import extract_enrichment
+from enrichment import extract_enrichment, _num, _bool
 
 
 def test_maps_and_types_a_full_homeharvest_row():
@@ -62,3 +62,20 @@ def test_parking_garage_bool_conversion():
     assert extract_enrichment({"parking_garage": "false"})["parking_garage"] is False
     assert extract_enrichment({"parking_garage": "0"})["parking_garage"] is False
     assert extract_enrichment({"parking_garage": None})["parking_garage"] is None
+
+
+def test_num_rejects_negative_values():
+    assert _num(-100) is None
+    assert _num(-100.0) is None
+    assert _num("-100") is None
+    assert _num("-$100") is None
+    assert _num("-0.00") == 0.0  # zero is not negative
+
+
+def test_bool_handles_float_one_zero():
+    assert _bool(1.0) is True
+    assert _bool(0.0) is False
+    assert _bool(1) is True
+    assert _bool(0) is False
+    assert _bool(1.5) is None
+    assert _bool(-1.0) is None
