@@ -89,7 +89,6 @@ export interface PropertyInputs {
   yearBuilt?: number | null;
   taxAnnualAmount?: number | null;
   assessedValue?: number | null;
-  county?: string | null;
 }
 
 export type CostSource =
@@ -291,6 +290,7 @@ export function resolveCosts(
   hoaFee: number | null | undefined,
   cfg: Pick<RuleConfig, 'propertyTaxRate' | 'insuranceAnnual'>,
   stateInsuranceAnnual?: number | null,
+  assessedValue?: number | null,
 ): RealCosts {
   const taxRate = cfg.propertyTaxRate ?? 0.012;
 
@@ -298,6 +298,10 @@ export function resolveCosts(
   let taxAnnual = price * taxRate;
   let taxDetail = `${(taxRate * 100).toFixed(2)}% of price ($${Math.round(taxAnnual).toLocaleString()}/yr)`;
 
+  // Tax precedence — most authoritative first:
+  //   1. real_tax:     populated tax_annual_amount (incl. 0 = tax-exempt)
+  //   2. assessed_tax: populated assessed_value (no direct tax record)
+  //   3. estimated_tax:price × rule-rate fallback when nothing else
   // A populated tax_annual_amount of 0 is meaningful (tax-exempt property) —
   // it must NOT fall back to the price-estimated default. Use >= 0 so the 0
   // case is treated as a real (zero) data point.
@@ -308,6 +312,10 @@ export function resolveCosts(
       taxAnnual === 0
         ? '$0/yr (actual, tax-exempt)'
         : `$${Math.round(taxAnnual).toLocaleString()}/yr (actual)`;
+  } else if (ok(assessedValue) && assessedValue > 0) {
+    taxAnnual = assessedValue * taxRate;
+    taxSource = 'assessed_tax';
+    taxDetail = `${(taxRate * 100).toFixed(2)}% × assessed $${Math.round(assessedValue).toLocaleString()} ($${Math.round(taxAnnual).toLocaleString()}/yr)`;
   }
 
   const hoaMonthly = ok(hoaFee) && hoaFee > 0 ? hoaFee : 0;
@@ -317,7 +325,7 @@ export function resolveCosts(
   // ?? (not ||) so an explicit 0 in the rule config isn't silently masked to
   // 1200; leaving the 0 visible keeps the call site honest about misconfigured rules.
   let insAnnual = cfg.insuranceAnnual ?? 1200;
-  let insDetail = `$${insAnnual}/yr (rule default)`;
+  let insDetail = `$${Math.round(insAnnual).toLocaleString()}/yr (rule default)`;
 
   if (ok(stateInsuranceAnnual) && stateInsuranceAnnual >= 0) {
     insAnnual = stateInsuranceAnnual;

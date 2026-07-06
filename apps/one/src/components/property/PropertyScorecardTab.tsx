@@ -134,7 +134,6 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
         arv: num(property?.estimated_value),
         taxAnnualAmount: num(property?.tax_annual_amount),
         assessedValue: num(property?.assessed_value),
-        county: property?.county ?? null,
     };
 
     const cfg = useMemo(
@@ -153,9 +152,11 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
                 inputs.hoaMonthly,
                 cfgWithRate,
                 num(property?.insurance_state_avg),
+                inputs.assessedValue,
             )
             : null,
-        [cfgWithRate, inputs.price, inputs.taxAnnualAmount, inputs.hoaMonthly, property?.insurance_state_avg]
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [cfgWithRate, inputs.price, inputs.taxAnnualAmount, inputs.hoaMonthly, inputs.assessedValue, property?.insurance_state_avg]
     );
     const evaluation = useMemo(
         () => (cfgWithRate ? evaluateRules(inputs, cfgWithRate, { propertyType: propType, saleType }) : null),

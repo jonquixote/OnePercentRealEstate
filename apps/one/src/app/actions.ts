@@ -374,6 +374,14 @@ const client = await pool.connect();
         },
         latitude: Number(row.latitude) || 0,
         longitude: Number(row.longitude) || 0,
+        // pg returns NUMERIC as strings; coerce the typed-columns we promote
+        // so downstream consumers (resolveCosts, calc helpers, UI) work on
+        // numbers like the existing sqft/price fields do.
+        hoa_fee: row.hoa_fee != null ? Number(row.hoa_fee) : null,
+        tax_annual_amount: row.tax_annual_amount != null ? Number(row.tax_annual_amount) : null,
+        assessed_value: row.assessed_value != null ? Number(row.assessed_value) : null,
+        estimated_value: row.estimated_value != null ? Number(row.estimated_value) : null,
+        insurance_state_avg: row.insurance_state_avg != null ? Number(row.insurance_state_avg) : null,
       images: images,
       media_blur: row.media_blur ?? null,
       raw_data: raw,

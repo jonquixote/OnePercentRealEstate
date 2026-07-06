@@ -363,6 +363,22 @@ describe('resolveCosts — Wave 3 provenance', () => {
     expect(c.provenance.hoa.source).toBe('real_hoa');
   });
 
+  it('uses assessed_tax when only assessed_value is populated (no direct tax record)', () => {
+    // No taxAnnualAmount, but assessedValue is populated → fall back to
+    // assessedValue × taxRate rather than price × taxRate. Common for
+    // county records that issue assessed value without annual tax bills.
+    const c = resolveCosts(300_000, null, null, cfg, null, 240_000);
+    expect(c.taxAnnual).toBeCloseTo(240_000 * 0.012);
+    expect(c.provenance.tax.source).toBe('assessed_tax');
+    expect(c.provenance.tax.detail).toContain('assessed');
+  });
+
+  it('real_tax takes precedence over assessed_tax when both exist', () => {
+    const c = resolveCosts(300_000, 4200, null, cfg, null, 240_000);
+    expect(c.taxAnnual).toBe(4200);
+    expect(c.provenance.tax.source).toBe('real_tax');
+  });
+
   it('uses state_insurance when stateInsuranceAnnual is provided', () => {
     const c = resolveCosts(300_000, null, null, cfg, 4201);
     expect(c.insuranceAnnual).toBe(4201);
