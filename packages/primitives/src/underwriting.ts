@@ -298,20 +298,28 @@ export function resolveCosts(
   let taxAnnual = price * taxRate;
   let taxDetail = `${(taxRate * 100).toFixed(2)}% of price ($${Math.round(taxAnnual).toLocaleString()}/yr)`;
 
-  if (ok(taxAnnualAmount) && taxAnnualAmount > 0) {
+  // A populated tax_annual_amount of 0 is meaningful (tax-exempt property) —
+  // it must NOT fall back to the price-estimated default. Use >= 0 so the 0
+  // case is treated as a real (zero) data point.
+  if (ok(taxAnnualAmount) && taxAnnualAmount >= 0) {
     taxAnnual = taxAnnualAmount;
     taxSource = 'real_tax';
-    taxDetail = `$${Math.round(taxAnnual).toLocaleString()}/yr (actual)`;
+    taxDetail =
+      taxAnnual === 0
+        ? '$0/yr (actual, tax-exempt)'
+        : `$${Math.round(taxAnnual).toLocaleString()}/yr (actual)`;
   }
 
   const hoaMonthly = ok(hoaFee) && hoaFee > 0 ? hoaFee : 0;
   const hoaSource: CostSource = hoaMonthly > 0 ? 'real_hoa' : 'none';
 
   let insSource: CostSource = 'default_insurance';
-  let insAnnual = cfg.insuranceAnnual || 1200;
+  // ?? (not ||) so an explicit 0 in the rule config isn't silently masked to
+  // 1200; leaving the 0 visible keeps the call site honest about misconfigured rules.
+  let insAnnual = cfg.insuranceAnnual ?? 1200;
   let insDetail = `$${insAnnual}/yr (rule default)`;
 
-  if (ok(stateInsuranceAnnual) && stateInsuranceAnnual > 0) {
+  if (ok(stateInsuranceAnnual) && stateInsuranceAnnual >= 0) {
     insAnnual = stateInsuranceAnnual;
     insSource = 'state_insurance';
     insDetail = `$${Math.round(insAnnual).toLocaleString()}/yr (state avg)`;

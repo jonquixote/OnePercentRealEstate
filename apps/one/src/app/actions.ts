@@ -320,6 +320,9 @@ tax_annual_amount,
 assessed_value,
 estimated_value,
 county,
+-- Wave 3: state-level insurance avg via regex-parse of address.
+-- TODO(Wave 1b): add listings.state column + backfill migration so this
+-- becomes a direct join rather than substring(addr from ', ([A-Z]{2}) ').
 ins_state.annual_premium AS insurance_state_avg
 FROM listings
 LEFT JOIN insurance_state_avg ins_state

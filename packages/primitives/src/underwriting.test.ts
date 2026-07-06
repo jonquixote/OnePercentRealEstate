@@ -17,6 +17,7 @@ import {
   annualCashflow,
   cashInvested,
   cashOnCash,
+  resolveCosts,
   type RuleConfig,
 } from './underwriting';
 
@@ -322,5 +323,66 @@ const TEST_DB = process.env.TEST_DATABASE_URL;
     } finally {
       await c.end();
     }
+  });
+});
+
+describe('resolveCosts — Wave 3 provenance', () => {
+  const cfg = {
+    propertyTaxRate: 0.012,
+    insuranceAnnual: 1200,
+  };
+
+  it('falls back to estimated tax when no real data', () => {
+    const c = resolveCosts(300_000, null, null, cfg);
+    expect(c.taxAnnual).toBeCloseTo(3600);
+    expect(c.provenance.tax.source).toBe('estimated_tax');
+    expect(c.provenance.hoa.source).toBe('none');
+    expect(c.provenance.insurance.source).toBe('default_insurance');
+    expect(c.insuranceAnnual).toBe(1200);
+  });
+
+  it('uses real_tax when tax_annual_amount is positive', () => {
+    const c = resolveCosts(300_000, 4200, null, cfg);
+    expect(c.taxAnnual).toBe(4200);
+    expect(c.provenance.tax.source).toBe('real_tax');
+    expect(c.provenance.tax.detail).toContain('actual');
+  });
+
+  it('treats 0 tax_annual_amount as tax-exempt (real_tax, not fallback)', () => {
+    // Gemini review: taxAnnualAmount=0 must NOT fall back to price*rate.
+    // A populated 0 means tax-exempt; we honor it as a real (zero) data point.
+    const c = resolveCosts(300_000, 0, null, cfg);
+    expect(c.taxAnnual).toBe(0);
+    expect(c.provenance.tax.source).toBe('real_tax');
+    expect(c.provenance.tax.detail).toMatch(/tax-exempt/i);
+  });
+
+  it('uses real_hoa when hoa_fee is positive', () => {
+    const c = resolveCosts(300_000, null, 250, cfg);
+    expect(c.hoaMonthly).toBe(250);
+    expect(c.provenance.hoa.source).toBe('real_hoa');
+  });
+
+  it('uses state_insurance when stateInsuranceAnnual is provided', () => {
+    const c = resolveCosts(300_000, null, null, cfg, 4201);
+    expect(c.insuranceAnnual).toBe(4201);
+    expect(c.provenance.insurance.source).toBe('state_insurance');
+  });
+
+  it('state_insurance takes precedence over default insurance; tax_annual takes precedence over estimate', () => {
+    // Both lanes valid: real tax + state insurance simultaneously.
+    const c = resolveCosts(300_000, 4200, 250, cfg, 4201);
+    expect(c.taxAnnual).toBe(4200);
+    expect(c.insuranceAnnual).toBe(4201);
+    expect(c.provenance.tax.source).toBe('real_tax');
+    expect(c.provenance.insurance.source).toBe('state_insurance');
+  });
+
+  it('uses ?? not || for insurance (preserves explicit 0 ambiguous-but preserved)', () => {
+    // If a rule explicitly sets insuranceAnnual=0 (misconfiguration), resolveCosts
+    // surfaces it instead of silently masking to 1200. The caller can decide.
+    const custom = { propertyTaxRate: 0.012, insuranceAnnual: 0 as number };
+    const c = resolveCosts(300_000, null, null, custom);
+    expect(c.insuranceAnnual).toBe(0);
   });
 });
