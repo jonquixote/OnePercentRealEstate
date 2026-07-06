@@ -136,7 +136,7 @@ def build_feature_row(row: dict[str, Any], meta: dict) -> list[float]:
 
     beds = num(row.get("beds"), 2.0)
     baths = num(row.get("baths"), 1.0)
-    sqft = _impute_sqft(beds, num(row.get("sqft"), None) if row.get("sqft") is not None else None, meta)
+    sqft = _impute_sqft(beds, num(row.get("sqft"), None), meta)
     year_built = num(row.get("year_built"), 1980.0)
     lot = num(row.get("lot_sqft"), 0.0)
     hoa = num(row.get("hoa_fee"), 0.0)

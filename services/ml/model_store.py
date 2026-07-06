@@ -127,19 +127,23 @@ def predict_rows(reqs: list[Any]) -> Optional[list[dict]]:
 
     from ml_rent_estimator.dataset import build_feature_row
 
-    X = np.asarray([build_feature_row(_row_from_request(r), _meta) for r in reqs], dtype=float)
-    p10 = np.exp(np.asarray(_boosters["p10"].predict(X), dtype=float))
-    p50 = np.exp(np.asarray(_boosters["p50"].predict(X), dtype=float))
-    p90 = np.exp(np.asarray(_boosters["p90"].predict(X), dtype=float))
-    out = []
-    for i in range(len(reqs)):
-        lo = float(min(p10[i], p50[i]))
-        hi = float(max(p90[i], p50[i]))
-        out.append(
-            {
-                "predicted_rent": round(float(p50[i]), 2),
-                "rent_low": round(lo, 2),
-                "rent_high": round(hi, 2),
-            }
-        )
-    return out
+    try:
+        X = np.asarray([build_feature_row(_row_from_request(r), _meta) for r in reqs], dtype=float)
+        p10 = np.exp(np.asarray(_boosters["p10"].predict(X), dtype=float))
+        p50 = np.exp(np.asarray(_boosters["p50"].predict(X), dtype=float))
+        p90 = np.exp(np.asarray(_boosters["p90"].predict(X), dtype=float))
+        out = []
+        for i in range(len(reqs)):
+            lo = float(min(p10[i], p50[i]))
+            hi = float(max(p90[i], p50[i]))
+            out.append(
+                {
+                    "predicted_rent": round(float(p50[i]), 2),
+                    "rent_low": round(lo, 2),
+                    "rent_high": round(hi, 2),
+                }
+            )
+        return out
+    except Exception as exc:
+        log.warning("v1 predict_rows failed \u2014 falling back to v2: %s", exc)
+        return None
