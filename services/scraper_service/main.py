@@ -263,7 +263,7 @@ def scrape_listings(req: ScrapeRequest):
                         INSERT INTO listings (
                             address, city, state, zip_code, price, bedrooms, bathrooms,
                             sqft, year_built, property_type, listing_type, images, raw_data,
-                            latitude, longitude, status, user_id,
+                            latitude, longitude, user_id,
                             sale_type, sale_type_source, sale_type_signal, sale_type_confidence,
                             address_norm, address_hash,
                             county, fips_code, neighborhoods, last_sold_price, last_sold_date,
@@ -273,7 +273,7 @@ def scrape_listings(req: ScrapeRequest):
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s,
                             %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s,
+                            %s, %s, %s,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'foreclosure' ELSE c.sale_type END,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest_flag' ELSE c.sale_type_source END,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest foreclosure filter' ELSE c.sale_type_signal END,
@@ -327,7 +327,7 @@ def scrape_listings(req: ScrapeRequest):
                         address, row.get('city'), row.get('state'), zip_code, price,
                         bedrooms, bathrooms, sqft, year_built, get_property_type(row),
                         req.listing_type, Json(images), Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
-                        'watch', DEFAULT_USER_ID,
+                        DEFAULT_USER_ID,
                         req.foreclosure, req.foreclosure, req.foreclosure, req.foreclosure,
                         row.get('city'), row.get('state'),
                         enr["county"], enr["fips_code"], enr["neighborhoods"],

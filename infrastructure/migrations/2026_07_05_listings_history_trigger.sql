@@ -7,7 +7,8 @@
 CREATE OR REPLACE FUNCTION log_listing_history() RETURNS trigger AS $$
 BEGIN
   INSERT INTO listings_history (listing_id, observed_at, price, estimated_rent, days_on_market, listing_status)
-  VALUES (NEW.id, NOW(), NEW.price, NEW.estimated_rent, NEW.days_on_market, NEW.listing_status);
+  VALUES (NEW.id, NOW(), NEW.price, NEW.estimated_rent, NEW.days_on_market, NEW.listing_status)
+  ON CONFLICT (listing_id, observed_at) DO NOTHING;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
