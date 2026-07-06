@@ -1,6 +1,12 @@
--- Wave 1 follow-up: add parking_garage and lot_sqft columns missed in the
--- initial enrichment migration, and refresh the coverage view to track them.
--- All adds are nullable + default-less => metadata-only, no table rewrite.
+-- NOTE: This migration is ENTIRELY REDUNDANT. The columns and view already
+-- exist in 2026_07_05_listings_enrichment_columns.sql (added via amendment to
+-- that migration after it was created). IF NOT EXISTS + DROP IF EXISTS make it
+-- a harmless no-op. Kept for historical continuity — it documents the real
+-- sequence of development on the wave/1-data-harvest branch. If the amended
+-- 07_05 already ran on a given database, this file can be skipped.
+--
+-- Wave 1 follow-up: originally intended to add parking_garage and lot_sqft
+-- columns and refresh the coverage view to track them.
 
 ALTER TABLE listings
   ADD COLUMN IF NOT EXISTS parking_garage BOOLEAN,

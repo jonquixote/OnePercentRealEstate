@@ -30,8 +30,8 @@
 | hoa_fee | 66.2% |
 | last_sold_price | 53.3% |
 | tax_annual_amount | 0.0% (source limitation) |
-| parking_garage | pending backfill |
-| lot_sqft | pending backfill |
+| parking_garage | 0.0% (source limitation, mostly rentals) |
+| lot_sqft | 4.0% |
 
 ## Wave 1b — External Sources (Deferred)
 - Census ACS demographics

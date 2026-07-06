@@ -54,6 +54,24 @@ SELECT * FROM vw_field_coverage;
 
 ---
 
+## Task 2: Scraper Extraction
+
+Scraper extraction changes implemented in `services/scraper_service/enrichment.py` and `main.py`. The `extract_enrichment()` pure function maps 17 fields from `raw_data` to typed columns. The scraper INSERT uses 42 `%s` placeholders with 42 params. See implementation plan for details.
+
+---
+
+## Task 3: `extra_property_data` Findings
+
+**File:** `docs/superpowers/plans/2026-07-05-wave-1-extra-data-findings.md`
+
+**Decision:** Keep `extra_property_data=False`. The flag does NOT populate `tax` at scrape time. Tax remains at 0.0% coverage (source limitation, not a pipeline gap). Wave 3 will derive tax from `assessed_value × county millage`.
+
+**Cost evidence:** Scrape ZIP 77006 twice — once without the flag (~8s), once with (~32s, 4× slowdown). Zero additional tax rows. Not worth the crawl throughput loss.
+
+**Acceptance:** `pct_tax = 0.0` in vw_field_coverage is expected and correct.
+
+---
+
 ## Task 4: Out-of-Band Backfill Results
 
 ### Task 4 Step 3 — Backfill Execution
@@ -95,15 +113,11 @@ Unenriched: 194,471 (~21%)
 
 ---
 
-## Task 3: `extra_property_data` Findings
+## Task 4 (cont.): Backfill Completion (hoa_fee Fix)
 
-**File:** `docs/superpowers/plans/2026-07-05-wave-1-extra-data-findings.md`
+**hoa_fee widened:** NUMERIC(10,2) → NUMERIC(15,2) to accommodate large HOA values.
 
-**Decision:** Keep `extra_property_data=False`. The flag does NOT populate `tax` at scrape time. Tax remains at 0.0% coverage (source limitation, not a pipeline gap). Wave 3 will derive tax from `assessed_value × county millage`.
-
-**Cost evidence:** Scrape ZIP 77006 twice — once without the flag (~8s), once with (~32s, 4× slowdown). Zero additional tax rows. Not worth the crawl throughput loss.
-
-**Acceptance:** `pct_tax = 0.0` in vw_field_coverage is expected and correct.
+**Backfill resumed:** 90,831 remaining rows enriched (total: 855,000 → 945,831).
 
 ---
 
@@ -123,14 +137,6 @@ trg_listings_history | CREATE TRIGGER trg_listings_history AFTER UPDATE OF price
 - Trigger fires on `AFTER UPDATE OF` (column-scoped) — enrichment backfill does NOT fire it
 - Rent NOTIFY trigger (`trg_rent_job_enqueue`) unaffected (INSERT-only, never UPDATE)
 - `ON CONFLICT DO NOTHING` handles edge-case duplicate timestamps from concurrent scraper jobs
-
----
-
-## Task 4: Backfill Completion (hoa_fee Fix)
-
-**hoa_fee widened:** NUMERIC(10,2) → NUMERIC(15,2) to accommodate large HOA values.
-
-**Backfill resumed:** 90,831 remaining rows enriched (total: 855,000 → 945,831).
 
 ---
 
@@ -266,10 +272,13 @@ Added two enrichment columns missed in the initial migration, plus code-quality 
 ```
                    version                   |          applied_at          
 ----------------------------------------------+------------------------------
- 2026_07_05_drop_dead_status_column           | 2026-07-06 06:42:03.527904+00
- 2026_07_05_listings_history_trigger          | 2026-07-06 06:42:02.924347+00
- 2026_07_05_listings_enrichment_columns       | 2026-07-06 03:46:00.744904+00
+  2026_07_05_drop_dead_status_column           | 2026-07-06 06:42:03.527904+00
+  2026_07_05_listings_history_trigger          | 2026-07-06 06:42:02.924347+00
+  2026_07_05_listings_enrichment_columns       | 2026-07-06 03:46:00.744904+00
+  2026_07_06_add_parking_garage_lot_sqft       | 2026-07-06 (applied post-review)
 ```
+
+> **Note:** The `2026_07_06_add_parking_garage_lot_sqft` migration is technically redundant — the columns and view already exist in the amended `2026_07_05_listings_enrichment_columns` migration. It was created as a follow-up before the earlier migration was discovered to already include these columns. `IF NOT EXISTS` / `DROP IF EXISTS` make it a harmless no-op. It exists for historical continuity on the `wave/1-data-harvest` branch and was applied to production to get the version tracked in `schema_migrations`.
 
 ---
 
@@ -289,5 +298,6 @@ Added two enrichment columns missed in the initial migration, plus code-quality 
 - Expand WHERE clause: enrichment-only re-scrapes update the row
 - Verified deploy sequence safe: no `status` column errors
 - Updated `wave-progress` and `upgrade-plan` memory files
+- Documented redundant migration (`2026_07_06_add_parking_garage_lot_sqft`) as a harmless no-op
 
-**Final commit SHA:** `fd5acd5`
+**Final commit SHA:** `fc92a18`

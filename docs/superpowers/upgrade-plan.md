@@ -16,6 +16,7 @@
 | 5 | Planned | — | Track P |
 | 6 | Planned | — | Filters |
 | 7 | Planned | — | raw_data retention gate |
+| 8 | Planned | — | Ops maturity: alertmanager, Grafana dashboards, CI gates, DR drill, n8n decommission |
 
 ## Key Decisions Log
 - **extra_property_data=False** (2026-07-06): Flag does NOT populate `tax` at scrape time. 4× crawl slowdown, zero benefit. Wave 3 uses assessed_value × county millage.
@@ -23,3 +24,4 @@
 - **hoa_fee widened to NUMERIC(15,2)** (2026-07-06): Original NUMERIC(10,2) overflowed on ~195K rows during backfill.
 - **parking_garage + lot_sqft added** (2026-07-06): Missing from initial Wave 1 migration; added via follow-up.
 - **_num() rejects negative values** (2026-07-06): Backfill regex and `_num()` helper now reject negative values for monetary fields (price/sqf/HOA/tax).
+- **WHERE clause expanded** (2026-07-06): Enrichment-only re-scrapes now update the row via expanded conflict UPDATE clause (all 19 enrichment columns, not just price/beds/baths/sqft).
