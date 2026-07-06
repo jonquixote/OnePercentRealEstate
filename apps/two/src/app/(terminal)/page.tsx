@@ -185,7 +185,11 @@ export default function TerminalPage() {
       if (rows.length === 0) return;
       const cols = ["id", "address", "price", "bedrooms", "bathrooms", "sqft", "estimated_rent"] as const;
       const esc = (v: unknown) => {
-        const s = v == null ? "" : String(v);
+        let s = v == null ? "" : String(v);
+        // CSV formula-injection guard: cell values are scraped external data
+        // (addresses etc.); a leading = + - @ or tab/CR would execute as a
+        // formula in Excel/Sheets. Neutralize with a leading apostrophe.
+        if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
         return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       };
       const csv = [cols.join(",")]
