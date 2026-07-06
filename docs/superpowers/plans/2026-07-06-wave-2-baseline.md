@@ -22,11 +22,28 @@ Gate: ≥100K usable → **PASS** (3× margin). Proceed to training.
 
 ## Task 1 — HUD SAFMR ingest
 
-_(appended on completion)_
+- FY2026 SAFMR file (huduser.gov, 4.4 MB xlsx) → `hud_safmr`: **193,005 rows / 38,601 ZIPs** (deduped multi-metro ZIPs keeping max).
+- `rent_estimator_v2.get_hud_safmr()` repointed from the 1-row `market_benchmarks` to `hud_safmr` — the federal floor fires for the first time. Probe: rural TX 76437 3BR → $1,717 (SAFMR $1,420 anchor + comps).
+
+## Task 2 — training
+
+- 306,362 rows loaded; **address-hash 90/10 split** (time split rejected: rental collection started ~2026-06-05, "last 30d" would hold out 93% of data; address hashing also kills relisted-unit leakage).
+- train=275,819 / holdout=30,543; 3 LightGBM quantile heads (native API); wall-clock **394 s** on the 2-core box; artifacts on the `ml_models` volume.
 
 ## Task 3 — eval results + promotion gate
 
-_(appended on completion)_
+| Metric | Value |
+|---|---|
+| Holdout rows | 30,543 |
+| **v1 p50 MAE** | **$483.75** |
+| v1 MAPE | 15.2% |
+| HUD-anchor baseline MAE | $768.46 |
+| **Gate ratio (≤0.85 required)** | **0.63 — 37% better than HUD** |
+| State wins vs HUD (≥10/15 required) | **15/15** |
+| Band coverage (p10–p90, target ≈0.8) | 0.766 |
+| v0 sample comparison | null (in-process v2 calls returned no estimates; informative-only, not gating) |
+
+**PROMOTION GATE: PASS.** `rent_models` v1 row written with full metrics jsonb, `active=false` (activation is Task 6).
 
 ## Task 6 — re-score acceptance
 
