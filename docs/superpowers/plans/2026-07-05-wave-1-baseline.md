@@ -290,4 +290,4 @@ Added two enrichment columns missed in the initial migration, plus code-quality 
 - Verified deploy sequence safe: no `status` column errors
 - Updated `wave-progress` and `upgrade-plan` memory files
 
-**Final commit SHA:** `7845223`
+**Final commit SHA:** `fd5acd5`
