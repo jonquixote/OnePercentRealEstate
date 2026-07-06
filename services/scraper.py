@@ -164,7 +164,6 @@ def process_listing(row, user_id):
             "estimated_rent": None, # Trigger will populate
             "expense_ratio": 50,
             "financial_snapshot": financial_snapshot,
-            "status": "watch",
             "user_id": user_id,
             "images": images,
             "raw_data": raw_data,

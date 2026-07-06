@@ -10,6 +10,7 @@ import urllib.parse
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import sleep
+from enrichment import extract_enrichment
 
 app = FastAPI()
 
@@ -226,6 +227,9 @@ def scrape_listings(req: ScrapeRequest):
                     raw_data["lat"] = row.get('latitude')
                     raw_data["lon"] = row.get('longitude')
 
+                # Extract enrichment fields for insertion
+                enr = extract_enrichment(raw_data)
+
                 images = []
                 if row.get('primary_photo'):
                     images.append(row['primary_photo'])
@@ -259,20 +263,25 @@ def scrape_listings(req: ScrapeRequest):
                         INSERT INTO listings (
                             address, city, state, zip_code, price, bedrooms, bathrooms,
                             sqft, year_built, property_type, listing_type, images, raw_data,
-                            latitude, longitude, status, user_id,
+                            latitude, longitude, user_id,
                             sale_type, sale_type_source, sale_type_signal, sale_type_confidence,
-                            address_norm, address_hash
+                            address_norm, address_hash,
+                            county, fips_code, neighborhoods, last_sold_price, last_sold_date,
+                            assessed_value, estimated_value, description, style, new_construction,
+                            list_date, price_per_sqft, hoa_fee, tax_annual_amount, property_url,
+                            parking_garage, lot_sqft
                         )
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s,
                             %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s,
+                            %s, %s, %s,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'foreclosure' ELSE c.sale_type END,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest_flag' ELSE c.sale_type_source END,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 'homeharvest foreclosure filter' ELSE c.sale_type_signal END,
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 0.95 ELSE c.sale_type_confidence END,
                             n.address_norm,
-                            md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), ''))
+                            md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), '')),
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                         FROM classify_sale_type(%s::jsonb, %s) c,
                              LATERAL (
                                  SELECT NULLIF(regexp_replace(regexp_replace(lower(trim(%s)), '[.,#]', '', 'g'), '\\s+', ' ', 'g'), '') AS address_norm
@@ -280,33 +289,80 @@ def scrape_listings(req: ScrapeRequest):
                         ON CONFLICT (address, listing_type, sale_type)
                         DO UPDATE SET
                             price = EXCLUDED.price,
-                            bedrooms = EXCLUDED.bedrooms,
-                            bathrooms = EXCLUDED.bathrooms,
-                            sqft = EXCLUDED.sqft,
-                            year_built = EXCLUDED.year_built,
-                            property_type = EXCLUDED.property_type,
+                            bedrooms = COALESCE(EXCLUDED.bedrooms, listings.bedrooms),
+                            bathrooms = COALESCE(EXCLUDED.bathrooms, listings.bathrooms),
+                            sqft = COALESCE(EXCLUDED.sqft, listings.sqft),
+                            year_built = COALESCE(EXCLUDED.year_built, listings.year_built),
+                            property_type = COALESCE(EXCLUDED.property_type, listings.property_type),
                             images = EXCLUDED.images,
                             raw_data = EXCLUDED.raw_data,
-                            latitude = EXCLUDED.latitude,
-                            longitude = EXCLUDED.longitude,
-                            sale_type_source = EXCLUDED.sale_type_source,
-                            sale_type_signal = EXCLUDED.sale_type_signal,
-                            sale_type_confidence = EXCLUDED.sale_type_confidence,
-                            address_norm = EXCLUDED.address_norm,
-                            address_hash = EXCLUDED.address_hash,
+                            latitude = COALESCE(EXCLUDED.latitude, listings.latitude),
+                            longitude = COALESCE(EXCLUDED.longitude, listings.longitude),
+                            sale_type_source = COALESCE(EXCLUDED.sale_type_source, listings.sale_type_source),
+                            sale_type_signal = COALESCE(EXCLUDED.sale_type_signal, listings.sale_type_signal),
+                            sale_type_confidence = COALESCE(EXCLUDED.sale_type_confidence, listings.sale_type_confidence),
+                            address_norm = COALESCE(EXCLUDED.address_norm, listings.address_norm),
+                            address_hash = COALESCE(EXCLUDED.address_hash, listings.address_hash),
+                            county = COALESCE(EXCLUDED.county, listings.county),
+                            fips_code = COALESCE(EXCLUDED.fips_code, listings.fips_code),
+                            neighborhoods = COALESCE(EXCLUDED.neighborhoods, listings.neighborhoods),
+                            last_sold_price = COALESCE(EXCLUDED.last_sold_price, listings.last_sold_price),
+                            last_sold_date = COALESCE(EXCLUDED.last_sold_date, listings.last_sold_date),
+                            assessed_value = COALESCE(EXCLUDED.assessed_value, listings.assessed_value),
+                            estimated_value = COALESCE(EXCLUDED.estimated_value, listings.estimated_value),
+                            description = COALESCE(EXCLUDED.description, listings.description),
+                            style = COALESCE(EXCLUDED.style, listings.style),
+                            new_construction = COALESCE(EXCLUDED.new_construction, listings.new_construction),
+                            list_date = COALESCE(EXCLUDED.list_date, listings.list_date),
+                            price_per_sqft = COALESCE(EXCLUDED.price_per_sqft, listings.price_per_sqft),
+                            hoa_fee = COALESCE(EXCLUDED.hoa_fee, listings.hoa_fee),
+                            tax_annual_amount = COALESCE(EXCLUDED.tax_annual_amount, listings.tax_annual_amount),
+                            property_url = COALESCE(EXCLUDED.property_url, listings.property_url),
+                            parking_garage = COALESCE(EXCLUDED.parking_garage, listings.parking_garage),
+                            lot_sqft = COALESCE(EXCLUDED.lot_sqft, listings.lot_sqft),
                             updated_at = NOW()
-                        WHERE listings.price IS DISTINCT FROM EXCLUDED.price
-                           OR listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms
-                           OR listings.bathrooms IS DISTINCT FROM EXCLUDED.bathrooms
-                           OR listings.sqft IS DISTINCT FROM EXCLUDED.sqft
+                        WHERE (EXCLUDED.price IS NOT NULL AND listings.price IS DISTINCT FROM EXCLUDED.price)
+                           OR (EXCLUDED.bedrooms IS NOT NULL AND listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms)
+                           OR (EXCLUDED.bathrooms IS NOT NULL AND listings.bathrooms IS DISTINCT FROM EXCLUDED.bathrooms)
+                           OR (EXCLUDED.sqft IS NOT NULL AND listings.sqft IS DISTINCT FROM EXCLUDED.sqft)
+                           OR (EXCLUDED.year_built IS NOT NULL AND listings.year_built IS DISTINCT FROM EXCLUDED.year_built)
+                           OR (EXCLUDED.property_type IS NOT NULL AND listings.property_type IS DISTINCT FROM EXCLUDED.property_type)
+                           OR (EXCLUDED.sale_type_source IS NOT NULL AND listings.sale_type_source IS DISTINCT FROM EXCLUDED.sale_type_source)
+                           OR (EXCLUDED.sale_type_signal IS NOT NULL AND listings.sale_type_signal IS DISTINCT FROM EXCLUDED.sale_type_signal)
+                           OR (EXCLUDED.sale_type_confidence IS NOT NULL AND listings.sale_type_confidence IS DISTINCT FROM EXCLUDED.sale_type_confidence)
+                           OR (EXCLUDED.latitude IS NOT NULL AND listings.latitude IS DISTINCT FROM EXCLUDED.latitude)
+                           OR (EXCLUDED.longitude IS NOT NULL AND listings.longitude IS DISTINCT FROM EXCLUDED.longitude)
+                           OR (EXCLUDED.county IS NOT NULL AND listings.county IS DISTINCT FROM EXCLUDED.county)
+                           OR (EXCLUDED.fips_code IS NOT NULL AND listings.fips_code IS DISTINCT FROM EXCLUDED.fips_code)
+                           OR (EXCLUDED.neighborhoods IS NOT NULL AND listings.neighborhoods IS DISTINCT FROM EXCLUDED.neighborhoods)
+                           OR (EXCLUDED.last_sold_price IS NOT NULL AND listings.last_sold_price IS DISTINCT FROM EXCLUDED.last_sold_price)
+                           OR (EXCLUDED.last_sold_date IS NOT NULL AND listings.last_sold_date IS DISTINCT FROM EXCLUDED.last_sold_date)
+                           OR (EXCLUDED.assessed_value IS NOT NULL AND listings.assessed_value IS DISTINCT FROM EXCLUDED.assessed_value)
+                           OR (EXCLUDED.estimated_value IS NOT NULL AND listings.estimated_value IS DISTINCT FROM EXCLUDED.estimated_value)
+                           OR (EXCLUDED.description IS NOT NULL AND listings.description IS DISTINCT FROM EXCLUDED.description)
+                           OR (EXCLUDED.style IS NOT NULL AND listings.style IS DISTINCT FROM EXCLUDED.style)
+                           OR (EXCLUDED.new_construction IS NOT NULL AND listings.new_construction IS DISTINCT FROM EXCLUDED.new_construction)
+                           OR (EXCLUDED.list_date IS NOT NULL AND listings.list_date IS DISTINCT FROM EXCLUDED.list_date)
+                           OR (EXCLUDED.price_per_sqft IS NOT NULL AND listings.price_per_sqft IS DISTINCT FROM EXCLUDED.price_per_sqft)
+                           OR (EXCLUDED.hoa_fee IS NOT NULL AND listings.hoa_fee IS DISTINCT FROM EXCLUDED.hoa_fee)
+                           OR (EXCLUDED.tax_annual_amount IS NOT NULL AND listings.tax_annual_amount IS DISTINCT FROM EXCLUDED.tax_annual_amount)
+                           OR (EXCLUDED.property_url IS NOT NULL AND listings.property_url IS DISTINCT FROM EXCLUDED.property_url)
+                           OR (EXCLUDED.parking_garage IS NOT NULL AND listings.parking_garage IS DISTINCT FROM EXCLUDED.parking_garage)
+                           OR (EXCLUDED.lot_sqft IS NOT NULL AND listings.lot_sqft IS DISTINCT FROM EXCLUDED.lot_sqft)
                         RETURNING id, (xmax = 0) as was_inserted
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,
                         bedrooms, bathrooms, sqft, year_built, get_property_type(row),
                         req.listing_type, Json(images), Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
-                        'watch', DEFAULT_USER_ID,
+                        DEFAULT_USER_ID,
                         req.foreclosure, req.foreclosure, req.foreclosure, req.foreclosure,
                         row.get('city'), row.get('state'),
+                        enr["county"], enr["fips_code"], enr["neighborhoods"],
+                        enr["last_sold_price"], enr["last_sold_date"], enr["assessed_value"],
+                        enr["estimated_value"], enr["description"], enr["style"],
+                        enr["new_construction"], enr["list_date"], enr["price_per_sqft"],
+                        enr["hoa_fee"], enr["tax_annual_amount"], enr["property_url"],
+                        enr["parking_garage"], enr["lot_sqft"],
                         Json(raw_data), get_property_type(row),
                         address
                     ))
