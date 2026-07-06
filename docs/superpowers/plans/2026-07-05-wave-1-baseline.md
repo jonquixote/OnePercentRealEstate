@@ -25,10 +25,14 @@ This is the "before" state used to measure the success of Tasks 1–6.
 ### Task 1 Step 1 — Rent Trigger Verification
 
 **SQL Query Results:**
-(To be filled in when Task 1 Step 1 is run)
+```
+        tgname        |                                                      pg_get_triggerdef                                                       
+----------------------+------------------------------------------------------------------------------------------------------------------------------
+ trg_rent_job_enqueue | CREATE TRIGGER trg_rent_job_enqueue AFTER INSERT ON public.listings FOR EACH ROW EXECUTE FUNCTION notify_rent_job_enqueued()
+```
 
 **Observation:**
-(To be recorded — confirm fire condition, note if column-scoped or unqualified UPDATE)
+✓ SAFE: Trigger fires AFTER INSERT only (not UPDATE). Will not fire during Task 4 backfill (which uses UPDATE). Rent queue is protected.
 
 ---
 
@@ -40,9 +44,13 @@ SELECT * FROM vw_field_coverage;
 ```
 
 **Results:**
-(To be filled in when Task 1 Step 3 is run)
+```
+ total  | pct_hoa | pct_tax | pct_url | pct_county | pct_est_value | pct_last_sold | pct_description | unenriched_rows 
+--------+---------+---------+---------+------------+---------------+---------------+-----------------+-----------------
+ 944413 |     0.0 |     0.0 |     0.0 |        0.0 |           0.0 |           0.0 |             0.0 |          944413
+```
 
-**Expected:** All `pct_*` near 0, `unenriched_rows = 944328`
+**Verified:** ✓ All `pct_*` = 0.0, `unenriched_rows = 944,413` (all rows waiting for enrichment)
 
 ---
 
