@@ -31,7 +31,7 @@ BEGIN
             neighborhoods   = nullif(l.raw_data->>'neighborhoods','')::text,
             last_sold_price = CASE WHEN l.raw_data->>'last_sold_price' ~ '^\-?[0-9]+(\.[0-9]+)?$'
                                    THEN (l.raw_data->>'last_sold_price')::numeric ELSE NULL END,
-            last_sold_date  = CASE WHEN l.raw_data->>'last_sold_date' ~ '^\d{4}-\d{2}-\d{2}' THEN (l.raw_data->>'last_sold_date')::date ELSE NULL END,
+            last_sold_date  = CASE WHEN l.raw_data->>'last_sold_date' ~ '^\d{4}-\d{2}-\d{2}$' THEN (l.raw_data->>'last_sold_date')::date ELSE NULL END,
             assessed_value  = CASE WHEN l.raw_data->>'assessed_value' ~ '^\-?[0-9]+(\.[0-9]+)?$'
                                    THEN (l.raw_data->>'assessed_value')::numeric ELSE NULL END,
             estimated_value = CASE WHEN l.raw_data->>'estimated_value' ~ '^\-?[0-9]+(\.[0-9]+)?$'
@@ -39,7 +39,7 @@ BEGIN
             description     = nullif(l.raw_data->>'text','')::text,
             style           = nullif(l.raw_data->>'style','')::text,
             new_construction= CASE WHEN l.raw_data->>'new_construction' IN ('true','false','t','f','yes','no','1','0') THEN (l.raw_data->>'new_construction')::boolean ELSE NULL END,
-            list_date       = CASE WHEN l.raw_data->>'list_date' ~ '^\d{4}-\d{2}-\d{2}' THEN (l.raw_data->>'list_date')::date ELSE NULL END,
+            list_date       = CASE WHEN l.raw_data->>'list_date' ~ '^\d{4}-\d{2}-\d{2}$' THEN (l.raw_data->>'list_date')::date ELSE NULL END,
             price_per_sqft  = CASE WHEN l.raw_data->>'price_per_sqft' ~ '^\-?[0-9]+(\.[0-9]+)?$'
                                    THEN (l.raw_data->>'price_per_sqft')::numeric ELSE NULL END,
             hoa_fee         = CASE WHEN l.raw_data->>'hoa_fee' ~ '^\-?[0-9]+(\.[0-9]+)?$'
