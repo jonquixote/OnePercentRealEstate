@@ -112,14 +112,14 @@ def fit_encoders(train_df) -> dict:
 def _impute_sqft(beds: Optional[float], sqft: Optional[float], meta: dict) -> float:
     if sqft is not None and sqft == sqft and sqft > 0:
         return float(sqft)
-    b = str(int(min(max(beds or 2, 0), 8)))
+    b = str(int(min(max(beds if beds is not None else 2, 0), 8)))
     return float(meta["sqft_median_by_beds"].get(b, 1200.0))
 
 
 def _hud_anchor(zip_code: str, beds: Optional[float], hud_safmr: Optional[float], meta: dict) -> float:
     if hud_safmr is not None and hud_safmr == hud_safmr and hud_safmr > 0:
         return float(hud_safmr)
-    b = str(int(min(max(beds or 2, 0), 4)))
+    b = str(int(min(max(beds if beds is not None else 2, 0), 4)))
     return float(meta["hud_beds_median"].get(b, 1500.0))
 
 

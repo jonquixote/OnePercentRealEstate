@@ -619,6 +619,11 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
           scored.map((s) => s.model_version),
         ],
       );
+      // Map items by listing_id so features are emitted in scored order,
+      // matching listing_id / model_version / predicted_rent arrays.
+      const itemMap = new Map<number, (typeof items)[number]>(
+        items.map((i) => [i.listing_id, i]),
+      );
       await client.query(
         `INSERT INTO rent_predictions_audit (listing_id, model_version, predicted_rent, features)
          SELECT unnest($1::bigint[]), unnest($2::text[]), unnest($3::numeric[]), unnest($4::jsonb[])`,
@@ -626,9 +631,7 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
           scored.map((s) => s.listing_id),
           scored.map((s) => s.model_version),
           scored.map((s) => s.predicted_rent),
-          items
-            .filter((i) => scoredIds.has(i.listing_id))
-            .map((i) => JSON.stringify(i)),
+          scored.map((s) => JSON.stringify(itemMap.get(s.listing_id) ?? null)),
         ],
       );
     }

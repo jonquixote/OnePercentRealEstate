@@ -389,7 +389,7 @@ def estimate_rent_v2(
     
     # 3. Get Scraped Comps (Source B)
     comps_median, comps, comp_count = get_scraped_comps(
-        lat, lon, bedrooms or 3,
+        lat, lon, bedrooms if bedrooms is not None else 3,
         radius_miles=50.0,
         hud_rent=hud_rent
     )
