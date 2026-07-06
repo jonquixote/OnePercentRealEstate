@@ -100,6 +100,17 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
         ? DISTRESS_LABELS[property.sale_type] ?? null
         : null;
 
+    // Wave 4 — price-cut + market-time + confidence-band facts (all optional;
+    // rows predating the derived columns simply render without them).
+    const cutPct: number | null = property.price_cut_pct != null && Number(property.price_cut_pct) > 0
+        ? Number(property.price_cut_pct) : null;
+    const dom: number | null = property.days_on_market != null && Number(property.days_on_market) >= 0
+        ? Number(property.days_on_market) : null;
+    const rentLow: number | null = property.rent_low != null ? Number(property.rent_low) : null;
+    const rentHigh: number | null = property.rent_high != null ? Number(property.rent_high) : null;
+    const motivatedScore: number | null = property.motivated_score != null
+        ? Number(property.motivated_score) : null;
+
     const handleToggle = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         e.stopPropagation();
         onSelect?.(property.id);
@@ -198,6 +209,15 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                                         {distressLabel}
                                     </span>
                                 )}
+                                {cutPct != null && (
+                                    <span
+                                        className="inline-flex items-center gap-1 rounded-full bg-brass px-2.5 py-1 text-[11px] font-semibold tracking-wide text-zinc-950 shadow-sm"
+                                        aria-label={`Price reduced ${(cutPct * 100).toFixed(0)} percent since listing`}
+                                    >
+                                        <ArrowDownRight className="h-3 w-3" aria-hidden="true" />
+                                        −{(cutPct * 100).toFixed(cutPct >= 0.1 ? 0 : 1)}% cut
+                                    </span>
+                                )}
                             </div>
 
                             {/* 1% Rule chip (top-right) */}
@@ -244,13 +264,36 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                             </h3>
 
                             {/* Spec strip */}
-                            <div className="mt-3 flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 tabular-nums">
+                            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 tabular-nums">
                                 <span>{beds || '—'} bd</span>
                                 <span className="text-zinc-300 dark:text-zinc-600">·</span>
                                 <span>{baths || '—'} ba</span>
                                 <span className="text-zinc-300 dark:text-zinc-600">·</span>
                                 <span>{sqft ? numberFormatter.format(sqft) : '—'} sqft</span>
+                                {dom != null && (
+                                    <>
+                                        <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                                        <span title="Days on market">{dom} DOM</span>
+                                    </>
+                                )}
+                                {motivatedScore != null && motivatedScore >= 60 && (
+                                    <>
+                                        <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                                        <span
+                                            className="font-semibold text-brass-hi"
+                                            title={`Motivated-seller score ${motivatedScore}/100 (price cuts + market time + sale type)`}
+                                        >
+                                            Motivated {motivatedScore}
+                                        </span>
+                                    </>
+                                )}
                             </div>
+                            {/* Rent confidence band (v1 model quantiles) */}
+                            {hasRent && rentLow != null && rentHigh != null && (
+                                <p className="mt-1 text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                                    rent range {currencyFormatter.format(rentLow)}–{currencyFormatter.format(rentHigh)}
+                                </p>
+                            )}
 
                             {/* Bottom row: monthly cashflow */}
                             <div className="mt-auto pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-line mt-4">

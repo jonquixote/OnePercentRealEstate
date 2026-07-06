@@ -66,7 +66,7 @@ export default function Dashboard() {
     debounceRef.current = setTimeout(() => { loadProperties(1); }, 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, qs.sold, qs.pmin, qs.pmax, qs.beds, qs.baths, qs.op, qs.cap, qs.coc, qs.type, qs.sale, qs.strat]);
+  }, [sortBy, qs.sold, qs.pmin, qs.pmax, qs.beds, qs.baths, qs.op, qs.cap, qs.coc, qs.type, qs.sale, qs.strat, qs.hoamax, qs.dom, qs.cut]);
 
   async function loadProperties(pageNum: number) {
     try {
@@ -83,6 +83,9 @@ export default function Dashboard() {
         propertyType: filters.propertyType,
         saleType: filters.saleType,
         strategy: filters.strategy,
+        hoaMax: filters.hoaMax > 0 ? filters.hoaMax : undefined,
+        domMin: filters.domMin > 0 ? filters.domMin : undefined,
+        hasPriceCut: filters.hasPriceCut || undefined,
       });
       const items = data.items;
       setHasMore(items.length >= 100);
@@ -164,6 +167,8 @@ export default function Dashboard() {
                 <option value="one_percent_high">Rule · best</option>
                 <option value="one_percent_low">Rule · worst</option>
                 <option value="newest">Newest listed</option>
+                <option value="biggest_cut">Biggest price cut</option>
+                <option value="stalest">Longest on market</option>
                 <option value="price_high">Price · high to low</option>
                 <option value="price_low">Price · low to high</option>
               </select>
