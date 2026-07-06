@@ -262,21 +262,14 @@ async function processListing(listingId, parentLog) {
         }
         return;
     }
+    // Two separate try/catches on purpose: classifyMlError() + the breaker
+    // exist to measure *ML service* health. A markDone() failure is a DB
+    // write problem — classifying it would falsely trip the ML breaker
+    // (default classification is 'transient') and pause the drain for an
+    // outage that isn't happening.
+    let prediction;
     try {
-        const prediction = await callMlService(payload, jobLog);
-        await markDone(payload.listing_id, prediction.predicted_rent, prediction.model_version, payload);
-        breaker.recordSuccess();
-        jobLog.info({
-            duration_ms: Date.now() - start,
-            predicted_rent: prediction.predicted_rent,
-            model_version: prediction.model_version,
-        }, 'rent calc done');
-        // Bust frontend caches periodically
-        completionsSinceLastBust++;
-        if (completionsSinceLastBust >= BUST_EVERY) {
-            completionsSinceLastBust = 0;
-            await bustFrontendCaches();
-        }
+        prediction = await callMlService(payload, jobLog);
     }
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -296,6 +289,31 @@ async function processListing(listingId, parentLog) {
             jobLog.error({ markErr: markErr.message }, 'failed to mark rent_calc_status=failed (will be retried on next NOTIFY/update)');
         }
         jobLog.error({ err: message, duration_ms: Date.now() - start }, 'rent calc errored');
+        return;
+    }
+    // ML answered — record the success against the breaker regardless of
+    // what the DB write does next.
+    breaker.recordSuccess();
+    try {
+        await markDone(payload.listing_id, prediction.predicted_rent, prediction.model_version, payload);
+        jobLog.info({
+            duration_ms: Date.now() - start,
+            predicted_rent: prediction.predicted_rent,
+            model_version: prediction.model_version,
+        }, 'rent calc done');
+        // Bust frontend caches periodically
+        completionsSinceLastBust++;
+        if (completionsSinceLastBust >= BUST_EVERY) {
+            completionsSinceLastBust = 0;
+            await bustFrontendCaches();
+        }
+    }
+    catch (err) {
+        // DB write-back failed. The row is still 'pending' (markDone is
+        // transactional), so the drain loop retries it naturally. Not an ML
+        // signal — the breaker is untouched. markFailed would also be a DB
+        // write into the same unhealthy DB; don't bother.
+        jobLog.error({ err: err.message, duration_ms: Date.now() - start }, 'rent write-back failed — row stays pending for retry');
     }
 }
 // ---------------------------------------------------------------------------
