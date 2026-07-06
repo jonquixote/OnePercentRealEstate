@@ -21,6 +21,7 @@ import { Client, Pool, type Notification } from 'pg';
 import { loadEnv } from './env.js';
 import { getLogger, newTraceId, withTrace, type WorkerLogger } from './logger.js';
 import { Redis } from 'ioredis';
+import { CircuitBreaker, classifyMlError } from './ml-errors.js';
 
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
@@ -150,6 +151,16 @@ class Semaphore {
 const semaphore = new Semaphore(env.RENT_WORKER_CONCURRENCY);
 let inFlight = 0;
 let shuttingDown = false;
+
+// Breaker shared by the drain loop and NOTIFY-driven jobs. When the ML
+// service flaps (its OOM restart loop was the P1 incident on 2026-07-05),
+// we stop pulling work instead of converting the backlog into permanent
+// 'failed' rows.
+const breaker = new CircuitBreaker(
+  5,       // consecutive transient failures before opening
+  30_000,  // first open window
+  300_000, // cap
+);
 
 // ---------------------------------------------------------------------------
 // processJob: load row → call ML → write back. Each step has its own
@@ -334,8 +345,45 @@ async function processListing(listingId: string, parentLog: WorkerLogger): Promi
     return;
   }
 
+  // Two separate try/catches on purpose: classifyMlError() + the breaker
+  // exist to measure *ML service* health. A markDone() failure is a DB
+  // write problem — classifying it would falsely trip the ML breaker
+  // (default classification is 'transient') and pause the drain for an
+  // outage that isn't happening.
+  let prediction: PredictResponse;
   try {
-    const prediction = await callMlService(payload, jobLog);
+    prediction = await callMlService(payload, jobLog);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const kind = classifyMlError(message);
+    if (kind === 'transient') {
+      // Row stays 'pending' — the drain loop will retry it once the
+      // dependency heals. Marking these 'failed' is how 171K rows got
+      // stranded before 2026-07-05.
+      breaker.recordTransientFailure();
+      jobLog.warn(
+        { err: message, duration_ms: Date.now() - start },
+        'rent calc transient failure — row stays pending',
+      );
+      return;
+    }
+    try {
+      await markFailed(payload.listing_id, message);
+    } catch (markErr) {
+      jobLog.error(
+        { markErr: (markErr as Error).message },
+        'failed to mark rent_calc_status=failed (will be retried on next NOTIFY/update)',
+      );
+    }
+    jobLog.error({ err: message, duration_ms: Date.now() - start }, 'rent calc errored');
+    return;
+  }
+
+  // ML answered — record the success against the breaker regardless of
+  // what the DB write does next.
+  breaker.recordSuccess();
+
+  try {
     await markDone(payload.listing_id, prediction.predicted_rent, prediction.model_version, payload);
     jobLog.info(
       {
@@ -353,16 +401,14 @@ async function processListing(listingId: string, parentLog: WorkerLogger): Promi
       await bustFrontendCaches();
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    try {
-      await markFailed(payload.listing_id, message);
-    } catch (markErr) {
-      jobLog.error(
-        { markErr: (markErr as Error).message },
-        'failed to mark rent_calc_status=failed (will be retried on next NOTIFY/update)',
-      );
-    }
-    jobLog.error({ err: message, duration_ms: Date.now() - start }, 'rent calc errored');
+    // DB write-back failed. The row is still 'pending' (markDone is
+    // transactional), so the drain loop retries it naturally. Not an ML
+    // signal — the breaker is untouched. markFailed would also be a DB
+    // write into the same unhealthy DB; don't bother.
+    jobLog.error(
+      { err: (err as Error).message, duration_ms: Date.now() - start },
+      'rent write-back failed — row stays pending for retry',
+    );
   }
 }
 
@@ -420,6 +466,45 @@ async function drain(parentLog: WorkerLogger): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+// Continuous drain. The one-shot drain-on-connect only ever dispatched
+// RENT_BACKFILL_BATCH rows per process lifetime — with 613K pending rows
+// that meant the backlog was structurally never drained. This loop pulls
+// a batch, waits for it to fully settle (drain() re-SELECTs 'pending', so
+// overlapping batches would double-dispatch the same rows), then pulls
+// the next. Empty queue or an open breaker -> sleep and re-check.
+// ---------------------------------------------------------------------------
+
+async function drainForever(parentLog: WorkerLogger): Promise<void> {
+  while (!shuttingDown) {
+    if (breaker.isOpen()) {
+      const waitMs = Math.max(breaker.msUntilClose(), 1_000);
+      parentLog.warn({ wait_ms: waitMs }, 'breaker open — pausing drain');
+      await sleep(waitMs);
+      continue;
+    }
+
+    let dispatched = 0;
+    try {
+      dispatched = await drain(parentLog);
+    } catch (err) {
+      parentLog.error({ err: (err as Error).message }, 'drain loop error');
+      await sleep(5_000);
+      continue;
+    }
+
+    if (dispatched === 0) {
+      await sleep(env.RENT_DRAIN_INTERVAL_MS);
+      continue;
+    }
+
+    // Wait for the batch to settle before the next SELECT.
+    while (inFlight > 0 && !shuttingDown) {
+      await sleep(250);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // LISTEN client with reconnect loop. Identical shape to crawl.ts.
 // ---------------------------------------------------------------------------
 
@@ -452,9 +537,9 @@ async function listenLoop(parentLog: WorkerLogger): Promise<void> {
       await client.query(`LISTEN ${CHANNEL}`);
       parentLog.info({ channel: CHANNEL }, 'subscribed to channel');
 
-      // Subscribe-then-drain order matters: any NOTIFY arriving between
-      // these two awaits will still be delivered once drain returns.
-      await drain(parentLog);
+      // Backlog draining is owned by drainForever() (started in main()).
+      // This loop only keeps the LISTEN subscription alive for realtime
+      // NOTIFYs on new inserts.
 
       // Block until the connection ends, then loop to reconnect.
       await new Promise<void>((resolve) => {
@@ -519,14 +604,13 @@ async function main(): Promise<void> {
       concurrency: env.RENT_WORKER_CONCURRENCY,
       ml: env.ML_URL,
       backfill_batch: env.RENT_BACKFILL_BATCH,
+      drain_interval_ms: env.RENT_DRAIN_INTERVAL_MS,
     },
     'rent-estimator worker starting',
   );
-  // First-touch drain runs against the same pending queue the LISTEN
-  // loop will keep draining; harmless if it overlaps slightly with the
-  // post-subscribe drain.
-  await drain(log).catch((err) => log.error({ err: (err as Error).message }, 'initial drain failed'));
-  await listenLoop(log);
+  // LISTEN handles realtime inserts; drainForever owns the backlog.
+  // They share the semaphore, so total concurrency stays bounded.
+  await Promise.all([listenLoop(log), drainForever(log)]);
 }
 
 void main().catch((err) => {

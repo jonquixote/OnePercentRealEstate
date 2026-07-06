@@ -88,6 +88,28 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=postgres
+    # Wave 0 tuning for a 15GB / 2-core host where PG is the primary tenant.
+    # Stock was shared_buffers=128MB, work_mem=4MB, random_page_cost=4 (HDD).
+    # 4GB buffers / 10GB effective cache = ~25%/65% rule; random_page_cost
+    # 1.1 for SSD; pg_stat_statements feeds the Wave 7 index audit.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=4GB
+      - -c
+      - effective_cache_size=10GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - wal_compression=on
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - shared_preload_libraries=pg_stat_statements
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../init-scripts:/docker-entrypoint-initdb.d
@@ -103,7 +125,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          # 4GB shared_buffers + work_mem/maintenance/connection overhead;
+          # 6G ceiling leaves headroom. Box is 15G with ~11G free.
+          memory: 6G
           cpus: '2'
     logging:
       driver: "json-file"
@@ -280,8 +304,14 @@ services:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - ML_URL=http://ml:8000
-      - RENT_BACKFILL_BATCH=50
-      - RENT_WORKER_CONCURRENCY=4
+      # Wave 0: drain the ~790K backlog. The ML service is a single-uvicorn
+      # sync-triangulation process — its per-prediction cost (comps DB scan
+      # + CPU) is the bottleneck, not the worker. Concurrency 8 saturated it
+      # (2G OOM + 30s timeouts, measured). 4 matches ML capacity without
+      # timeouts. Real throughput fix is the Wave 2 batch-scoring path.
+      - RENT_BACKFILL_BATCH=200
+      - RENT_WORKER_CONCURRENCY=6
+      - RENT_DRAIN_INTERVAL_MS=30000
       - LOG_LEVEL=info
     command: ["node", "apps/worker/dist/rent-estimator.js"]
     depends_on:
@@ -294,8 +324,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
-          cpus: '0.5'
+          memory: 512M
+          cpus: '1'
     logging:
       driver: "json-file"
       options:
@@ -349,6 +379,20 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
       - ML_PORT=8000
+    # 3 uvicorn worker processes: the estimator is sync CPU+DB work, so a
+    # single process is GIL-bound (~6s/prediction serialized). 3 processes
+    # give real parallelism to drain the backlog. Each caches version +
+    # estimator independently (no shared state). Wave 2's batch path
+    # supersedes per-row HTTP entirely.
+    command:
+      - uvicorn
+      - services.ml.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "3"
     expose:
       - "8000"
     depends_on:
@@ -359,8 +403,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
-          cpus: '1'
+          memory: 3G
+          cpus: '2'
     logging:
       driver: "json-file"
       options:

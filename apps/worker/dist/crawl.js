@@ -106,12 +106,19 @@ async function processJob(jobId, parentLog) {
             log.warn({ err: err.message }, 'for_rent scrape failed');
             return null;
         });
-        if (!saleResult && !rentResult) {
-            throw new Error('both for_sale and for_rent scrapes failed');
+        // Third pass: distressed inventory via homeharvest's foreclosure filter. The
+        // scraper tags these rows sale_type='foreclosure' (source homeharvest_flag)
+        // unless its text classifier finds something more specific.
+        const foreclosureResult = await scrape(job, 'for_sale', log, { foreclosure: true }).catch((err) => {
+            log.warn({ err: err.message }, 'foreclosure scrape failed');
+            return null;
+        });
+        if (!saleResult && !rentResult && !foreclosureResult) {
+            throw new Error('all scrape passes (for_sale, for_rent, foreclosure) failed');
         }
-        const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0);
-        const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0);
-        const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0);
+        const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0) + (foreclosureResult?.count ?? 0);
+        const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0) + (foreclosureResult?.inserted ?? 0);
+        const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0) + (foreclosureResult?.skipped ?? 0);
         await pool.query(`UPDATE crawl_jobs
           SET status = 'completed',
               finished_at = NOW(),
@@ -144,7 +151,7 @@ async function processJob(jobId, parentLog) {
         return true; // we DID process it (failed) — caller shouldn't retry the same id
     }
 }
-async function scrape(job, listingType, log) {
+async function scrape(job, listingType, log, opts) {
     const url = `${env.SCRAPER_URL.replace(/\/$/, '')}/scrape`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), env.SCRAPE_TIMEOUT_MS);
@@ -156,6 +163,7 @@ async function scrape(job, listingType, log) {
                 location: job.region_value,
                 listing_type: listingType,
                 past_days: 30,
+                ...(opts?.foreclosure ? { foreclosure: true } : {}),
             }),
             signal: controller.signal,
         });

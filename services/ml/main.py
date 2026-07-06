@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import sys
+import time
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -84,28 +85,46 @@ class PredictResponse(BaseModel):
 
 _DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Active-version lookup is cached for 60s so /predict doesn't pay a
+# connection handshake per request — and the connection is explicitly
+# closed ("with psycopg2.connect()" only ends the transaction, which is
+# how the previous version leaked one connection per prediction and OOM-
+# killed the container every ~2 minutes on 2026-07-05).
+_VERSION_TTL_S = 60.0
+_version_cache: tuple[float, str] = (0.0, "v0")
+
 
 def _get_active_version() -> str:
-    """Read the active model version from rent_models.
+    """Read the active model version from rent_models, cached 60s.
 
     Falls back to 'v0' (the baseline seed in 2026_06_03_rent_model_registry)
     if the table is absent — keeps local imports cheap during tests where
     the registry migration hasn't been applied.
     """
-    if not _DATABASE_URL:
-        return "v0"
-    try:
-        with psycopg2.connect(_DATABASE_URL) as conn:
+    global _version_cache
+    now = time.monotonic()
+    cached_at, cached = _version_cache
+    if now - cached_at < _VERSION_TTL_S:
+        return cached
+    version = "v0"
+    if _DATABASE_URL:
+        conn = None
+        try:
+            conn = psycopg2.connect(_DATABASE_URL)
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT version FROM rent_models WHERE active = true LIMIT 1"
                 )
                 row = cur.fetchone()
                 if row and row[0]:
-                    return str(row[0])
-    except Exception as exc:  # pragma: no cover — degrade not crash
-        log.warning("rent_models lookup failed: %s", exc)
-    return "v0"
+                    version = str(row[0])
+        except Exception as exc:  # pragma: no cover — degrade not crash
+            log.warning("rent_models lookup failed: %s", exc)
+        finally:
+            if conn is not None:
+                conn.close()
+    _version_cache = (now, version)
+    return version
 
 
 def _features_hash(req: PredictRequest) -> str:
