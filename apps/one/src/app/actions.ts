@@ -314,9 +314,17 @@ primary_photo,
 images,
 media_blur,
 listing_status as status,
-created_at
+created_at,
+hoa_fee,
+tax_annual_amount,
+assessed_value,
+estimated_value,
+county,
+ins_state.annual_premium AS insurance_state_avg
 FROM listings
-WHERE id = $1
+LEFT JOIN insurance_state_avg ins_state
+  ON ins_state.state = substring(listings.address from ', ([A-Z]{2}) ')
+WHERE listings.id = $1
 `;
 
 const client = await pool.connect();

@@ -87,6 +87,38 @@ export interface PropertyInputs {
   rehabBudget?: number | null; // explicit rehab cost; else derived from rehabPerSqft * sqft
   daysOnMarket?: number | null;
   yearBuilt?: number | null;
+  taxAnnualAmount?: number | null;
+  assessedValue?: number | null;
+  county?: string | null;
+}
+
+export type CostSource =
+  | 'real_tax'
+  | 'assessed_tax'
+  | 'estimated_tax'
+  | 'real_hoa'
+  | 'none'
+  | 'state_insurance'
+  | 'default_insurance';
+
+export interface CostProvenanceItem {
+  source: CostSource;
+  annualAmount?: number;
+  monthlyAmount?: number;
+  detail: string;
+}
+
+export interface CostProvenance {
+  tax: CostProvenanceItem;
+  hoa: CostProvenanceItem;
+  insurance: CostProvenanceItem;
+}
+
+export interface RealCosts {
+  taxAnnual: number;
+  hoaMonthly: number;
+  insuranceAnnual: number;
+  provenance: CostProvenance;
 }
 
 export type Comparator = 'gte' | 'lte';
@@ -247,6 +279,54 @@ function deriveRehab(inputs: PropertyInputs, cfg: RuleConfig): number {
   if (ok(inputs.rehabBudget)) return inputs.rehabBudget!;
   if (ok(inputs.sqft) && ok(cfg.rehabPerSqft)) return inputs.sqft! * cfg.rehabPerSqft!;
   return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Real-cost resolution (tax, HOA, insurance provenance)               */
+/* ------------------------------------------------------------------ */
+
+export function resolveCosts(
+  price: number,
+  taxAnnualAmount: number | null | undefined,
+  hoaFee: number | null | undefined,
+  cfg: Pick<RuleConfig, 'propertyTaxRate' | 'insuranceAnnual'>,
+  stateInsuranceAnnual?: number | null,
+): RealCosts {
+  const taxRate = cfg.propertyTaxRate ?? 0.012;
+
+  let taxSource: CostSource = 'estimated_tax';
+  let taxAnnual = price * taxRate;
+  let taxDetail = `${(taxRate * 100).toFixed(2)}% of price ($${Math.round(taxAnnual).toLocaleString()}/yr)`;
+
+  if (ok(taxAnnualAmount) && taxAnnualAmount > 0) {
+    taxAnnual = taxAnnualAmount;
+    taxSource = 'real_tax';
+    taxDetail = `$${Math.round(taxAnnual).toLocaleString()}/yr (actual)`;
+  }
+
+  const hoaMonthly = ok(hoaFee) && hoaFee > 0 ? hoaFee : 0;
+  const hoaSource: CostSource = hoaMonthly > 0 ? 'real_hoa' : 'none';
+
+  let insSource: CostSource = 'default_insurance';
+  let insAnnual = cfg.insuranceAnnual || 1200;
+  let insDetail = `$${insAnnual}/yr (rule default)`;
+
+  if (ok(stateInsuranceAnnual) && stateInsuranceAnnual > 0) {
+    insAnnual = stateInsuranceAnnual;
+    insSource = 'state_insurance';
+    insDetail = `$${Math.round(insAnnual).toLocaleString()}/yr (state avg)`;
+  }
+
+  return {
+    taxAnnual,
+    hoaMonthly,
+    insuranceAnnual: insAnnual,
+    provenance: {
+      tax: { source: taxSource, annualAmount: taxAnnual, detail: taxDetail },
+      hoa: { source: hoaSource, monthlyAmount: hoaMonthly, detail: hoaMonthly > 0 ? `$${hoaMonthly}/mo (actual)` : 'No HOA' },
+      insurance: { source: insSource, annualAmount: insAnnual, detail: insDetail },
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ */
