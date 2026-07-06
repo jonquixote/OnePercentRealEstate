@@ -10,7 +10,7 @@
 | 0 | **Shipped** | `docs/superpowers/plans/2026-07-05-wave-0-bleed-stop.md` | Bleed-stop: ML breaker, backups, PG tuning, n8n freeze |
 | 1 | **Shipped** | `docs/superpowers/plans/2026-07-05-wave-1-data-harvest.md` | Free data harvest: enrichment columns, backfill, history trigger, drop dead status |
 | 1b | Deferred | — | External sources (Census ACS, FEMA floods, FRED rates) |
-| 2 | Planned | — | estimated_rent=0 → NULL |
+| 2 | **Shipped** | `docs/superpowers/plans/2026-07-06-wave-2-rent-engine.md` | Rent engine v1: LightGBM quantile model, batch scoring, nightly retrain, confidence bands, 37% MAE win vs HUD |
 | 3 | Planned | — | Real tax via assessed_value × county millage (gated on FRED key) |
 | 4 | Planned | — | Investor surfaces (price-cut UI) |
 | 5 | Planned | — | Track P |

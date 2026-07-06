@@ -48,8 +48,11 @@ SELECT DISTINCT ON (r.address, r.listing_date)
        r.listing_date,
        h.safmr::float          AS hud_safmr
 FROM rental_listings r
-LEFT JOIN hud_safmr h
-       ON h.zip_code = r.zip_code
+LEFT JOIN (
+    SELECT DISTINCT ON (zip_code, bedrooms) zip_code, bedrooms, safmr
+    FROM hud_safmr
+    ORDER BY zip_code, bedrooms, fy DESC
+) h ON h.zip_code = r.zip_code
       AND h.bedrooms = LEAST(GREATEST(coalesce(r.bedrooms, 2)::int, 0), 4)
 WHERE r.price BETWEEN 300 AND 20000
 ORDER BY r.address, r.listing_date, r.created_at DESC

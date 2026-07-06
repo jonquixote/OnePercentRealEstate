@@ -339,7 +339,7 @@ async def _run_subprocess(cmd: list[str], timeout_s: float = 120.0) -> tuple[boo
 @app.post("/ops/run-drift", response_model=OpResponse)
 async def run_drift() -> OpResponse:
     """Trigger the drift monitor. Captures stdout and returns JSON."""
-    ok, lines, exit_code = await _run_subprocess(["python", "-m", "drift"])
+    ok, lines, exit_code = await _run_subprocess(["python", "-m", "services.ml.drift"])
 
     # Simple heuristic: if there are "WARNING" or "ERROR" lines, alert.
     alert = any("WARNING" in line or "ERROR" in line for line in lines)
@@ -350,7 +350,7 @@ async def run_drift() -> OpResponse:
 @app.post("/ops/run-eval", response_model=OpResponse)
 async def run_eval() -> OpResponse:
     """Trigger model evaluation. Captures stdout and returns JSON."""
-    ok, lines, exit_code = await _run_subprocess(["python", "-m", "eval"])
+    ok, lines, exit_code = await _run_subprocess(["python", "-m", "services.ml.eval"])
 
     # Simple heuristic: if there are "WARNING" or "ERROR" lines, alert.
     alert = any("WARNING" in line or "ERROR" in line for line in lines)
@@ -405,17 +405,28 @@ async def run_train() -> OpResponse:
         )
 
     # Ensure the registry row is active (it usually already is; idempotent).
+    # Must set promoted_at so the ops team knows when the model went live.
+    activation_ok = True
     if _DATABASE_URL:
         conn = None
         try:
             conn = psycopg2.connect(_DATABASE_URL)
             with conn.cursor() as cur:
-                cur.execute("UPDATE rent_models SET active = (version = 'v1')")
+                cur.execute(
+                    "UPDATE rent_models SET active = (version = 'v1'), "
+                    "promoted_at = CASE WHEN version = 'v1' THEN NOW() ELSE promoted_at END"
+                )
             conn.commit()
         except Exception as exc:  # pragma: no cover
-            log.warning("activation update failed: %s", exc)
+            log.critical("activation update failed: %s", exc)
+            activation_ok = False
         finally:
             if conn is not None:
                 conn.close()
+
+    if not activation_ok:
+        return OpResponse(
+            ok=False, lines=["PROMOTED ON DISK BUT ACTIVATION FAILED"] + lines, exit_code=1, alert=True
+        )
 
     return OpResponse(ok=True, lines=["PROMOTED"] + lines, exit_code=0, alert=False)

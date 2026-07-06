@@ -20,6 +20,7 @@ with metrics + gate=false, exits 1.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -146,7 +147,7 @@ def main() -> None:
                          artifact_path = EXCLUDED.artifact_path,
                          trained_at = now()""",
                 (
-                    str(hash(tuple(meta["feature_names"]))),
+                    hashlib.sha256(json.dumps(meta["feature_names"], sort_keys=True).encode()).hexdigest(),
                     json.dumps(metrics),
                     OUT_DIR,
                 ),
