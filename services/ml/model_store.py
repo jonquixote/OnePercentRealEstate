@@ -25,6 +25,7 @@ MODEL_DIR = os.environ.get("MODEL_DIR", "/models")
 _boosters: dict[str, Any] = {}
 _meta: Optional[dict] = None
 _loaded_version: Optional[str] = None
+_loaded_meta_mtime: float = 0.0
 
 _hud: dict[tuple[str, int], float] = {}
 _hud_loaded_at: float = 0.0
@@ -38,23 +39,33 @@ def loaded_version() -> Optional[str]:
 def refresh(active_version: str, database_url: Optional[str]) -> bool:
     """Ensure artifacts for active_version are loaded. Returns True when the
     store can serve that version."""
-    global _boosters, _meta, _loaded_version
+    global _boosters, _meta, _loaded_version, _loaded_meta_mtime
+    out_dir = os.path.join(MODEL_DIR, "rent_v1")
+    meta_path = os.path.join(out_dir, "metadata.json")
     if active_version == _loaded_version and _boosters:
-        _maybe_refresh_hud(database_url)
-        return True
+        # Nightly retrain promotes by atomically swapping the artifact dir —
+        # the version string stays 'v1', so staleness is detected via the
+        # metadata mtime. All uvicorn workers converge within the caller's
+        # 60s version-cache window.
+        try:
+            if os.path.getmtime(meta_path) == _loaded_meta_mtime:
+                _maybe_refresh_hud(database_url)
+                return True
+        except OSError:
+            return True  # artifacts briefly mid-swap: keep serving what we have
     if not active_version.startswith("v1"):
         return False
     try:
         import lightgbm as lgb
 
-        out_dir = os.path.join(MODEL_DIR, "rent_v1")
-        with open(os.path.join(out_dir, "metadata.json")) as f:
+        with open(meta_path) as f:
             meta = json.load(f)
         boosters = {
             q: lgb.Booster(model_file=os.path.join(out_dir, f"{q}.txt"))
             for q in ("p10", "p50", "p90")
         }
         _boosters, _meta, _loaded_version = boosters, meta, active_version
+        _loaded_meta_mtime = os.path.getmtime(meta_path)
         log.info("model store loaded %s (train_rows=%s)", active_version, meta.get("train_rows"))
         _maybe_refresh_hud(database_url, force=not _hud)
         return True

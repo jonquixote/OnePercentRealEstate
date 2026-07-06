@@ -28,7 +28,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ml_rent_estimator.dataset import TRAINING_SQL, fit_encoders, frame_to_matrix
 
 MODEL_DIR = os.environ.get("MODEL_DIR", "/models")
-OUT_DIR = os.path.join(MODEL_DIR, "rent_v1")
+# Optional argv[1] = subdirectory (the nightly retrain trains into
+# 'rent_v1_staging' and only swaps to 'rent_v1' after the eval gate passes).
+_SUBDIR = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "rent_v1"
+OUT_DIR = os.path.join(MODEL_DIR, _SUBDIR)
 
 # Native lightgbm.train params (the sklearn wrapper would drag in a
 # scikit-learn dependency for nothing).

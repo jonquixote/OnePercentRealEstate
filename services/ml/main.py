@@ -310,7 +310,7 @@ class OpResponse(BaseModel):
     exit_code: Optional[int] = None
 
 
-async def _run_subprocess(cmd: list[str]) -> tuple[bool, list[str], int]:
+async def _run_subprocess(cmd: list[str], timeout_s: float = 120.0) -> tuple[bool, list[str], int]:
     """Run a subprocess and capture stdout/stderr. Return (ok, lines, exit_code)."""
     import asyncio
 
@@ -321,17 +321,17 @@ async def _run_subprocess(cmd: list[str]) -> tuple[bool, list[str], int]:
             stderr=asyncio.subprocess.STDOUT,
         )
 
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120.0)
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
         output = stdout.decode("utf-8", errors="replace").strip()
         lines = output.split("\n") if output else []
 
         if proc.returncode == 0:
             return True, lines, 0
         else:
-            return False, lines, proc.returncode
+            return False, lines, proc.returncode if proc.returncode is not None else 1
 
     except asyncio.TimeoutError:
-        return False, ["timeout: subprocess exceeded 120s"], 124
+        return False, [f"timeout: subprocess exceeded {timeout_s:.0f}s"], 124
     except Exception as exc:
         return False, [f"subprocess error: {exc}"], 1
 
@@ -356,3 +356,66 @@ async def run_eval() -> OpResponse:
     alert = any("WARNING" in line or "ERROR" in line for line in lines)
 
     return OpResponse(ok=ok, lines=lines, exit_code=exit_code, alert=alert)
+
+
+@app.post("/ops/run-train", response_model=OpResponse)
+async def run_train() -> OpResponse:
+    """Wave 2 nightly retrain: train into a staging dir, run the eval gate
+    against staging, and promote by atomic directory swap only on gate PASS.
+    The previous artifacts are kept as rent_v1_backup (manual rollback:
+    swap the directories back). The eval gate IS the auto-rollback — a worse
+    candidate never reaches the serving path.
+    """
+    import shutil
+
+    model_dir = os.environ.get("MODEL_DIR", "/models")
+    staging = os.path.join(model_dir, "rent_v1_staging")
+    live = os.path.join(model_dir, "rent_v1")
+    backup = os.path.join(model_dir, "rent_v1_backup")
+
+    lines: list[str] = []
+
+    ok, out, code = await _run_subprocess(
+        ["python", "-m", "ml_rent_estimator.train_v1", "rent_v1_staging"], timeout_s=1800.0
+    )
+    lines += out[-8:]
+    if not ok:
+        return OpResponse(ok=False, lines=["TRAIN FAILED"] + lines, exit_code=code, alert=True)
+
+    gate_ok, out, code = await _run_subprocess(
+        ["python", "-m", "ml_rent_estimator.eval_v1", "rent_v1_staging"], timeout_s=900.0
+    )
+    lines += out[-12:]
+    if not gate_ok:
+        # Candidate lost to the gate. Keep serving the current model; leave
+        # staging on disk for inspection.
+        return OpResponse(
+            ok=True, lines=["GATE FAIL — kept current model"] + lines, exit_code=code, alert=True
+        )
+
+    try:
+        if os.path.isdir(backup):
+            shutil.rmtree(backup)
+        if os.path.isdir(live):
+            os.rename(live, backup)
+        os.rename(staging, live)
+    except OSError as exc:
+        return OpResponse(
+            ok=False, lines=[f"PROMOTE SWAP FAILED: {exc}"] + lines, exit_code=1, alert=True
+        )
+
+    # Ensure the registry row is active (it usually already is; idempotent).
+    if _DATABASE_URL:
+        conn = None
+        try:
+            conn = psycopg2.connect(_DATABASE_URL)
+            with conn.cursor() as cur:
+                cur.execute("UPDATE rent_models SET active = (version = 'v1')")
+            conn.commit()
+        except Exception as exc:  # pragma: no cover
+            log.warning("activation update failed: %s", exc)
+        finally:
+            if conn is not None:
+                conn.close()
+
+    return OpResponse(ok=True, lines=["PROMOTED"] + lines, exit_code=0, alert=False)

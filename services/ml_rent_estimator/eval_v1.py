@@ -32,7 +32,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ml_rent_estimator.dataset import TRAINING_SQL, frame_to_matrix
 
 MODEL_DIR = os.environ.get("MODEL_DIR", "/models")
-OUT_DIR = os.path.join(MODEL_DIR, "rent_v1")
+# Optional argv[1] = subdirectory to evaluate (nightly retrain evaluates
+# 'rent_v1_staging' before promotion).
+_SUBDIR = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "rent_v1"
+OUT_DIR = os.path.join(MODEL_DIR, _SUBDIR)
 V0_SAMPLE = 2000
 
 
