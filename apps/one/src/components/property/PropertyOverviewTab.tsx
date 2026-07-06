@@ -25,8 +25,89 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
         raw_data = {},
     } = property || {};
 
+    // Wave 4 — enrichment facts (all optional; absent fields render nothing).
+    const cutPct: number | null = property?.price_cut_pct != null && Number(property.price_cut_pct) > 0
+        ? Number(property.price_cut_pct) : null;
+    const firstPrice: number | null = property?.first_list_price != null ? Number(property.first_list_price) : null;
+    const lastSoldPrice: number | null = property?.last_sold_price != null ? Number(property.last_sold_price) : null;
+    const lastSoldDate: string | null = property?.last_sold_date
+        ? String(property.last_sold_date).slice(0, 10) : null;
+    const estValue: number | null = property?.estimated_value != null ? Number(property.estimated_value) : null;
+    const estValueGapPct: number | null = estValue && listing_price > 0 && listing_price < estValue * 0.97
+        ? (estValue - listing_price) / estValue : null;
+    const motivatedScore: number | null = property?.motivated_score != null ? Number(property.motivated_score) : null;
+    const rentLow: number | null = property?.rent_low != null ? Number(property.rent_low) : null;
+    const rentHigh: number | null = property?.rent_high != null ? Number(property.rent_high) : null;
+    const description: string | null = typeof property?.description === 'string' && property.description.trim().length > 0
+        ? property.description.trim() : null;
+    const sourceUrl: string | null = typeof property?.property_url === 'string' && property.property_url.startsWith('http')
+        ? property.property_url : null;
+    const neighborhoods: string | null = property?.neighborhoods ?? null;
+    const county: string | null = property?.county ?? null;
+
     return (
         <div id="tabpanel-overview" role="tabpanel" aria-labelledby="tab-overview" className="space-y-8 animate-in fade-in duration-300">
+            {/* Wave 4 — seller & value intel strip (renders only when facts exist) */}
+            {(cutPct != null || estValueGapPct != null || lastSoldPrice != null || (motivatedScore != null && motivatedScore >= 40) || sourceUrl) && (
+                <Card>
+                    <CardContent className="p-6">
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+                            {cutPct != null && firstPrice != null && (
+                                <span className="inline-flex items-center gap-1.5 font-semibold text-brass-hi tabular-nums">
+                                    ↓ {(cutPct * 100).toFixed(1)}% since list
+                                    <span className="font-normal text-muted-foreground">
+                                        ({formatCurrency(firstPrice)} → {formatCurrency(listing_price)})
+                                    </span>
+                                </span>
+                            )}
+                            {estValueGapPct != null && estValue != null && (
+                                <span className="inline-flex items-center gap-1.5 font-semibold text-pass-hi tabular-nums" title="List price vs. source-estimated value">
+                                    listed {(estValueGapPct * 100).toFixed(0)}% under est. value
+                                    <span className="font-normal text-muted-foreground">({formatCurrency(estValue)} est.)</span>
+                                </span>
+                            )}
+                            {lastSoldPrice != null && (
+                                <span className="text-muted-foreground tabular-nums">
+                                    last sold {lastSoldDate ? `${lastSoldDate.slice(0, 4)} · ` : ''}{formatCurrency(lastSoldPrice)}
+                                    {listing_price > 0 && lastSoldPrice > 0 && (
+                                        <> → asking {listing_price >= lastSoldPrice ? '+' : '−'}{Math.abs(Math.round(((listing_price - lastSoldPrice) / lastSoldPrice) * 100))}%</>
+                                    )}
+                                </span>
+                            )}
+                            {motivatedScore != null && motivatedScore >= 40 && (
+                                <span
+                                    className="inline-flex items-center gap-1.5 tabular-nums text-muted-foreground"
+                                    title="Motivated-seller score: price cuts + market time + sale type (0–100)"
+                                >
+                                    seller motivation
+                                    <span className={`font-semibold ${motivatedScore >= 60 ? 'text-brass-hi' : 'text-white'}`}>{motivatedScore}/100</span>
+                                </span>
+                            )}
+                            {(neighborhoods || county) && (
+                                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                    <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                                    {neighborhoods ?? county}
+                                </span>
+                            )}
+                            {sourceUrl && (
+                                <a
+                                    href={sourceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-white transition-colors"
+                                >
+                                    view source listing <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                </a>
+                            )}
+                        </div>
+                        {description && (
+                            <p className="mt-4 text-sm leading-relaxed text-muted-foreground line-clamp-4">
+                                {description}
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card>
                     <CardContent className="p-6">
@@ -51,9 +132,11 @@ export function PropertyOverviewTab({ property, estCashflow, capRate, cashOnCash
                         <p className={`text-3xl font-bold ${estimated_rent > 0 ? 'text-blue-600' : 'text-muted-foreground'}`}>
                             {estimated_rent > 0 ? formatCurrency(estimated_rent) : 'Pending...'}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-sm text-muted-foreground mt-1 tabular-nums">
                             {estimated_rent > 0
-                                ? `Based on market analysis`
+                                ? (rentLow != null && rentHigh != null
+                                    ? `Model range ${formatCurrency(rentLow)}–${formatCurrency(rentHigh)}`
+                                    : 'Based on market analysis')
                                 : 'Awaiting smart estimate generation'
                             }
                         </p>
