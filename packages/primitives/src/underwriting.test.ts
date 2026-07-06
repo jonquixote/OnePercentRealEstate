@@ -18,6 +18,8 @@ import {
   cashInvested,
   cashOnCash,
   resolveCosts,
+  motivatedSellerScore,
+  MOTIVATED_SELLER_SCORE_SQL,
   type RuleConfig,
 } from './underwriting';
 
@@ -400,5 +402,61 @@ describe('resolveCosts — Wave 3 provenance', () => {
     const custom = { propertyTaxRate: 0.012, insuranceAnnual: 0 as number };
     const c = resolveCosts(300_000, null, null, custom);
     expect(c.insuranceAnnual).toBe(0);
+  });
+});
+
+describe('motivatedSellerScore — Wave 4', () => {
+  it('scores a fresh full-price standard listing at 0', () => {
+    expect(motivatedSellerScore(null, 0, 5, 'standard')).toBe(0);
+  });
+
+  it('caps cut depth at 10% (45 pts) and count at 3 (15 pts)', () => {
+    expect(motivatedSellerScore(0.25, 9, 0, 'standard')).toBe(60);
+  });
+
+  it('adds staleness linearly between 30 and 120 DOM', () => {
+    expect(motivatedSellerScore(null, 0, 75, 'standard')).toBe(13); // (45/90)*25 = 12.5 -> 13
+    expect(motivatedSellerScore(null, 0, 300, 'standard')).toBe(25);
+  });
+
+  it('adds 15 for distress sale types', () => {
+    expect(motivatedSellerScore(null, 0, 0, 'foreclosure')).toBe(15);
+  });
+
+  it('composes: 5% cut, 2 cuts, 60 DOM, auction', () => {
+    // cut (0.05/0.10)*45=22.5, count 10, dom ((60-30)/90)*25=8.33, distress 15 => 55.83 -> 56
+    expect(motivatedSellerScore(0.05, 2, 60, 'auction')).toBe(56);
+  });
+});
+
+// SQL twin parity — DB-gated like the resolve_rule parity tests above.
+(TEST_DB ? describe : describe.skip)('MOTIVATED_SELLER_SCORE_SQL parity', () => {
+  it('matches the TS function on a grid of inputs', async () => {
+    const { Client } = await import('pg');
+    const client = new Client({ connectionString: TEST_DB! });
+    await client.connect();
+    try {
+      const grid = [
+        { pct: null, cnt: 0, dom: 5, st: 'standard' },
+        { pct: 0.05, cnt: 2, dom: 60, st: 'auction' },
+        { pct: 0.25, cnt: 9, dom: 0, st: 'standard' },
+        { pct: 0.03, cnt: 1, dom: 120, st: 'short_sale' },
+        { pct: null, cnt: 0, dom: 300, st: 'standard' },
+      ];
+      for (const g of grid) {
+        const res = await client.query(
+          `SELECT ${MOTIVATED_SELLER_SCORE_SQL.replace(/price_cut_pct/g, '$1::numeric')
+            .replace(/price_cut_count/g, '$2::int')
+            .replace(/days_on_market/g, '$3::int')
+            .replace(/sale_type/g, '$4::text')} AS score`,
+          [g.pct, g.cnt, g.dom, g.st],
+        );
+        expect(Number(res.rows[0].score)).toBe(
+          motivatedSellerScore(g.pct, g.cnt, g.dom, g.st),
+        );
+      }
+    } finally {
+      await client.end();
+    }
   });
 });

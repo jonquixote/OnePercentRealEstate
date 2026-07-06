@@ -35,6 +35,13 @@ const ALLOWED_COLUMNS = new Set([
   'zip_code',
   'sale_type',
   'property_type',
+  // Wave 4: price-cut facts + rent bands + market-time
+  'price_cut_pct',
+  'price_cut_count',
+  'days_on_market',
+  'rent_low',
+  'rent_high',
+  'hoa_fee',
 ]);
 
 export interface CompileResult {

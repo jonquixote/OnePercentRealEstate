@@ -2,6 +2,7 @@
 
 import pool from '@/lib/db';
 import redis from '@/lib/redis';
+import { MOTIVATED_SELLER_SCORE_SQL } from '@oper/primitives';
 
 const PROPERTY_CACHE_TTL = 60;
 const HUD_CACHE_TTL = 86400;
@@ -49,6 +50,11 @@ export async function getProperties(
         propertyType?: string;
         saleType?: string;
         strategy?: string;
+        // Wave 4 — investor filters
+        hoaMax?: number;
+        domMin?: number;
+        hasPriceCut?: boolean;
+        minRentConfidence?: number; // 0..1; 1 - band_spread/rent, clamped
     },
     cursor: string | null = null
 ) {
@@ -68,6 +74,9 @@ export async function getProperties(
     price_low: 'price ASC NULLS LAST',
     one_percent_high: '(estimated_rent / NULLIF(price, 0)) DESC NULLS LAST',
     one_percent_low: '(estimated_rent / NULLIF(price, 0)) ASC NULLS LAST',
+    // Wave 4: served by the partial index idx_listings_price_cut.
+    biggest_cut: 'price_cut_pct DESC NULLS LAST',
+    stalest: 'days_on_market DESC NULLS LAST',
   };
   const orderBy = SORT_COLUMNS[sortBy] ?? 'created_at DESC';
   const isDesc = orderBy.includes('DESC');
@@ -144,6 +153,26 @@ export async function getProperties(
             whereClauses.push(`LOWER(property_type) = LOWER($${paramIndex++})`);
             params.push(filters.propertyType);
         }
+        // Wave 4 — investor filters
+        if (filters?.hoaMax !== undefined && filters.hoaMax >= 0) {
+            // Unknown HOA (NULL, ~34% of rows) passes: "cap my HOA" should not
+            // hide listings whose dues simply weren't published.
+            whereClauses.push(`(hoa_fee IS NULL OR hoa_fee <= $${paramIndex++})`);
+            params.push(filters.hoaMax);
+        }
+        if (filters?.domMin && filters.domMin > 0) {
+            whereClauses.push(`days_on_market >= $${paramIndex++}`);
+            params.push(filters.domMin);
+        }
+        if (filters?.hasPriceCut) {
+            whereClauses.push(`price_cut_pct > 0`);
+        }
+        if (filters?.minRentConfidence && filters.minRentConfidence > 0) {
+            // confidence = 1 - band_spread/rent (clamped to [0,1]); rows without
+            // a band are excluded by definition when the user asks for confidence.
+            whereClauses.push(`(1 - LEAST((rent_high - rent_low) / NULLIF(estimated_rent, 0), 1)) >= $${paramIndex++}`);
+            params.push(Math.min(filters.minRentConfidence, 1));
+        }
 
         if (useCursor) {
             whereClauses.push(`id ${isDesc ? '<' : '>'} $${paramIndex++}`);
@@ -167,7 +196,13 @@ sale_type,
 primary_photo,
 images,
 media_blur,
-created_at
+created_at,
+days_on_market,
+price_cut_pct,
+price_cut_count,
+rent_low,
+rent_high,
+${MOTIVATED_SELLER_SCORE_SQL} as motivated_score
 `;
 
         let query: string;
