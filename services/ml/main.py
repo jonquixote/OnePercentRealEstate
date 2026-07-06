@@ -45,6 +45,8 @@ else:
 
 import psycopg2  # noqa: E402
 
+from . import model_store  # noqa: E402
+
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format='{"ts":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s","service":"ml"}',
@@ -70,12 +72,35 @@ class PredictRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     property_type: Optional[str] = None
+    # Wave 2 (optional — the batch path supplies them, the LISTEN path may not)
+    lot_sqft: Optional[float] = None
+    hoa_fee: Optional[float] = None
 
 
 class PredictResponse(BaseModel):
     predicted_rent: float
     model_version: str
     features_hash: str
+    # Wave 2: quantile band (present when the v1 model served the request)
+    rent_low: Optional[float] = None
+    rent_high: Optional[float] = None
+
+
+class BatchPredictRequest(BaseModel):
+    items: list[PredictRequest] = Field(..., min_length=1, max_length=1000)
+
+
+class BatchPredictItem(BaseModel):
+    listing_id: int
+    predicted_rent: float
+    rent_low: Optional[float] = None
+    rent_high: Optional[float] = None
+    model_version: str
+    features_hash: str
+
+
+class BatchPredictResponse(BaseModel):
+    results: list[BatchPredictItem]
 
 
 # ---------------------------------------------------------------------------
@@ -170,24 +195,26 @@ def healthz() -> dict:
     }
 
 
-@app.post("/predict", response_model=PredictResponse)
-def predict(req: PredictRequest) -> PredictResponse:
+def _try_model_predict(reqs: list[PredictRequest]) -> Optional[list[dict]]:
+    """Score with the active v1 model via the model store. Returns None when
+    v1 isn't active/loadable — callers fall back to the v2 triangulation."""
+    version = _get_active_version()
+    if not version.startswith("v1"):
+        return None
+    if not model_store.refresh(version, _DATABASE_URL):
+        return None
+    return model_store.predict_rows(reqs)
+
+
+def _v2_predict(req: PredictRequest) -> float:
     if estimate_rent_v2 is None:
         raise HTTPException(
             status_code=503,
             detail=f"rent_estimator_v2 not importable: {_IMPORT_ERR}",
         )
-
     if req.latitude is None or req.longitude is None:
-        # Caller (worker) already screens this, but defense-in-depth: the
-        # estimator can't do anything without geometry.
         raise HTTPException(status_code=400, detail="latitude and longitude required")
-
     try:
-        # No type annotation: RentEstimate may be None at runtime if the
-        # legacy module failed to import (we guard above with the `is None`
-        # check), and pyright won't let us use a possibly-None symbol as a
-        # type. Behavior is unchanged.
         estimate = estimate_rent_v2(
             lat=float(req.latitude),
             lon=float(req.longitude),
@@ -201,12 +228,74 @@ def predict(req: PredictRequest) -> PredictResponse:
     except Exception as exc:  # noqa: BLE001 — surface as 5xx
         log.exception("estimator raised for listing_id=%s", req.listing_id)
         raise HTTPException(status_code=500, detail=f"estimator error: {exc}") from exc
+    return round(float(estimate.estimated_rent or 0.0), 2)
+
+
+@app.post("/predict", response_model=PredictResponse)
+def predict(req: PredictRequest) -> PredictResponse:
+    if req.latitude is None or req.longitude is None:
+        # Caller (worker) already screens this, but defense-in-depth: neither
+        # path can do anything meaningful without geometry.
+        raise HTTPException(status_code=400, detail="latitude and longitude required")
+
+    version = _get_active_version()
+    scored = _try_model_predict([req])
+    if scored is not None:
+        s = scored[0]
+        return PredictResponse(
+            predicted_rent=s["predicted_rent"],
+            rent_low=s["rent_low"],
+            rent_high=s["rent_high"],
+            model_version=version,
+            features_hash=_features_hash(req),
+        )
 
     return PredictResponse(
-        predicted_rent=round(float(estimate.estimated_rent or 0.0), 2),
-        model_version=_get_active_version(),
+        predicted_rent=_v2_predict(req),
+        model_version=version if not version.startswith("v1") else "v0-fallback",
         features_hash=_features_hash(req),
     )
+
+
+@app.post("/predict_batch", response_model=BatchPredictResponse)
+def predict_batch(req: BatchPredictRequest) -> BatchPredictResponse:
+    """Vectorized scoring for the worker's backlog drain. v1 scores the whole
+    batch in one matrix pass; the v2 fallback loops (slow but correct)."""
+    version = _get_active_version()
+    valid = [r for r in req.items if r.latitude is not None and r.longitude is not None]
+    if not valid:
+        return BatchPredictResponse(results=[])
+
+    scored = _try_model_predict(valid)
+    results: list[BatchPredictItem] = []
+    if scored is not None:
+        for r, s in zip(valid, scored):
+            results.append(
+                BatchPredictItem(
+                    listing_id=r.listing_id,
+                    predicted_rent=s["predicted_rent"],
+                    rent_low=s["rent_low"],
+                    rent_high=s["rent_high"],
+                    model_version=version,
+                    features_hash=_features_hash(r),
+                )
+            )
+        return BatchPredictResponse(results=results)
+
+    for r in valid:
+        try:
+            rent = _v2_predict(r)
+        except HTTPException:
+            continue  # skip the bad row, keep the batch alive
+        results.append(
+            BatchPredictItem(
+                listing_id=r.listing_id,
+                predicted_rent=rent,
+                model_version=version if not version.startswith("v1") else "v0-fallback",
+                features_hash=_features_hash(r),
+            )
+        )
+    return BatchPredictResponse(results=results)
 
 
 # ---------------------------------------------------------------------------
