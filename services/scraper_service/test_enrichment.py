@@ -12,6 +12,7 @@ def test_maps_and_types_a_full_homeharvest_row():
         "new_construction": False, "list_date": "2026-07-01",
         "price_per_sqft": 180, "hoa_fee": "45", "tax": 5400.0,
         "property_url": "https://realtor.com/x",
+        "parking_garage": True, "lot_sqft": "5000",
     }
     out = extract_enrichment(row)
     assert out["county"] == "Harris"
@@ -28,6 +29,8 @@ def test_maps_and_types_a_full_homeharvest_row():
     assert out["hoa_fee"] == 45.0
     assert out["tax_annual_amount"] == 5400.0
     assert out["property_url"] == "https://realtor.com/x"
+    assert out["parking_garage"] is True
+    assert out["lot_sqft"] == 5000.0
 
 
 def test_missing_and_nan_become_none():
@@ -48,3 +51,14 @@ def test_bad_numbers_do_not_raise():
     out = extract_enrichment({"price_per_sqft": "N/A", "assessed_value": "$210,000"})
     assert out["price_per_sqft"] is None
     assert out["assessed_value"] == 210000.0  # currency stripped
+
+
+def test_parking_garage_bool_conversion():
+    assert extract_enrichment({"parking_garage": True})["parking_garage"] is True
+    assert extract_enrichment({"parking_garage": "true"})["parking_garage"] is True
+    assert extract_enrichment({"parking_garage": "1"})["parking_garage"] is True
+    assert extract_enrichment({"parking_garage": "yes"})["parking_garage"] is True
+    assert extract_enrichment({"parking_garage": False})["parking_garage"] is False
+    assert extract_enrichment({"parking_garage": "false"})["parking_garage"] is False
+    assert extract_enrichment({"parking_garage": "0"})["parking_garage"] is False
+    assert extract_enrichment({"parking_garage": None})["parking_garage"] is None

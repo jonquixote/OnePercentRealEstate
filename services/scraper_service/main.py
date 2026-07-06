@@ -268,7 +268,8 @@ def scrape_listings(req: ScrapeRequest):
                             address_norm, address_hash,
                             county, fips_code, neighborhoods, last_sold_price, last_sold_date,
                             assessed_value, estimated_value, description, style, new_construction,
-                            list_date, price_per_sqft, hoa_fee, tax_annual_amount, property_url
+                            list_date, price_per_sqft, hoa_fee, tax_annual_amount, property_url,
+                            parking_garage, lot_sqft
                         )
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s,
@@ -280,7 +281,7 @@ def scrape_listings(req: ScrapeRequest):
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 0.95 ELSE c.sale_type_confidence END,
                             n.address_norm,
                             md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), '')),
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                         FROM classify_sale_type(%s::jsonb, %s) c,
                              LATERAL (
                                  SELECT NULLIF(regexp_replace(regexp_replace(lower(trim(%s)), '[.,#]', '', 'g'), '\\s+', ' ', 'g'), '') AS address_norm
@@ -317,11 +318,30 @@ def scrape_listings(req: ScrapeRequest):
                             hoa_fee = EXCLUDED.hoa_fee,
                             tax_annual_amount = EXCLUDED.tax_annual_amount,
                             property_url = EXCLUDED.property_url,
+                            parking_garage = EXCLUDED.parking_garage,
+                            lot_sqft = EXCLUDED.lot_sqft,
                             updated_at = NOW()
                         WHERE listings.price IS DISTINCT FROM EXCLUDED.price
                            OR listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms
                            OR listings.bathrooms IS DISTINCT FROM EXCLUDED.bathrooms
                            OR listings.sqft IS DISTINCT FROM EXCLUDED.sqft
+                           OR listings.county IS DISTINCT FROM EXCLUDED.county
+                           OR listings.fips_code IS DISTINCT FROM EXCLUDED.fips_code
+                           OR listings.neighborhoods IS DISTINCT FROM EXCLUDED.neighborhoods
+                           OR listings.last_sold_price IS DISTINCT FROM EXCLUDED.last_sold_price
+                           OR listings.last_sold_date IS DISTINCT FROM EXCLUDED.last_sold_date
+                           OR listings.assessed_value IS DISTINCT FROM EXCLUDED.assessed_value
+                           OR listings.estimated_value IS DISTINCT FROM EXCLUDED.estimated_value
+                           OR listings.description IS DISTINCT FROM EXCLUDED.description
+                           OR listings.style IS DISTINCT FROM EXCLUDED.style
+                           OR listings.new_construction IS DISTINCT FROM EXCLUDED.new_construction
+                           OR listings.list_date IS DISTINCT FROM EXCLUDED.list_date
+                           OR listings.price_per_sqft IS DISTINCT FROM EXCLUDED.price_per_sqft
+                           OR listings.hoa_fee IS DISTINCT FROM EXCLUDED.hoa_fee
+                           OR listings.tax_annual_amount IS DISTINCT FROM EXCLUDED.tax_annual_amount
+                           OR listings.property_url IS DISTINCT FROM EXCLUDED.property_url
+                           OR listings.parking_garage IS DISTINCT FROM EXCLUDED.parking_garage
+                           OR listings.lot_sqft IS DISTINCT FROM EXCLUDED.lot_sqft
                         RETURNING id, (xmax = 0) as was_inserted
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,
@@ -335,6 +355,7 @@ def scrape_listings(req: ScrapeRequest):
                         enr["estimated_value"], enr["description"], enr["style"],
                         enr["new_construction"], enr["list_date"], enr["price_per_sqft"],
                         enr["hoa_fee"], enr["tax_annual_amount"], enr["property_url"],
+                        enr["parking_garage"], enr["lot_sqft"],
                         Json(raw_data), get_property_type(row),
                         address
                     ))

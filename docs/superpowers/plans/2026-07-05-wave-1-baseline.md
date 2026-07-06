@@ -220,6 +220,47 @@ SELECT column_name FROM information_schema.columns WHERE table_name='listings' A
 
 **Interpretation:** Dead `status` column successfully removed ✓
 
+### Deploy Sequence Verified
+
+```bash
+# Scraper log search for "column status does not exist" across ALL history:
+docker logs infrastructure-scraper-1 2>&1 | grep -ciE "column.*status.*does not exist"
+```
+```
+0
+```
+
+**Interpretation:** No errors — the scraper was rebuilt without `status` in the INSERT before the column was dropped. Sequence was correct ✓
+
+---
+
+## Follow-Up: `parking_garage` + `lot_sqft` (2026-07-06)
+
+Added two enrichment columns missed in the initial migration, plus code-quality fixes.
+
+### What Changed
+
+**New columns added to `listings`:**
+- `parking_garage BOOLEAN` — whether the property has parking (homeharvest provides for rentals, rarely for for-sale)
+- `lot_sqft NUMERIC` — lot square footage (available for ~4% of listings)
+
+**`vw_field_coverage` updated** — now tracks `pct_parking_garage` and `pct_lot_sqft`
+
+**Backfill regex hardened** — 6 monetary fields (`last_sold_price`, `assessed_value`, `estimated_value`, `price_per_sqft`, `hoa_fee`, `tax_annual_amount`) now reject negative values (`^\-?` → `^`)
+
+**WHERE clause expanded** — the scraper's conflict UPDATE now fires when any enrichment column changes, not just `price`/`beds`/`baths`/`sqft`. Enrichment-only re-scrapes no longer silently skipped.
+
+**New migration:** `2026_07_06_add_parking_garage_lot_sqft`
+**New backfill:** 50,287 rows processed for the two new fields
+
+### Coverage After Follow-Up
+
+```
+ total  | pct_hoa | pct_tax | pct_url | pct_county | pct_est_value | pct_last_sold | pct_description | pct_parking_garage | pct_lot_sqft | unenriched_rows 
+--------+---------+---------+---------+------------+---------------+---------------+-----------------+--------------------+--------------+-----------------
+ 946121 |    66.2 |     0.0 |   100.0 |       99.9 |          81.4 |          53.3 |            98.9 |                0.0 |          4.0 |               0
+```
+
 ### schema_migrations
 
 ```
@@ -242,4 +283,11 @@ SELECT column_name FROM information_schema.columns WHERE table_name='listings' A
 - [x] Task 5: Trigger deployed (trg_listings_history + ON CONFLICT safety fix)
 - [x] Task 6: Final acceptance passed
 
-**Final commit:** (to be committed — see below)
+**Post-review fixes applied July 2026-07-06:**
+- Added `parking_garage` + `lot_sqft` enrichment columns
+- Harden backfill regexes: reject negative monetary values
+- Expand WHERE clause: enrichment-only re-scrapes update the row
+- Verified deploy sequence safe: no `status` column errors
+- Updated `wave-progress` and `upgrade-plan` memory files
+
+**Final commit SHA:** `7845223`

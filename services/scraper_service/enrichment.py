@@ -87,4 +87,6 @@ def extract_enrichment(row: dict) -> dict:
         "hoa_fee": _num(row.get("hoa_fee")),
         "tax_annual_amount": _num(row.get("tax")),  # homeharvest calls it 'tax'
         "property_url": _text(row.get("property_url")),
+        "parking_garage": _bool(row.get("parking_garage")),
+        "lot_sqft": _num(row.get("lot_sqft")),
     }
