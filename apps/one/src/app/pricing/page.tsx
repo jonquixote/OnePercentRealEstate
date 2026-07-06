@@ -66,55 +66,51 @@ export default function PricingPage() {
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
-    const handleCheckout = async (tierId: string) => {
-        if (tierId === 'free') {
-            router.push('/login');
-            return;
+  const handleCheckout = async (tierId: string) => {
+    if (tierId === 'free') {
+      router.push('/login');
+      return;
+    }
+
+    setLoading(tierId);
+    setError(null);
+
+    try {
+      const body: Record<string, string> = {
+        plan: tierId === 'agency' ? 'monthly' : 'monthly',
+        propertyId: 'subscription_upgrade',
+      };
+
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 401 || data.error === 'Unauthorized') {
+          router.push('/login?returnUrl=/pricing');
+          return;
         }
+        throw new Error(data.error || 'Checkout failed');
+      }
 
-        setLoading(tierId);
+      const { sessionId } = data;
 
-        try {
-            const response = await fetch('/api/checkout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    priceId: tierId === 'pro'
-                        ? process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO
-                        : tierId === 'agency'
-                            ? process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_AGENCY
-                            : 'contact_sales',
-                    propertyId: 'subscription_upgrade',
-                    userId: 'current_user_id_placeholder', // Should be fetched from auth context
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                if (response.status === 401 || data.error === 'Unauthorized') {
-                    router.push('/login?returnUrl=/pricing');
-                    return;
-                }
-                throw new Error(data.error || 'Checkout failed');
-            }
-
-            const { sessionId } = data;
-
-            const stripe = await stripePromise;
-            if (stripe) {
-                // @ts-ignore
-                await stripe.redirectToCheckout({ sessionId });
-            }
-        } catch (err: any) {
-            console.error('Checkout error:', err);
-            setError('Checkout failed. Please ensure you are logged in and config is set.');
-        } finally {
-            setLoading(null);
-        }
-    };
+      const stripe = await stripePromise;
+      if (stripe) {
+        // @ts-ignore
+        await stripe.redirectToCheckout({ sessionId });
+      }
+    } catch (err: any) {
+      console.error('Checkout error:', err);
+      setError('Checkout failed. Please ensure you are logged in and config is set.');
+    } finally {
+      setLoading(null);
+    }
+  };
 
     return (
         <div className="bg-slate-900 min-h-screen py-24 sm:py-32">
