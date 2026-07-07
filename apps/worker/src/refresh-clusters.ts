@@ -27,6 +27,35 @@ pool.on('error', (err) => {
 let shuttingDown = false;
 let inFlight = false;
 
+// Wave 8: threshold refresh. A full CONCURRENTLY refresh costs ~85s at
+// ~950K listings (14% duty at the 10-min cadence) and most ticks change
+// nothing the tiles can see. Tiles depend on inserts + price/status
+// changes, NOT on rent-worker updated_at churn — so the high-water mark is
+// max(created_at) (new rows) + max(listings_history.id) (the trigger
+// writes history exactly when price/status/DOM change). Both are
+// index-cheap lookups.
+let lastHighWater: string | null = null;
+
+async function tilesInputChanged(log2: ReturnType<typeof withTrace>): Promise<boolean> {
+  try {
+    const res = await pool.query<{ hw: string }>(
+      `SELECT coalesce(max(created_at)::text, '') || '|' ||
+              coalesce((SELECT max(id)::text FROM listings_history), '') AS hw
+         FROM listings`,
+    );
+    const hw = res.rows[0]?.hw ?? '';
+    if (hw !== lastHighWater) {
+      lastHighWater = hw;
+      return true;
+    }
+    return false;
+  } catch (err) {
+    // The check failing must never block the refresh itself.
+    log2.warn({ err: (err as Error).message }, 'high-water check failed; refreshing anyway');
+    return true;
+  }
+}
+
 async function refreshOnce(): Promise<void> {
   if (inFlight) {
     log.warn('previous refresh still running; skipping this tick');
@@ -37,6 +66,10 @@ async function refreshOnce(): Promise<void> {
   const log2 = withTrace(log, traceId);
   const start = Date.now();
   try {
+    if (!(await tilesInputChanged(log2))) {
+      log2.info('tiles input unchanged since last refresh; skipping');
+      return;
+    }
     // CONCURRENTLY requires that the MV has a UNIQUE index — that's the
     // uq_mv_cluster_tiles_zoom_xy from the migration. If a future
     // schema change drops that index this call will fail hard and the

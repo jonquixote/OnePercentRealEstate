@@ -42,6 +42,12 @@ function validateWatchlistColumn(col) {
         'state',
         'city',
         'zip_code',
+        // Wave 5 — price-cut alerts are the headline digest content. MUST stay
+        // in sync with ALLOWED_COLUMNS in apps/one api/watchlists/route.ts.
+        'sale_type',
+        'price_cut_pct',
+        'days_on_market',
+        'property_type',
     ]);
     return allowed.has(col);
 }
@@ -49,9 +55,15 @@ function validateWatchlistColumn(col) {
  * Compile a watchlist's query_json to parameterized SQL.
  * Returns { sql, params } or throws if invalid.
  */
-function compileWatchlistQuery(queryJson) {
+function compileWatchlistQuery(queryJson, 
+// Number of placeholders the CALLER's query already uses before ours —
+// evaluateWatchlist binds $1 = cutoff, so compiled conditions must start
+// at $2. Without this offset every condition compared against the DATE
+// (critical bug caught by PR #9 review).
+placeholderOffset = 0) {
     const conditions = [];
     const params = [];
+    const ph = () => `$${placeholderOffset + params.length + 1}`;
     for (const [key, value] of Object.entries(queryJson)) {
         if (!validateWatchlistColumn(key)) {
             throw new Error(`Invalid column in watchlist query: ${key}`);
@@ -60,24 +72,24 @@ function compileWatchlistQuery(queryJson) {
             // IN clause
             if (value.length === 0)
                 continue;
-            const placeholders = value.map((_, i) => `$${params.length + i + 1}`).join(', ');
+            const placeholders = value.map((_, i) => `$${placeholderOffset + params.length + i + 1}`).join(', ');
             conditions.push(`"${key}" IN (${placeholders})`);
             params.push(...value);
         }
         else if (typeof value === 'object' && value !== null) {
             // Range query: { min: X, max: Y }
-            if ('min' !== undefined && value.min !== undefined) {
-                conditions.push(`"${key}" >= $${params.length + 1}`);
+            if (value.min !== undefined) {
+                conditions.push(`"${key}" >= ${ph()}`);
                 params.push(value.min);
             }
-            if ('max' !== undefined && value.max !== undefined) {
-                conditions.push(`"${key}" <= $${params.length + 1}`);
+            if (value.max !== undefined) {
+                conditions.push(`"${key}" <= ${ph()}`);
                 params.push(value.max);
             }
         }
         else {
             // Simple equality
-            conditions.push(`"${key}" = $${params.length + 1}`);
+            conditions.push(`"${key}" = ${ph()}`);
             params.push(value);
         }
     }
@@ -89,7 +101,8 @@ function compileWatchlistQuery(queryJson) {
  */
 async function evaluateWatchlist(client, watchlistId, userId, queryJson, lastEvaluatedAt) {
     try {
-        const { sql, params } = compileWatchlistQuery(queryJson);
+        // Offset 1: the outer query's $1 is the created_at cutoff.
+        const { sql, params } = compileWatchlistQuery(queryJson, 1);
         // Look for new listings since last evaluation (or last 30 days)
         const cutoff = lastEvaluatedAt ? new Date(lastEvaluatedAt.getTime()) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         const listingsResult = await client.query(`

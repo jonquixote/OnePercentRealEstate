@@ -3,14 +3,19 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import { safeErrorResponse } from '@/lib/api-error';
 import { checkRateLimit, checkoutLimiter } from '@/lib/rate-limit';
+import { getSessionUser } from '@/lib/auth';
 
 const VALID_PRICE_IDS: Record<string, string | undefined> = {
   monthly: process.env.STRIPE_PRICE_MONTHLY,
   annual: process.env.STRIPE_PRICE_ANNUAL,
+  // Agency tier ships when the owner creates its Stripe price; until then
+  // requests for it get the clean 400 below rather than silently charging
+  // the wrong amount (security review 2026-07-07: pricing bypass).
+  agency: process.env.STRIPE_PRICE_AGENCY,
 };
 
 const checkoutSchema = z.object({
-  plan: z.enum(['monthly', 'annual']).optional(),
+  plan: z.enum(['monthly', 'annual', 'agency']).optional(),
   priceId: z.string().startsWith('price_').max(200).optional(),
   propertyId: z.string().max(200).optional(),
   userId: z.string().max(200).optional(),
@@ -43,6 +48,14 @@ export async function POST(req: Request) {
     const raw = await req.json();
     const body = checkoutSchema.parse(raw);
 
+    // Wave 5: subscription identity comes from the SESSION, never the client
+    // body — the webhook grants the tier to metadata.userId, so a spoofable
+    // userId would let anyone gift themselves (or others) entitlements.
+    const sessionUser = await getSessionUser();
+    if (!sessionUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const resolvedPriceId = body.plan
       ? VALID_PRICE_IDS[body.plan]
       : body.priceId;
@@ -57,18 +70,20 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
-      customer_email: body.email || undefined,
+      customer_email: sessionUser.email || undefined,
       line_items: [
         {
           price: resolvedPriceId,
           quantity: 1,
         },
       ],
-      success_url: `${req.headers.get('origin')}/?upgrade_success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/pricing?canceled=true`,
+      // Origin header is absent on non-browser clients; fall back to the
+      // canonical site URL rather than sending Stripe an invalid "null/..."
+      success_url: `${req.headers.get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://one.octavo.press'}/?upgrade_success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://one.octavo.press'}/pricing?canceled=true`,
       metadata: {
         propertyId: body.propertyId || '',
-        ...(body.userId ? { userId: body.userId } : {}),
+        userId: sessionUser.id,
       },
     });
 

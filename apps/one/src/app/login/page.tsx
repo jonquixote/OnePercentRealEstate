@@ -5,103 +5,123 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
-// Simplified login page without Supabase auth
-// Authentication is currently disabled. To re-enable, implement with NextAuth.js
+// Wave 5: real credentials auth against /api/auth/{login,signup}.
 export default function LoginPage() {
+    const [mode, setMode] = useState<'login' | 'signup'>('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null);
+    const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
     const router = useRouter();
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setMessage(null);
-
-        // For now, just redirect to home - auth is disabled
-        setMessage({
-            type: 'success',
-            text: 'Authentication is currently disabled. You have full access to the dashboard.'
-        });
-
-        setTimeout(() => {
+        try {
+            const res = await fetch(`/api/auth/${mode}`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setMessage({ type: 'error', text: data.error ?? 'Something went wrong' });
+                return;
+            }
+            setMessage({ type: 'success', text: mode === 'signup' ? 'Account created — welcome.' : 'Welcome back.' });
             router.push('/');
-        }, 1500);
-
-        setLoading(false);
+            router.refresh();
+        } catch {
+            setMessage({ type: 'error', text: 'Network error — try again' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 py-12 sm:px-6 lg:px-8">
+        <div className="flex min-h-screen flex-col items-center justify-center bg-ink py-12 sm:px-6 lg:px-8">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-                    Welcome to OnePercent
+                <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-white">
+                    {mode === 'login' ? 'Welcome back' : 'Create your account'}
                 </h2>
-                <p className="mt-2 text-center text-sm text-gray-600">
-                    Real estate investment analysis platform
+                <p className="mt-2 text-center text-sm text-haze">
+                    Watchlists, saved searches, and price-cut alerts
                 </p>
             </div>
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+                <div className="bg-ink-panel border border-line py-8 px-4 shadow sm:rounded-xl sm:px-10">
                     <form className="space-y-6" onSubmit={handleAuth}>
                         <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                            <label htmlFor="email" className="block text-sm font-medium text-haze">
                                 Email address
                             </label>
-                            <div className="mt-1">
-                                <input
-                                    id="email"
-                                    name="email"
-                                    type="email"
-                                    autoComplete="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                                />
-                            </div>
+                            <input
+                                id="email"
+                                type="email"
+                                autoComplete="email"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="mt-1 block w-full rounded-md border border-line bg-white/[0.04] px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-pass"
+                            />
                         </div>
-
                         <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                                Password
+                            <label htmlFor="password" className="block text-sm font-medium text-haze">
+                                Password {mode === 'signup' && <span className="text-zinc-500">(8+ characters)</span>}
                             </label>
-                            <div className="mt-1">
-                                <input
-                                    id="password"
-                                    name="password"
-                                    type="password"
-                                    autoComplete="current-password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                                />
-                            </div>
+                            <input
+                                id="password"
+                                type="password"
+                                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                                required
+                                minLength={8}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="mt-1 block w-full rounded-md border border-line bg-white/[0.04] px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-pass"
+                            />
                         </div>
 
                         {message && (
-                            <div className={`rounded-md p-4 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                <p className="text-sm">{message.text}</p>
-                            </div>
+                            <p
+                                role="alert"
+                                className={`text-sm ${message.type === 'error' ? 'text-rose-400' : 'text-pass-hi'}`}
+                            >
+                                {message.text}
+                            </p>
                         )}
 
-                        <div>
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="flex w-full justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-                            >
-                                {loading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Continue to Dashboard'}
-                            </button>
-                        </div>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="flex w-full items-center justify-center gap-2 rounded-md bg-pass px-4 py-2 font-semibold text-white transition-colors hover:bg-pass-hi disabled:opacity-60"
+                        >
+                            {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                            {mode === 'login' ? 'Log in' : 'Sign up'}
+                        </button>
                     </form>
 
-                    <div className="mt-6">
-                        <Link href="/" className="text-center block text-sm text-blue-600 hover:text-blue-500">
-                            ← Back to Dashboard
-                        </Link>
+                    <div className="mt-6 text-center text-sm text-haze">
+                        {mode === 'login' ? (
+                            <>
+                                New here?{' '}
+                                <button onClick={() => { setMode('signup'); setMessage(null); }} className="font-semibold text-pass-hi hover:underline">
+                                    Create an account
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                Already have an account?{' '}
+                                <button onClick={() => { setMode('login'); setMessage(null); }} className="font-semibold text-pass-hi hover:underline">
+                                    Log in
+                                </button>
+                            </>
+                        )}
                     </div>
+                    <p className="mt-4 text-center text-xs text-zinc-500">
+                        <Link href="/" className="hover:underline">← back to the map</Link>
+                    </p>
                 </div>
             </div>
         </div>

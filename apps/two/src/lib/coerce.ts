@@ -47,7 +47,10 @@ export function toRows(data: ViewportResponse | undefined): PropertyRow[] {
     const id = String(raw.id);
     const price = n(raw.price);
     const sqft = n(raw.sqft);
-    const estimated_rent = estimateRent(price, sqft);
+    // Wave 8 wrap: use the REAL model rent when the payload carries it (the
+    // v1 LightGBM estimate with quantile bands); the crude price-anchored
+    // guess only remains as a fallback for payloads without it.
+    const estimated_rent = n((raw as Record<string, number | string | null>).estimated_rent) ?? estimateRent(price, sqft);
     const ppsf = price != null && sqft != null && sqft > 0 ? price / sqft : null;
     const onePct =
       estimated_rent != null && price != null && price > 0
@@ -69,7 +72,9 @@ export function toRows(data: ViewportResponse | undefined): PropertyRow[] {
       primary_photo: raw.primary_photo ?? null,
       latitude: raw.latitude,
       longitude: raw.longitude,
-      dom: hashInt(id, 180) + 1,
+      // Real days_on_market when the payload carries it (Wave 1 column);
+      // deterministic mock only for payloads that predate it.
+      dom: n((raw as Record<string, unknown>).days_on_market as number | string | null) ?? hashInt(id, 180) + 1,
       ppsf,
       onePct,
       cap,

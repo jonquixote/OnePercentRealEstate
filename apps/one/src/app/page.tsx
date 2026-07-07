@@ -12,12 +12,14 @@ import {
   propertyFilterParsers,
   toFilterState,
 } from '@/components/PropertyFilters';
+import { WatchSearchButton } from '@/components/WatchSearchButton';
 import { useQueryStates } from 'nuqs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { SavedSearches } from '@/components/SavedSearches';
 import { HomeHero } from '@/components/home/HomeHero';
 import { FeaturedDeals } from '@/components/home/FeaturedDeals';
+import { ReducedRail } from '@/components/home/ReducedRail';
 import { MarketPulse } from '@/components/home/MarketPulse';
 import { asStrategy, STRATEGY_BY_ID } from '@/lib/strategies';
 
@@ -131,6 +133,7 @@ export default function Dashboard() {
         onBrowse={scrollToOpportunities}
       />
       <FeaturedDeals strategy={strategy} rentCalcPending={stats?.rentCalcPending ?? 0} />
+      <ReducedRail />
       {stats && (
         <MarketPulse
           strategy={strategy}
@@ -182,7 +185,12 @@ export default function Dashboard() {
           </div>
 
           <div className="sticky top-[88px] z-20 -mx-4 border-y border-line bg-ink/95 px-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-            <PropertyFilters />
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <PropertyFilters />
+              </div>
+              <WatchSearchButton filters={filters} />
+            </div>
           </div>
         </div>
 

@@ -9,7 +9,11 @@ set -euo pipefail
 # full-DB dump off any other account on the host.
 umask 077
 
-DIR=/opt/onepercent/backups
+# /var/backups — OUTSIDE the rsync/deploy target on purpose. The original
+# /opt/onepercent/backups vanished on 2026-07-07 (server-side cleanup wiped
+# it along with the app tree); the safety net must not live inside the
+# thing it protects.
+DIR=/var/backups/onepercent
 LOG="$DIR/backup.log"
 mkdir -p "$DIR"
 chmod 700 "$DIR"
