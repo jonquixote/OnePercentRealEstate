@@ -38,6 +38,12 @@ STATES=(
   "55:wisconsin" "56:wyoming"
 )
 
+# Alpine postgis ships a shp2pgsql linked against libintl.so.8 without the
+# library present (discovered 2026-07-07: every state "loaded" while the
+# pipeline died silently behind 2>/dev/null). Self-heal:
+docker exec "$CONTAINER" sh -c "apk add --no-cache gettext-libs libintl >/dev/null 2>&1 || apk add --no-cache gettext >/dev/null 2>&1" || true
+docker exec "$CONTAINER" sh -c "shp2pgsql 2>&1 | head -1" | grep -qi usage || { echo "FATAL: shp2pgsql still broken in container"; exit 1; }
+
 echo "Downloading and loading census tract shapefiles..."
 echo "Working directory: $WORKDIR"
 
@@ -69,14 +75,14 @@ for entry in "${STATES[@]}"; do
 
   # Run shp2pgsql then INSERT inside the container
   docker exec "$CONTAINER" sh -c "
-    shp2pgsql -s 4269:4326 -I /tmp/tract_${FIPS}/${SHAPEFILE} staging_tracts 2>/dev/null | psql -U postgres -q 2>/dev/null
+    shp2pgsql -d -s 4269:4326 -I /tmp/tract_${FIPS}/${SHAPEFILE} staging_tracts 2>/tmp/shp_err_${FIPS} | psql -U postgres -q || echo \"  ERROR: shp2pgsql/psql failed for ${FIPS}: \$(tail -1 /tmp/shp_err_${FIPS})\"
     psql -U postgres -c \"
       INSERT INTO census_tracts (geoid, state_fips, geom)
       SELECT geoid, LEFT(geoid, 2), geom
       FROM staging_tracts
       ON CONFLICT (geoid) DO NOTHING;
-    \" 2>/dev/null
-    psql -U postgres -c \"DROP TABLE IF EXISTS staging_tracts;\" 2>/dev/null
+    \" || echo \"  ERROR: insert failed for ${FIPS}\"
+    psql -U postgres -c \"DROP TABLE IF EXISTS staging_tracts;\"
     rm -rf /tmp/tract_${FIPS}
   "
 
