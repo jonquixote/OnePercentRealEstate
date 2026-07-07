@@ -33,7 +33,7 @@ def get_db_connection():
         print(f"Error connecting to database: {e}", file=sys.stderr)
         return None
 
-CENSUS_BENCHMARK = 'Public_AR_Currenty'
+CENSUS_BENCHMARK = 'Public_AR_Current'
 
 def geocode_address(address):
     """Geocodes an address using Census Bureau (primary) + Nominatim (fallback)."""

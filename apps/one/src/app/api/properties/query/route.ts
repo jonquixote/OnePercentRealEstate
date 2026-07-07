@@ -73,7 +73,11 @@ export async function POST(req: NextRequest) {
       year_built,
       primary_photo,
       sale_type,
-      listing_status
+      listing_status,
+      days_on_market,
+      price_cut_pct,
+      rent_low,
+      rent_high
     FROM listings
     WHERE listing_type = 'for_sale'
       AND ${saleTypeDefault} (${compiled.whereSql})

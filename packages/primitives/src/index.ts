@@ -37,6 +37,8 @@ export {
   scoreToGrade,
   headlineForGrade,
   resolveCosts,
+  motivatedSellerScore,
+  MOTIVATED_SELLER_SCORE_SQL,
 } from "./underwriting";
 export type {
   Strategy,

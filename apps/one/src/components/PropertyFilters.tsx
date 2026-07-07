@@ -24,6 +24,10 @@ export interface FilterState {
     propertyType: string;
     saleType: string;
     strategy: string;
+    // Wave 4 — investor filters
+    hoaMax: number;      // 0 = off
+    domMin: number;      // 0 = off
+    hasPriceCut: boolean;
 }
 
 /**
@@ -47,6 +51,10 @@ export const propertyFilterParsers = {
     type: parseAsString.withDefault(''),
     sale: parseAsString.withDefault(''),
     strat: parseAsString.withDefault('buy_hold'),
+    // Wave 4 — investor filters
+    hoamax: parseAsInteger.withDefault(0),
+    dom: parseAsInteger.withDefault(0),
+    cut: parseAsBoolean.withDefault(false),
 };
 
 /**
@@ -65,6 +73,9 @@ export function toFilterState(qs: {
     type: string;
     sale: string;
     strat: string;
+    hoamax: number;
+    dom: number;
+    cut: boolean;
 }): FilterState {
     return {
         showSold: qs.sold,
@@ -78,6 +89,9 @@ export function toFilterState(qs: {
         propertyType: qs.type,
         saleType: qs.sale,
         strategy: qs.strat,
+        hoaMax: qs.hoamax,
+        domMin: qs.dom,
+        hasPriceCut: qs.cut,
     };
 }
 
@@ -338,6 +352,59 @@ export function PropertyFilters() {
                                                 ? 'bg-amber-600 text-white'
                                                 : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
                                         }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Wave 4 — Motivated-seller signals */}
+                        <div className="space-y-2 md:col-span-4">
+                            <Label>Seller Signals</Label>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={() => setQs({ cut: !filters.hasPriceCut })}
+                                    className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
+                                        filters.hasPriceCut
+                                            ? 'bg-brass text-zinc-950'
+                                            : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                    }`}
+                                    aria-pressed={filters.hasPriceCut}
+                                >
+                                    Price Reduced
+                                </button>
+                                {[
+                                    { value: 30, label: '30+ DOM' },
+                                    { value: 60, label: '60+ DOM' },
+                                    { value: 90, label: '90+ DOM' },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        onClick={() => setQs({ dom: filters.domMin === opt.value ? 0 : opt.value })}
+                                        className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
+                                            filters.domMin === opt.value
+                                                ? 'bg-brass text-zinc-950'
+                                                : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                        }`}
+                                        aria-pressed={filters.domMin === opt.value}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                                {[
+                                    { value: 100, label: 'HOA ≤ $100' },
+                                    { value: 300, label: 'HOA ≤ $300' },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        onClick={() => setQs({ hoamax: filters.hoaMax === opt.value ? 0 : opt.value })}
+                                        className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
+                                            filters.hoaMax === opt.value
+                                                ? 'bg-pass text-white'
+                                                : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                        }`}
+                                        aria-pressed={filters.hoaMax === opt.value}
                                     >
                                         {opt.label}
                                     </button>

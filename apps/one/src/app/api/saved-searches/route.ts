@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { getSessionUser } from '@/lib/auth';
 
 /**
  * Wave 5 minimal saved searches endpoint.
  *
- * SECURITY: User identity comes from a request-controlled field (header
- * `x-user-id` or `?user_id=`) because Wave 8 auth is not yet wired. This
- * is a known IDOR/spoofing surface — any caller can read or delete any
- * row by supplying the matching user_id. Mitigations until Wave 8:
+ * SECURITY: Session identity (`getSessionUser()`) is the primary source
+ * for userId. The legacy `x-user-id` header / `?user_id=` query fallback
+ * is available only in non-production environments and is gated behind
+ * ADMIN_API_KEY in production.
  *
- *   1. Production builds (NODE_ENV=production) require ADMIN_API_KEY in
- *      the `Authorization: Bearer <key>` header. Without it the route
- *      returns 501 so the endpoint is unreachable from the public web.
- *   2. Dev/test builds pass through with the spoofable user_id so the
- *      UI prototype keeps working locally.
+ * Production builds (NODE_ENV=production) require ADMIN_API_KEY in
+ * the `Authorization: Bearer <key>` header. Without it the route returns
+ * 501 so the endpoint is unreachable from the public web.
  *
- * When Wave 8 lands, derive userId from `getServerSession()` and remove
- * the env-gated bypass.
+ * Dev/test builds pass through with the spoofable user_id so the
+ * UI prototype keeps working locally.
  */
 
 const PROD_GATE_HEADER = 'authorization';
@@ -55,11 +54,16 @@ function readUserId(request: NextRequest, fallback?: string): string | null {
 }
 
 export async function GET(request: NextRequest) {
-  const gate = devGateBlocked(request);
-  if (gate) return gate;
+  // Wave 5: a real session is the primary identity; the ADMIN_API_KEY gate
+  // only guards the legacy header/query fallback path.
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
 
   try {
-    const userId = readUserId(request);
+    const userId = sessionUser?.id ?? readUserId(request);
     if (!userId) {
       return NextResponse.json(
         { error: 'user_id required (alphanumeric, max 64 chars)' },
@@ -83,14 +87,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = devGateBlocked(request);
-  if (gate) return gate;
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
 
   try {
     const body = await request.json().catch(() => ({}));
     const { user_id, name, params } = body ?? {};
 
-    const userId = readUserId(request, typeof user_id === 'string' ? user_id : undefined);
+    const userId = sessionUser?.id ?? readUserId(request, typeof user_id === 'string' ? user_id : undefined);
 
     if (!userId) {
       return NextResponse.json(
@@ -131,12 +138,15 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const gate = devGateBlocked(request);
-  if (gate) return gate;
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
 
   try {
     const id = request.nextUrl.searchParams.get('id');
-    const userId = readUserId(request);
+    const userId = sessionUser?.id ?? readUserId(request);
 
     if (!id || !/^\d+$/.test(id) || !userId) {
       return NextResponse.json(

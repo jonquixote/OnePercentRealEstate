@@ -21,7 +21,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-CENSUS_BENCHMARK = 'Public_AR_Currenty'
+CENSUS_BENCHMARK = 'Public_AR_Current'
 
 def geocode_address(address):
     """Geocodes via Census Bureau (no rate limit), falls back to Nominatim (1 req/sec)."""

@@ -113,12 +113,17 @@ async function processJob(jobId, parentLog) {
             log.warn({ err: err.message }, 'foreclosure scrape failed');
             return null;
         });
-        if (!saleResult && !rentResult && !foreclosureResult) {
-            throw new Error('all scrape passes (for_sale, for_rent, foreclosure) failed');
+        // Fourth pass: recently sold listings (14-day lookback overlaps the ~11-day ZIP cycle).
+        const soldResult = await scrape(job, 'sold', log, { pastDays: 14 }).catch((err) => {
+            log.warn({ err: err.message }, 'sold scrape failed, continuing');
+            return null;
+        });
+        if (!saleResult && !rentResult && !foreclosureResult && !soldResult) {
+            throw new Error('all scrape passes (for_sale, for_rent, foreclosure, sold) failed');
         }
-        const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0) + (foreclosureResult?.count ?? 0);
-        const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0) + (foreclosureResult?.inserted ?? 0);
-        const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0) + (foreclosureResult?.skipped ?? 0);
+        const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0) + (foreclosureResult?.count ?? 0) + (soldResult?.count ?? 0);
+        const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0) + (foreclosureResult?.inserted ?? 0) + (soldResult?.inserted ?? 0);
+        const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0) + (foreclosureResult?.skipped ?? 0) + (soldResult?.skipped ?? 0);
         await pool.query(`UPDATE crawl_jobs
           SET status = 'completed',
               finished_at = NOW(),
@@ -162,7 +167,7 @@ async function scrape(job, listingType, log, opts) {
             body: JSON.stringify({
                 location: job.region_value,
                 listing_type: listingType,
-                past_days: 30,
+                past_days: opts?.pastDays ?? 30,
                 ...(opts?.foreclosure ? { foreclosure: true } : {}),
             }),
             signal: controller.signal,

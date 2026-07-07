@@ -706,3 +706,45 @@ function buyHoldBreakdown(inputs: PropertyInputs, ev: RuleEvaluation): GradeCate
 
   return cats;
 }
+
+/* ------------------------------------------------------------------ */
+/* Wave 4: motivated-seller score                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 0–100 heuristic of seller motivation, built from observable listing
+ * behavior. One truth: the SQL expression in apps/one getProperties MUST
+ * mirror this exactly (parity-tested in underwriting.test.ts).
+ *
+ *   cut depth   0–45 pts : 3% cut ≈ 13pts, 10%+ ≈ 45 (capped)
+ *   cut count   0–15 pts : 5 per observed decrease, capped at 3
+ *   staleness   0–25 pts : linear from 30 to 120+ DOM
+ *   distress    0/15 pts : non-standard sale types signal a motivated seller
+ */
+export function motivatedSellerScore(
+  priceCutPct: number | null | undefined,
+  priceCutCount: number | null | undefined,
+  daysOnMarket: number | null | undefined,
+  saleType: SaleType | string | null | undefined,
+): number {
+  const cut = Math.max(0, Math.min(priceCutPct ?? 0, 0.10));
+  const cutPts = (cut / 0.10) * 45;
+  const countPts = Math.min(priceCutCount ?? 0, 3) * 5;
+  const dom = Math.max(0, daysOnMarket ?? 0);
+  const domPts = Math.max(0, Math.min((dom - 30) / 90, 1)) * 25;
+  const distressPts = saleType && saleType !== 'standard' ? 15 : 0;
+  return Math.round(cutPts + countPts + domPts + distressPts);
+}
+
+/**
+ * The SQL twin of motivatedSellerScore. Interpolate as a SELECT expression;
+ * expects columns price_cut_pct, price_cut_count, days_on_market, sale_type.
+ * Kept here so the TS and SQL definitions live one screen apart.
+ */
+export const MOTIVATED_SELLER_SCORE_SQL = `
+round(
+  (LEAST(GREATEST(COALESCE(price_cut_pct, 0), 0), 0.10) / 0.10) * 45
+  + LEAST(COALESCE(price_cut_count, 0), 3) * 5
+  + GREATEST(0, LEAST((GREATEST(COALESCE(days_on_market, 0), 0) - 30) / 90.0, 1)) * 25
+  + CASE WHEN sale_type IS NOT NULL AND sale_type <> 'standard' THEN 15 ELSE 0 END
+)`;

@@ -2,6 +2,7 @@
 
 import pool from '@/lib/db';
 import redis from '@/lib/redis';
+import { MOTIVATED_SELLER_SCORE_SQL } from '@oper/primitives';
 
 const PROPERTY_CACHE_TTL = 60;
 const HUD_CACHE_TTL = 86400;
@@ -49,6 +50,11 @@ export async function getProperties(
         propertyType?: string;
         saleType?: string;
         strategy?: string;
+        // Wave 4 — investor filters
+        hoaMax?: number;
+        domMin?: number;
+        hasPriceCut?: boolean;
+        minRentConfidence?: number; // 0..1; 1 - band_spread/rent, clamped
     },
     cursor: string | null = null
 ) {
@@ -68,6 +74,9 @@ export async function getProperties(
     price_low: 'price ASC NULLS LAST',
     one_percent_high: '(estimated_rent / NULLIF(price, 0)) DESC NULLS LAST',
     one_percent_low: '(estimated_rent / NULLIF(price, 0)) ASC NULLS LAST',
+    // Wave 4: served by the partial index idx_listings_price_cut.
+    biggest_cut: 'price_cut_pct DESC NULLS LAST',
+    stalest: 'days_on_market DESC NULLS LAST',
   };
   const orderBy = SORT_COLUMNS[sortBy] ?? 'created_at DESC';
   const isDesc = orderBy.includes('DESC');
@@ -144,6 +153,26 @@ export async function getProperties(
             whereClauses.push(`LOWER(property_type) = LOWER($${paramIndex++})`);
             params.push(filters.propertyType);
         }
+        // Wave 4 — investor filters
+        if (filters?.hoaMax !== undefined && filters.hoaMax >= 0) {
+            // Unknown HOA (NULL, ~34% of rows) passes: "cap my HOA" should not
+            // hide listings whose dues simply weren't published.
+            whereClauses.push(`(hoa_fee IS NULL OR hoa_fee <= $${paramIndex++})`);
+            params.push(filters.hoaMax);
+        }
+        if (filters?.domMin && filters.domMin > 0) {
+            whereClauses.push(`days_on_market >= $${paramIndex++}`);
+            params.push(filters.domMin);
+        }
+        if (filters?.hasPriceCut) {
+            whereClauses.push(`price_cut_pct > 0`);
+        }
+        if (filters?.minRentConfidence && filters.minRentConfidence > 0) {
+            // confidence = 1 - band_spread/rent (clamped to [0,1]); rows without
+            // a band are excluded by definition when the user asks for confidence.
+            whereClauses.push(`(1 - LEAST((rent_high - rent_low) / NULLIF(estimated_rent, 0), 1)) >= $${paramIndex++}`);
+            params.push(Math.min(filters.minRentConfidence, 1));
+        }
 
         if (useCursor) {
             whereClauses.push(`id ${isDesc ? '<' : '>'} $${paramIndex++}`);
@@ -167,7 +196,13 @@ sale_type,
 primary_photo,
 images,
 media_blur,
-created_at
+created_at,
+days_on_market,
+price_cut_pct,
+price_cut_count,
+rent_low,
+rent_high,
+${MOTIVATED_SELLER_SCORE_SQL} as motivated_score
 `;
 
         let query: string;
@@ -215,6 +250,12 @@ const client = await pool.connect();
         ...row,
         listing_price: row.listing_price != null ? Number(row.listing_price) : null,
         estimated_rent: Math.round(rent),
+        days_on_market: row.days_on_market != null ? Number(row.days_on_market) : null,
+        price_cut_pct: row.price_cut_pct != null ? Number(row.price_cut_pct) : null,
+        price_cut_count: row.price_cut_count != null ? Number(row.price_cut_count) : null,
+        rent_low: row.rent_low != null ? Number(row.rent_low) : null,
+        rent_high: row.rent_high != null ? Number(row.rent_high) : null,
+        motivated_score: row.motivated_score != null ? Number(row.motivated_score) : null,
         financial_snapshot: {
           bedrooms: Number(row.bedrooms) || 0,
           bathrooms: Number(row.bathrooms) || 0,
@@ -320,6 +361,20 @@ tax_annual_amount,
 assessed_value,
 estimated_value,
 county,
+-- Wave 4: enrichment surfaced on the detail page
+neighborhoods,
+property_url,
+last_sold_price,
+last_sold_date,
+description,
+style,
+days_on_market,
+price_cut_pct,
+price_cut_count,
+first_list_price,
+rent_low,
+rent_high,
+${MOTIVATED_SELLER_SCORE_SQL} as motivated_score,
 -- Wave 3: state-level insurance avg via regex-parse of address.
 -- TODO(Wave 1b): add listings.state column + backfill migration so this
 -- becomes a direct join rather than substring(addr from ', ([A-Z]{2}) ').
@@ -382,6 +437,12 @@ const client = await pool.connect();
         assessed_value: row.assessed_value != null ? Number(row.assessed_value) : null,
         estimated_value: row.estimated_value != null ? Number(row.estimated_value) : null,
         insurance_state_avg: row.insurance_state_avg != null ? Number(row.insurance_state_avg) : null,
+        last_sold_price: row.last_sold_price != null ? Number(row.last_sold_price) : null,
+        price_cut_pct: row.price_cut_pct != null ? Number(row.price_cut_pct) : null,
+        first_list_price: row.first_list_price != null ? Number(row.first_list_price) : null,
+        rent_low: row.rent_low != null ? Number(row.rent_low) : null,
+        rent_high: row.rent_high != null ? Number(row.rent_high) : null,
+        motivated_score: row.motivated_score != null ? Number(row.motivated_score) : null,
       images: images,
       media_blur: row.media_blur ?? null,
       raw_data: raw,

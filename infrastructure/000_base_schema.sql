@@ -82,7 +82,7 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_update_listings_geom ON listings;
 CREATE TRIGGER trg_update_listings_geom
-    BEFORE INSERT OR UPDATE ON listings
+    BEFORE INSERT OR UPDATE OF longitude, latitude, geom ON listings
     FOR EACH ROW
     EXECUTE FUNCTION update_listings_geom();
 
