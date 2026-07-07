@@ -139,7 +139,9 @@ async function loadListing(listingId, parentLog) {
             latitude,
             longitude,
             property_type,
-            public.is_rentable(property_type) AS is_rentable
+            public.is_rentable(property_type) AS is_rentable,
+            hoa_fee,
+            lot_size_acres
        FROM listings
       WHERE id = $1`, [listingId]);
     if (res.rowCount === 0) {
@@ -161,6 +163,8 @@ async function loadListing(listingId, parentLog) {
         longitude: r.longitude != null ? Number(r.longitude) : null,
         property_type: r.property_type,
         is_rentable: r.is_rentable,
+        hoa_fee: r.hoa_fee != null ? Number(r.hoa_fee) : null,
+        lot_sqft: r.lot_size_acres != null ? Number(r.lot_size_acres) * 43_560 : null,
     };
 }
 async function callMlService(payload, parentLog) {
@@ -365,6 +369,9 @@ async function drainBatch(parentLog) {
      UPDATE listings l
         SET rent_calc_status = 'failed', updated_at = NOW()
        FROM ng WHERE l.id = ng.id`, [env.RENT_BATCH_SIZE]);
+    if (noGeo.rowCount && noGeo.rowCount > 0) {
+        parentLog.warn({ noGeo: noGeo.rowCount }, `marked ${noGeo.rowCount} no-geo listings as failed`);
+    }
     // 2. Pull a scoreable page with features.
     const page = await pool.query(`SELECT id::text AS id, address, city, state,
             zip_code, bedrooms, bathrooms, sqft, year_built,
@@ -453,14 +460,15 @@ async function drainBatch(parentLog) {
                 scored.map((s) => s.rent_high ?? null),
                 scored.map((s) => s.model_version),
             ]);
+            // Map items by listing_id so features are emitted in scored order,
+            // matching listing_id / model_version / predicted_rent arrays.
+            const itemMap = new Map(items.map((i) => [i.listing_id, i]));
             await client.query(`INSERT INTO rent_predictions_audit (listing_id, model_version, predicted_rent, features)
          SELECT unnest($1::bigint[]), unnest($2::text[]), unnest($3::numeric[]), unnest($4::jsonb[])`, [
                 scored.map((s) => s.listing_id),
                 scored.map((s) => s.model_version),
                 scored.map((s) => s.predicted_rent),
-                items
-                    .filter((i) => scoredIds.has(i.listing_id))
-                    .map((i) => JSON.stringify(i)),
+                scored.map((s) => JSON.stringify(itemMap.get(s.listing_id) ?? null)),
             ]);
         }
         if (skipped.length > 0) {

@@ -7,11 +7,13 @@ import {
     Button,
     resolveRuleFrom,
     evaluateRules,
+    resolveCosts,
     type RuleConfig,
     type PropertyInputs,
     type Strategy,
     type SaleType,
     type Grade,
+    type RealCosts,
 } from '@oper/primitives';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
@@ -105,6 +107,18 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
         };
     }, []);
 
+    const [liveRatePct, setLiveRatePct] = useState<number | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/mortgage-rates', { cache: 'no-store' })
+            .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+            .then((data) => {
+                if (!cancelled && data?.rate) setLiveRatePct(data.rate);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
     const propType: string | null =
         property?.property_type ?? rawData?.style ?? rawData?.property_type ?? null;
     const saleType = (property?.sale_type ?? 'standard') as SaleType;
@@ -114,19 +128,40 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
         price: listing_price,
         monthlyRent: estimated_rent,
         sqft: num(fin?.sqft ?? rawData?.sqft),
-        hoaMonthly: num(rawData?.hoa_fee),
+        hoaMonthly: num(property?.hoa_fee ?? rawData?.hoa_fee),
         yearBuilt: num(fin?.year_built ?? rawData?.year_built),
         daysOnMarket: computeDaysOnMarket(property),
+        arv: num(property?.estimated_value),
+        taxAnnualAmount: num(property?.tax_annual_amount),
+        assessedValue: num(property?.assessed_value),
     };
 
     const cfg = useMemo(
         () => (rules ? resolveRuleFrom(rules, { propertyType: propType, saleType, strategy }) : null),
         [rules, propType, saleType, strategy]
     );
-    const evaluation = useMemo(
-        () => (cfg ? evaluateRules(inputs, cfg, { propertyType: propType, saleType }) : null),
+    const cfgWithRate = useMemo(
+        () => (cfg && liveRatePct ? { ...cfg, interestRate: liveRatePct / 100 } : cfg),
+        [cfg, liveRatePct]
+    );
+    const realCosts: RealCosts | null = useMemo(
+        () => cfgWithRate && inputs.price > 0
+            ? resolveCosts(
+                inputs.price,
+                inputs.taxAnnualAmount,
+                inputs.hoaMonthly,
+                cfgWithRate,
+                num(property?.insurance_state_avg),
+                inputs.assessedValue,
+            )
+            : null,
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [cfg, listing_price, estimated_rent, inputs.sqft, inputs.hoaMonthly, inputs.yearBuilt, inputs.daysOnMarket]
+        [cfgWithRate, inputs.price, inputs.taxAnnualAmount, inputs.hoaMonthly, inputs.assessedValue, property?.insurance_state_avg]
+    );
+    const evaluation = useMemo(
+        () => (cfgWithRate ? evaluateRules(inputs, cfgWithRate, { propertyType: propType, saleType }) : null),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [cfgWithRate, listing_price, estimated_rent, inputs.sqft, inputs.hoaMonthly, inputs.yearBuilt, inputs.daysOnMarket, inputs.arv]
     );
 
     const compareHref = `/compare?ids=${encodeURIComponent(property?.id ?? '')}`;
@@ -278,6 +313,52 @@ export function PropertyScorecardTab({ property }: PropertyScorecardTabProps) {
                             </div>
                         </div>
                     </div>
+                    {realCosts && (
+                        <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
+                            <span className="font-mono text-[10px] uppercase tracking-widest text-gray-400">
+                                Costs
+                            </span>
+                            <span
+                                className={cn(
+                                    'inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-medium',
+                                    realCosts.provenance.tax.source === 'real_tax'
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                )}
+                                title={realCosts.provenance.tax.detail}
+                            >
+                                Tax: {realCosts.provenance.tax.source === 'real_tax' ? 'actual' : 'estimated'}
+                            </span>
+                            <span
+                                className={cn(
+                                    'inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-medium',
+                                    realCosts.provenance.hoa.source === 'real_hoa'
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-gray-100 text-gray-500'
+                                )}
+                                title={realCosts.provenance.hoa.detail}
+                            >
+                                HOA: {realCosts.provenance.hoa.source === 'real_hoa' ? 'actual' : 'none'}
+                            </span>
+                            <span
+                                className={cn(
+                                    'inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-medium',
+                                    realCosts.provenance.insurance.source === 'state_insurance'
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                )}
+                                title={realCosts.provenance.insurance.detail}
+                            >
+                                Ins: {realCosts.provenance.insurance.source === 'state_insurance' ? 'state avg' : 'default'}
+                            </span>
+                            {liveRatePct && (
+                                <span className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 font-mono text-[10px] font-medium text-sky-700"
+                                    title={`Live FRED 30yr mortgage rate: ${liveRatePct}%`}>
+                                    Rate: {liveRatePct}%
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 

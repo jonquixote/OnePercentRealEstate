@@ -36,6 +36,7 @@ export {
   compositeScore,
   scoreToGrade,
   headlineForGrade,
+  resolveCosts,
 } from "./underwriting";
 export type {
   Strategy,
@@ -50,4 +51,8 @@ export type {
   RuleEvaluation,
   GradeCategory,
   ScoreResult,
+  CostSource,
+  CostProvenance,
+  CostProvenanceItem,
+  RealCosts,
 } from "./underwriting";

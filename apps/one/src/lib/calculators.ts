@@ -27,6 +27,7 @@ export interface ExpenseOptions {
     hoaMonthly: number;
     utilitiesMonthly: number;
     otherMonthly: number;
+    taxAnnual?: number; // Override: actual annual tax instead of price * propertyTaxRate
 }
 
 export interface CashflowResult {
@@ -118,7 +119,9 @@ export function calculatePropertyMetrics(
     }
 
     // 3. Fixed Monthly Expenses
-    const monthlyPropertyTax = (price * expenses.propertyTaxRate) / 12;
+    const monthlyPropertyTax = expenses.taxAnnual && expenses.taxAnnual > 0
+        ? expenses.taxAnnual / 12
+        : (price * expenses.propertyTaxRate) / 12;
     const monthlyInsurance = expenses.insuranceAnnual / 12;
 
     // 4. Variable Monthly Expenses (% of rent)
