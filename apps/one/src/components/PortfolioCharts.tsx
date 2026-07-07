@@ -10,11 +10,10 @@ import {
 
 interface PortfolioChartsProps {
     properties: any[];
-    benchmarks: any[];
     stats: any;
 }
 
-export default function PortfolioCharts({ properties, benchmarks, stats }: PortfolioChartsProps) {
+export default function PortfolioCharts({ properties, stats }: PortfolioChartsProps) {
     const data = properties; // rename for convenience
 
     // Prepare Chart Data
@@ -52,15 +51,11 @@ export default function PortfolioCharts({ properties, benchmarks, stats }: Portf
 
     const rentVsHudData = Object.keys(rentByZip).map(zip => {
         const avgRent = rentByZip[zip].totalRent / rentByZip[zip].count;
-        const benchmark = benchmarks.find((b: any) => b.zip_code === zip);
-        const hudRent = benchmark ? benchmark.safmr_data['3br'] : 0;
-
         return {
             name: zip,
             "Avg Rent": Math.round(avgRent),
-            "HUD FMR (3BR)": hudRent
         };
-    }).filter(d => d["HUD FMR (3BR)"] > 0);
+    });
 
     // Prepare Deal Economics
     const avgRent = stats.avgRent;

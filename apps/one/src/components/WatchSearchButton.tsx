@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, Check, Loader2 } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import type { FilterState } from '@/components/PropertyFilters';
 
 /**
@@ -66,7 +66,7 @@ export function WatchSearchButton({ filters }: { filters: FilterState }) {
         >
             {state === 'saving' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 : state === 'saved' ? <Check className="h-4 w-4" aria-hidden="true" />
-                : <Bell className="h-4 w-4" aria-hidden="true" />}
+                : <span aria-hidden="true" className="text-[15px] leading-none">⌂</span>}
             {state === 'saved' ? 'Watching' : state === 'login' ? 'Log in to watch' : state === 'error' ? 'Retry watch' : 'Watch this search'}
         </button>
     );

@@ -66,7 +66,7 @@ const DISTRESS_LABELS: Record<string, string> = {
 };
 
 export const PropertyCard = React.memo(function PropertyCard({ property, isSelected, onSelect }: PropertyCardProps) {
-    const { address, listing_price, estimated_rent, financial_snapshot, status } = property;
+    const { address, listing_price, estimated_rent, property_type, is_rentable, financial_snapshot, status } = property;
 
     const { monthlyCashflow } = calculatePropertyMetrics(listing_price, estimated_rent);
     const hasRent = !!estimated_rent && estimated_rent > 0;
@@ -220,9 +220,14 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                                 )}
                             </div>
 
-                            {/* 1% Rule chip (top-right) */}
+                            {/* 1% Rule chip (top-right) — tri-state */}
                             <div className="absolute top-3 right-3 z-10" style={{ marginRight: onSelect ? '2.25rem' : 0 }}>
-                                {hasRent && ratioPct != null ? (
+                                {is_rentable === false ? (
+                                    <span className="inline-flex items-center rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold tracking-wide text-mute"
+                                          style={{ font: '600 11px/1 var(--font-ui)', letterSpacing: '.14em', textTransform: 'uppercase' }}>
+                                        {property_type?.replace(/_/g, ' ')?.toLowerCase() || 'property'} · not rentable
+                                    </span>
+                                ) : hasRent && ratioPct != null ? (
                                     <span
                                         className={cn(
                                             "inline-flex items-center rounded-full px-3 py-1.5 text-base font-bold tracking-tight text-white shadow-[0_2px_8px_rgba(0,0,0,0.25)]",
@@ -233,12 +238,9 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
                                         {ratioPct.toFixed(2)}%
                                     </span>
                                 ) : (
-                                    <span
-                                        className="inline-flex items-center gap-1.5 rounded-full bg-zinc-200/90 dark:bg-zinc-800/90 backdrop-blur-sm px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300 shadow-sm animate-pulse"
-                                        aria-label="Calculating one percent rule"
-                                    >
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        Calculating…
+                                    <span className="inline-flex items-center rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold tracking-wide text-haze"
+                                          style={{ font: '600 11px/1 var(--font-ui)', letterSpacing: '.14em', textTransform: 'uppercase' }}>
+                                        estimate queued
                                     </span>
                                 )}
                             </div>

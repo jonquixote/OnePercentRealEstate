@@ -36,6 +36,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const reqIdRef = useRef(0);
+  const lastSelectedRef = useRef<string | number | null>(null);
 
   const buildUrl = useCallback((map: maplibregl.Map) => {
     const b = map.getBounds()!;
@@ -123,8 +124,18 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
     const ro = new ResizeObserver(() => map.resize());
     if (containerRef.current) ro.observe(containerRef.current);
 
-    map.on('load', () => {
+      map.on('load', () => {
       map.resize();
+
+      // Fix N2: Basemap label contrast overrides
+      const labelLayers = map.getStyle().layers.filter(l => l.id.includes('label') || l.id.includes('place') || l.id.includes('road'));
+      for (const layer of labelLayers) {
+        try {
+          map.setPaintProperty(layer.id, 'text-color', '#e8e6e1');
+          map.setPaintProperty(layer.id, 'text-halo-color', '#0b0d10');
+          map.setPaintProperty(layer.id, 'text-halo-width', 1.5);
+        } catch { /* skip non-text layers */ }
+      }
       map.addSource('listings', { type: 'geojson', data: EMPTY });
       map.addSource('listings-mvt', {
         type: 'vector',
@@ -133,7 +144,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
         maxzoom: 20,
       });
 
-      // cluster circles — low zoom only (MVT takes over at z10+)
+      // cluster circles — visible through z9 to overlap with MVT minzoom 9
       map.addLayer({
         id: 'clusters',
         type: 'circle',
@@ -148,7 +159,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
           'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 12, 50, 18, 500, 26, 5000, 36, 50000, 48],
         },
       });
-      // cluster counts — low zoom only
+      // cluster counts — visible through z9 for overlap
       map.addLayer({
         id: 'cluster-count',
         type: 'symbol',
@@ -164,19 +175,53 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
         paint: { 'text-color': '#04140d' },
       });
 
-      // MVT individual points at zoom >= 10
+      // Fix 1: Invisible hit layer under mvt-points — radius 22 for Fitts-friendly clicks
+      map.addLayer({
+        id: 'mvt-hit',
+        type: 'circle',
+        source: 'listings-mvt',
+        'source-layer': 'listings',
+        minzoom: 9,
+        paint: {
+          'circle-color': '#000',
+          'circle-opacity': 0,
+          'circle-radius': 22,
+        },
+      });
+
+      // Fix 1+3: MVT points with brass for cut listings, ink stroke, feature-state halo
       map.addLayer({
         id: 'mvt-points',
         type: 'circle',
         source: 'listings-mvt',
         'source-layer': 'listings',
-        minzoom: 10,
+        minzoom: 9,
         paint: {
-          'circle-color': '#34e0a1',
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 14, 8, 16, 11],
-          'circle-stroke-color': '#0b1220',
+          'circle-color': ['case',
+            ['>', ['coalesce', ['get', 'price_cut_pct'], 0], 0], '#e3c184', // brass for cuts
+            '#34d399', // emerald for normal
+          ],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 7, 16, 10],
+          'circle-stroke-color': '#0b0d10',
           'circle-stroke-width': 1.5,
           'circle-opacity': 0.95,
+        },
+      });
+
+      // Selected halo layer (added below mvt-points so it renders behind)
+      map.addLayer({
+        id: 'mvt-selected-halo',
+        type: 'circle',
+        source: 'listings-mvt',
+        'source-layer': 'listings',
+        minzoom: 9,
+        filter: ['==', ['feature-state', 'selected'], true],
+        paint: {
+          'circle-color': 'transparent',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 8, 14, 12, 16, 15],
+          'circle-stroke-color': '#e8e6e1',
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.9,
         },
       });
 
@@ -196,19 +241,27 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates as [number, number];
       map.easeTo({ center: [lng, lat], zoom: Math.min(map.getZoom() + 2.5, 15), duration: 500 });
     });
-    // MVT point click → navigate
-    map.on('click', 'mvt-points', (e) => {
+    // Fix 1+2+4: click on hit layer OR visible points → navigate
+    const handlePointClick = (e: maplibregl.MapMouseEvent & { features?: GeoJSON.Feature[] | undefined }) => {
       const f = e.features?.[0];
       const id = f?.properties?.id;
       if (!id) return;
+      // Clear previous selection before setting new one
+      if (lastSelectedRef.current !== null && lastSelectedRef.current !== id) {
+        map.setFeatureState({ source: 'listings-mvt', sourceLayer: 'listings', id: lastSelectedRef.current }, { selected: false });
+      }
+      map.setFeatureState({ source: 'listings-mvt', sourceLayer: 'listings', id }, { selected: true });
+      lastSelectedRef.current = id;
       if (onMarkerClick) onMarkerClick(String(id));
       else router.push(`/property/${id}`);
-    });
+    };
+    map.on('click', 'mvt-points', handlePointClick);
+    map.on('click', 'mvt-hit', handlePointClick);
 
-    // hover popup on MVT points
+    // Fix 4: Mini-dossier card on hover (replaces bare popup)
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'op-map-popup', offset: 12 });
     popupRef.current = popup;
-    const showPopup = (e: maplibregl.MapMouseEvent & { features?: GeoJSON.Feature[] | undefined }) => {
+    const showMiniDossier = (e: maplibregl.MapMouseEvent & { features?: GeoJSON.Feature[] | undefined }) => {
       map.getCanvas().style.cursor = 'pointer';
       const f = e.features?.[0];
       if (!f) return;
@@ -216,22 +269,84 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       const geom = f.geometry as GeoJSON.Point;
       if (!geom?.coordinates) return;
       const [lng, lat] = geom.coordinates as [number, number];
+
       const root = document.createElement('div');
-      root.style.cssText = 'font-family:var(--font-geist-sans);min-width:150px';
+      root.style.cssText = 'background:var(--ink-panel);border:1px solid var(--line-hi);border-radius:12px;padding:12px;min-width:220px;box-shadow:0 12px 40px rgba(0,0,0,.45);font-family:var(--font-geist-sans)';
+
+      // Photo mat
+      if (p.primary_photo) {
+        const img = document.createElement('div');
+        img.style.cssText = 'background:var(--ink-mat);border:1px solid var(--line);border-radius:6px;margin-bottom:8px;overflow:hidden';
+        const imgEl = document.createElement('img');
+        imgEl.src = p.primary_photo;
+        imgEl.style.cssText = 'width:100%;height:80px;object-fit:cover;display:block';
+        img.append(imgEl);
+        root.append(img);
+      }
+
+      // Ratio + Price
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between';
+      const cutPct = Number(p.price_cut_pct) || 0;
+      const ratioColor = cutPct > 0 ? 'var(--brass-hi)' : 'var(--pass-hi)';
+      const ratio = document.createElement('span');
+      ratio.style.cssText = `font-family:var(--font-geist-mono);font-size:18px;font-weight:600;color:${ratioColor}`;
+      const price = Number(p.price) || 0;
+      const rent = Number(p.estimated_rent) || 0;
+      const rpct = price > 0 && rent > 0 ? ((rent / price) * 100).toFixed(2) : null;
+      ratio.textContent = rpct ? `${rpct}%` : '—';
+      const priceEl = document.createElement('span');
+      priceEl.style.cssText = 'font-family:var(--font-geist-mono);font-size:14px;font-weight:600;color:var(--text)';
+      priceEl.textContent = usd0.format(price);
+      row.append(ratio, priceEl);
+      root.append(row);
+
+      // Band (placeholder bar)
+      if (p.rent_low != null && p.rent_high != null && rent > 0) {
+        const loPct = (Number(p.rent_low) / rent) * 100;
+        const hiPct = (Number(p.rent_high) / rent) * 100;
+        const band = document.createElement('div');
+        band.style.cssText = 'position:relative;height:4px;border-radius:2px;background:var(--line);margin-top:6px';
+        const fill = document.createElement('div');
+        fill.style.cssText = `position:absolute;top:0;bottom:0;left:${Math.max(0, loPct)}%;width:${Math.min(100 - loPct, hiPct - loPct)}%;border-radius:2px;background:rgba(15,157,110,.14)`;
+        band.append(fill);
+        const mark = document.createElement('div');
+        mark.style.cssText = `position:absolute;top:-3px;left:44%;width:2px;height:10px;border-radius:1px;background:var(--pass-hi)`;
+        band.append(mark);
+        root.append(band);
+      }
+
+      // Address
       const addr = document.createElement('div');
-      addr.style.cssText = 'font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px';
+      addr.style.cssText = 'font-size:12px;color:var(--haze);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px';
       addr.textContent = p.address ?? '';
-      const price = document.createElement('div');
-      price.style.cssText = 'font-family:var(--font-geist-mono);font-size:14px;font-weight:600;color:#34e0a1;margin-top:2px';
-      price.textContent = usd0.format(Number(p.price) || 0);
-      const specs = document.createElement('div');
-      specs.style.cssText = 'font-size:10px;color:#8a93a6;margin-top:1px';
-      specs.textContent = `${p.bedrooms ?? '–'} bd · ${p.bathrooms ?? '–'} ba`;
-      root.append(addr, price, specs);
+      root.append(addr);
+
+      // Open link
+      const link = document.createElement('a');
+      link.style.cssText = 'display:block;margin-top:8px;text-align:center;font-size:13px;font-weight:600;color:var(--pass-hi);text-decoration:none;cursor:pointer';
+      link.textContent = 'Open the dossier →';
+
+      // Use router push on click — but we need the id context
+      const id = p.id;
+      if (id) {
+        link.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          if (onMarkerClick) onMarkerClick(String(id));
+          else router.push(`/property/${id}`);
+        });
+      }
+      root.append(link);
+
       popup.setLngLat([lng, lat]).setDOMContent(root).addTo(map);
     };
-    map.on('mouseenter', 'mvt-points', showPopup);
+    map.on('mouseenter', 'mvt-points', showMiniDossier);
+    map.on('mouseenter', 'mvt-hit', showMiniDossier);
     map.on('mouseleave', 'mvt-points', () => {
+      map.getCanvas().style.cursor = '';
+      popup.remove();
+    });
+    map.on('mouseleave', 'mvt-hit', () => {
       map.getCanvas().style.cursor = '';
       popup.remove();
     });

@@ -2,24 +2,20 @@ import pool from '@/lib/db';
 import { getMarketTrends } from '@/lib/fred';
 import MarketTrends from '@/components/MarketTrends';
 import Header from '@/components/Header';
-import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, DollarSign, Home, PieChart as PieChartIcon } from 'lucide-react';
 import PortfolioCharts from '@/components/PortfolioCharts';
+import { TrendingUp, DollarSign, Home, PieChart as PieChartIcon } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
+const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
 export default async function AnalyticsPage() {
-    // Fetch data from PostgreSQL directly
     let properties: any[] = [];
-    let benchmarks: any[] = [];
 
     try {
         const client = await pool.connect();
-
-        // Fetch all properties
         const propResult = await client.query(`
-            SELECT 
+            SELECT
                 id,
                 address,
                 COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
@@ -31,24 +27,15 @@ export default async function AnalyticsPage() {
             LIMIT 500
         `);
         properties = propResult.rows;
-
-        // Fetch market benchmarks
-        const benchResult = await client.query(`
-            SELECT * FROM market_benchmarks LIMIT 100
-        `);
-        benchmarks = benchResult.rows;
-
         client.release();
     } catch (error) {
         console.error('Database error:', error);
     }
 
-    // 2. Calc High Level Stats (Server Side is fine/fast)
     const total = properties.length;
     const totalPrice = properties.reduce((acc, p) => acc + (Number(p.listing_price) || 0), 0);
     const totalRent = properties.reduce((acc, p) => acc + (Number(p.estimated_rent) || 0), 0);
 
-    // Simple Yield: (Annual Rent / Price) * 100 (Avg of yields)
     const totalYield = properties.reduce((acc, p) => {
         const price = Number(p.listing_price);
         const rent = Number(p.estimated_rent);
@@ -65,80 +52,51 @@ export default async function AnalyticsPage() {
         avgYield: total > 0 ? (totalYield / total) * 100 : 0
     };
 
-    // Fetch FRED market trends
     const trendsData = await getMarketTrends();
 
     return (
-        <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
+        <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
             <Header />
-            <div className="p-8">
-                <div className="mx-auto max-w-7xl">
-                    <header className="mb-8 flex items-center justify-between">
-                        <div>
-                            <h1 className="text-3xl font-bold tracking-tight text-gray-900">Market Analytics</h1>
-                            <p className="text-gray-500">Deep dive into market trends and portfolio metrics.</p>
-                        </div>
-                        <Link href="/" className="text-sm font-medium text-blue-600 hover:text-blue-500">
-                            &larr; Back to Dashboard
-                        </Link>
-                    </header>
-
-                    {/* 1. Macro Trends (FRED) */}
-                    <section className="mb-10">
-                        <div className="mb-4 flex items-center gap-2">
-                            <TrendingUp className="h-5 w-5 text-blue-600" />
-                            <h2 className="text-xl font-semibold">Macro Market Trends</h2>
-                        </div>
-                        <MarketTrends data={trendsData} />
-                    </section>
-
-                    {/* 2. Portfolio KPI Cards */}
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
-                                <Home className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.totalProperties}</div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Avg Listing Price</CardTitle>
-                                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">${stats.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Avg Est. Rent</CardTitle>
-                                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">${stats.avgRent.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Avg Gross Yield</CardTitle>
-                                <PieChartIcon className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold text-green-600">{stats.avgYield.toFixed(2)}%</div>
-                            </CardContent>
-                        </Card>
+            <div className="mx-auto max-w-7xl px-6 py-10">
+                <header className="mb-8 flex items-center justify-between">
+                    <div>
+                        <h1 style={{ font: '400 var(--display-2)/1.1 var(--font-display)' }}>Market Analytics</h1>
+                        <p className="mt-1 text-[14px]" style={{ color: 'var(--haze)' }}>Deep dive into market trends and portfolio metrics.</p>
                     </div>
+                </header>
 
-                    {/* 3. Detailed Portfolio Charts (Client Component) */}
-                    <PortfolioCharts
-                        properties={properties}
-                        benchmarks={benchmarks}
-                        stats={stats}
-                    />
+                {/* Macro Trends (FRED) */}
+                <section className="mb-10">
+                    <div className="mb-4 flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5" style={{ color: 'var(--pass-hi)' }} />
+                        <h2 className="text-[18px] font-semibold">Macro Market Trends</h2>
+                    </div>
+                    <MarketTrends data={trendsData} />
+                </section>
 
+                {/* KPI Cards */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+                    <StatCard icon={<Home />} label="Total Properties" value={String(stats.totalProperties)} />
+                    <StatCard icon={<DollarSign />} label="Avg Listing Price" value={stats.avgPrice > 0 ? usd0.format(stats.avgPrice) : '—'} />
+                    <StatCard icon={<TrendingUp />} label="Avg Est. Rent" value={stats.avgRent > 0 ? usd0.format(stats.avgRent) : '—'} />
+                    <StatCard icon={<PieChartIcon />} label="Avg Gross Yield" value={`${stats.avgYield.toFixed(2)}%`} pass />
+                </div>
+
+                {/* Portfolio Charts */}
+                <PortfolioCharts properties={properties} stats={stats} />
+            </div>
+        </div>
+    );
+}
+
+function StatCard({ icon, label, value, pass }: { icon: React.ReactNode; label: string; value: string; pass?: boolean }) {
+    return (
+        <div className="rounded-[var(--r-panel)] p-5" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
+            <div className="flex items-center gap-3">
+                <div style={{ color: 'var(--haze)' }} className="h-5 w-5">{icon}</div>
+                <div>
+                    <p className="text-[12px] font-medium" style={{ color: 'var(--haze)' }}>{label}</p>
+                    <p className="text-[22px] font-semibold" style={{ color: pass ? 'var(--pass-hi)' : 'var(--text)' }}>{value}</p>
                 </div>
             </div>
         </div>

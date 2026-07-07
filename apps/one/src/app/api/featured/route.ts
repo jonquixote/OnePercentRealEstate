@@ -49,6 +49,9 @@ export async function GET(req: Request) {
               l.state,
               l.price,
               l.estimated_rent,
+              l.rent_low,
+              l.rent_high,
+              l.rent_model_version,
               l.bedrooms,
               l.bathrooms,
               l.sqft,
@@ -71,6 +74,7 @@ export async function GET(req: Request) {
               AND (l.estimated_rent / l.price) >= COALESCE((SELECT target_ratio FROM resolve_rule(l.property_type, l.sale_type, $2)), 0.01)
           )
           SELECT id, address, city, state, price, estimated_rent,
+                 rent_low, rent_high, rent_model_version,
                  bedrooms, bathrooms, sqft, primary_photo, property_type, ratio_pct, target_ratio_pct
           FROM ranked
           ORDER BY
@@ -92,6 +96,9 @@ export async function GET(req: Request) {
       state: row.state,
       price: row.price != null ? Number(row.price) : null,
       estimated_rent: row.estimated_rent != null ? Number(row.estimated_rent) : null,
+      rent_low: row.rent_low != null ? Number(row.rent_low) : null,
+      rent_high: row.rent_high != null ? Number(row.rent_high) : null,
+      rent_model_version: row.rent_model_version ?? null,
       bedrooms: row.bedrooms != null ? Number(row.bedrooms) : null,
       bathrooms: row.bathrooms != null ? Number(row.bathrooms) : null,
       sqft: row.sqft != null ? Number(row.sqft) : null,

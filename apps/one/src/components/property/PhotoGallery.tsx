@@ -46,7 +46,7 @@ function TileButton({
             type="button"
             onClick={onClick}
             aria-label={ariaLabel}
-            className={`group relative block h-full w-full overflow-hidden rounded-2xl bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${className ?? ''}`}
+            className={`group relative block h-full w-full overflow-hidden rounded-[var(--r-mat)] bg-[var(--ink-mat)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pass-hi)] focus-visible:ring-offset-2 ${className ?? ''}`}
         >
             <Media
                 media={{ primary_photo: src }}
@@ -88,7 +88,7 @@ export function PhotoGallery({ images, address }: PhotoGalleryProps) {
         return (
             <div
                 role="status"
-                className="flex h-[400px] w-full items-center justify-center rounded-2xl bg-gray-100 text-gray-400"
+                className="flex h-[400px] w-full items-center justify-center rounded-[var(--r-mat)] bg-[var(--ink-mat)]" style={{ color: 'var(--mute)' }}
             >
                 <div className="text-center">
                     <ImageIcon className="mx-auto mb-2 h-12 w-12 opacity-50" />
@@ -154,9 +154,10 @@ export function PhotoGallery({ images, address }: PhotoGalleryProps) {
                                 {remainingCount > 0 && (
                                     <span
                                         aria-hidden="true"
-                                        className="pointer-events-none absolute inset-x-0 bottom-0 flex h-1/2 items-end justify-center bg-gradient-to-t from-black/70 via-black/30 to-transparent p-4"
+                                        className="pointer-events-none absolute inset-x-0 bottom-0 flex h-1/2 items-end justify-center p-4"
+                                        style={{ background: 'linear-gradient(to top, color-mix(in srgb, var(--ink) 70%, transparent) 0%, color-mix(in srgb, var(--ink) 30%, transparent) 50%, transparent 100%)' }}
                                     >
-                                        <span className="inline-flex items-center gap-2 text-sm font-semibold text-white">
+                                        <span className="inline-flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
                                             <ImageIcon className="h-4 w-4" />
                                             +{remainingCount} more
                                         </span>
@@ -171,7 +172,7 @@ export function PhotoGallery({ images, address }: PhotoGalleryProps) {
                 <button
                     type="button"
                     onClick={() => openAt(0)}
-                    className="absolute bottom-4 right-4 rounded-lg bg-white/90 px-4 py-2 text-sm font-medium text-gray-900 shadow-sm backdrop-blur-sm transition-colors hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:hidden"
+                                    className="absolute bottom-4 right-4 rounded-lg px-4 py-2 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pass-hi)] lg:hidden" style={{ background: 'color-mix(in srgb, var(--ink) 92%, transparent)', color: 'var(--text)' }}
                     aria-label={`View all ${total} photos`}
                 >
                     <span className="inline-flex items-center gap-2">

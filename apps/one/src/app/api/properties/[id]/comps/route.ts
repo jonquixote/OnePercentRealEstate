@@ -1,166 +1,113 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import redis from '@/lib/redis';
-import { withSpan } from '@/lib/tracing';
-
-export const dynamic = 'force-dynamic';
-
-const CACHE_TTL_SECONDS = 600;
-
-export interface CompItem {
-  id: string;
-  address: string;
-  price: number | null;
-  bedrooms: number | null;
-  bathrooms: number | null;
-  sqft: number | null;
-  estimated_rent: number | null;
-  primary_photo: string | null;
-  distance_m: number;
-  status: string;
-}
-
-export interface CompsResponse {
-  items: CompItem[];
-}
-
-function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? n : null;
-}
 
 export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
-  if (!/^\d+$/.test(id)) {
-    return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+  if (!id || isNaN(Number(id))) {
+    return NextResponse.json({ error: 'Invalid property id' }, { status: 400 });
   }
 
-  const cacheKey = `comps:${id}`;
-
-  // Try cache first; tolerate Redis failures.
+  const client = await pool.connect();
   try {
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return NextResponse.json(JSON.parse(cached) as CompsResponse, {
-        headers: {
-          'X-Cache': 'HIT',
-          'Cache-Control': 'public, max-age=60, s-maxage=600',
-        },
-      });
-    }
-  } catch (error) {
-    console.warn('Cache read error (comps):', error);
-  }
+    // Look up the listing's coordinates + specs
+    const listingRes = await client.query(`
+      SELECT latitude, longitude, bedrooms, city, state
+      FROM listings
+      WHERE id = $1
+    `, [id]);
 
-  try {
-    // Confirm the base property exists (and has geom we can search around).
-    const baseRes = await withSpan(
-      'comps.base_lookup',
-      () =>
-        pool.query(
-          `SELECT id, geom IS NOT NULL AS has_geom
-             FROM listings
-            WHERE id = $1
-            LIMIT 1`,
-          [id]
-        ),
-      { 'listing.id': id },
-    );
-
-    if (baseRes.rowCount === 0) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (listingRes.rows.length === 0) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     }
 
-    const baseRow = baseRes.rows[0];
-    if (!baseRow.has_geom) {
-      const empty: CompsResponse = { items: [] };
-      try {
-        await redis.setex(cacheKey, CACHE_TTL_SECONDS, JSON.stringify(empty));
-      } catch (error) {
-        console.warn('Cache write error (comps):', error);
-      }
-      return NextResponse.json(empty, {
-        headers: { 'X-Cache': 'MISS', 'Cache-Control': 'public, max-age=60, s-maxage=600' },
-      });
+    const listing = listingRes.rows[0];
+    const lat = listing.latitude ? Number(listing.latitude) : null;
+    const lng = listing.longitude ? Number(listing.longitude) : null;
+    const beds = listing.bedrooms ? Number(listing.bedrooms) : null;
+    const city = listing.city;
+    const state = listing.state;
+
+    if (!lat || !lng) {
+      return NextResponse.json({ error: 'Property has no coordinates' }, { status: 400 });
     }
 
-    const sql = `
-      WITH base AS (
-        SELECT geom, sqft, bedrooms, bathrooms, price
-        FROM listings WHERE id = $1
-      )
+    // Find sold comps within ~30mi (0.5 deg lat/lng), same city preferred
+    const compsRes = await client.query(`
       SELECT
-        l.id::text                                   AS id,
-        l.address                                    AS address,
-        l.city                                       AS city,
-        l.state                                      AS state,
-        l.zip_code                                   AS zip_code,
-        l.price                                      AS price,
-        l.bedrooms                                   AS bedrooms,
-        l.bathrooms                                  AS bathrooms,
-        l.sqft                                       AS sqft,
-        l.year_built                                 AS year_built,
-        l.primary_photo                              AS primary_photo,
-        l.estimated_rent                             AS estimated_rent,
-        l.listing_status                             AS listing_status,
-        ST_Distance(l.geom::geography, base.geom::geography) AS distance_m,
-        (
-          COALESCE(ABS(l.sqft - base.sqft), 1000) / NULLIF(base.sqft, 0)::float +
-          COALESCE(ABS(l.bedrooms - base.bedrooms), 2) +
-          COALESCE(ABS(l.bathrooms - base.bathrooms), 2)
-        )                                            AS dissimilarity
-      FROM listings l, base
-      WHERE l.id <> $1
-        AND l.listing_type = 'for_sale'
-        AND l.sale_type = 'standard'
-        AND l.geom IS NOT NULL
-        AND base.geom IS NOT NULL
-        AND ST_DWithin(l.geom::geography, base.geom::geography, 5000)
-      ORDER BY dissimilarity ASC NULLS LAST, distance_m ASC
-      LIMIT 10;
-    `;
+        id, address, city, state, zip_code,
+        sold_price, sold_date, list_price,
+        bedrooms, bathrooms, sqft,
+        latitude, longitude,
+        ROUND(
+          ST_Distance(
+            geom,
+            ST_SetSRID(ST_MakePoint($1::float, $2::float), 4326)::geography
+          )::numeric
+        ) AS distance_meters
+      FROM sold_listings
+      WHERE latitude BETWEEN $2::float - 0.5 AND $2::float + 0.5
+        AND longitude BETWEEN $1::float - 0.5 AND $1::float + 0.5
+        AND sold_price IS NOT NULL AND sold_price > 0
+        AND sold_date IS NOT NULL
+      ORDER BY
+        CASE WHEN city = $3 THEN 0 ELSE 1 END,
+        ABS(bedrooms - COALESCE($4::numeric, bedrooms)) ASC,
+        distance_meters ASC
+      LIMIT 20
+    `, [lng, lat, city ?? '', beds]);
 
-    const result = await withSpan(
-      'comps.search',
-      () => pool.query(sql, [id]),
-      { 'listing.id': id },
-    );
-
-    const items: CompItem[] = result.rows.map((row) => ({
-      id: String(row.id),
-      address: row.address ?? '',
-      price: toNumber(row.price),
-      bedrooms: toNumber(row.bedrooms),
-      bathrooms: toNumber(row.bathrooms),
-      sqft: toNumber(row.sqft),
-      estimated_rent: toNumber(row.estimated_rent),
-      primary_photo: row.primary_photo ?? null,
-      distance_m: toNumber(row.distance_m) ?? 0,
-      status: row.listing_status ?? 'active',
+    const comps = compsRes.rows.map((r: any) => ({
+      id: r.id,
+      address: r.address,
+      city: r.city,
+      state: r.state,
+      zip_code: r.zip_code,
+      sold_price: r.sold_price ? Number(r.sold_price) : null,
+      sold_date: r.sold_date,
+      list_price: r.list_price ? Number(r.list_price) : null,
+      bedrooms: r.bedrooms ? Number(r.bedrooms) : null,
+      bathrooms: r.bathrooms ? Number(r.bathrooms) : null,
+      sqft: r.sqft ? Number(r.sqft) : null,
+      distance_meters: r.distance_meters ? Number(r.distance_meters) : null,
     }));
 
-    const payload: CompsResponse = { items };
+    // Compute summary stats
+    const prices = comps.map((c: any) => c.sold_price).filter(Boolean);
+    const medianPrice = prices.length > 0
+      ? prices.sort((a: number, b: number) => a - b)[Math.floor(prices.length / 2)]
+      : null;
+    const ppsfList = comps
+      .filter((c: any) => c.sold_price && c.sqft)
+      .map((c: any) => c.sold_price / c.sqft)
+      .sort((a: number, b: number) => a - b);
+    const avgPpsf = ppsfList.length > 0
+      ? ppsfList.reduce((a: number, b: number) => a + b, 0) / ppsfList.length
+      : 0;
+    // P75 $/sqft is the ARV anchor per the Track B spec (§B4): ARV =
+    // p75_ppsf × subject sqft. Requires ≥5 priced+sized comps to be
+    // meaningful — below that the UI should fall back, not extrapolate.
+    const p75Ppsf = ppsfList.length >= 5
+      ? ppsfList[Math.min(ppsfList.length - 1, Math.floor(ppsfList.length * 0.75))]
+      : null;
 
-    // Cache write (tolerate Redis failures).
-    try {
-      await redis.setex(cacheKey, CACHE_TTL_SECONDS, JSON.stringify(payload));
-    } catch (error) {
-      console.warn('Cache write error (comps):', error);
-    }
-
-    return NextResponse.json(payload, {
-      headers: {
-        'X-Cache': 'MISS',
-        'Cache-Control': 'public, max-age=60, s-maxage=600',
+    return NextResponse.json({
+      comps,
+      summary: {
+        total: comps.length,
+        median_sold_price: medianPrice,
+        avg_price_per_sqft: avgPpsf > 0 ? Math.round(avgPpsf * 100) / 100 : null,
+        p75_price_per_sqft: p75Ppsf != null ? Math.round(p75Ppsf * 100) / 100 : null,
+        source: 'sold_listings',
       },
     });
   } catch (error) {
-    console.error('Comps API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Comps fetch error:', error);
+    return NextResponse.json({ error: 'Failed to fetch comps' }, { status: 500 });
+  } finally {
+    client.release();
   }
 }

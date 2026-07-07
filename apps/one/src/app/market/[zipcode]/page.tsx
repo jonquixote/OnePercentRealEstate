@@ -1,216 +1,246 @@
 import pool from '@/lib/db';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, TrendingUp, Building, Wallet, MapPin } from 'lucide-react';
-import { PropertyCard } from '@/components/ui/card';
 
-// Render at request time so we don't need DB access during `next build`.
-// On Vercel this also lets ISR cache each zip individually; the previous
-// force-static + generateStaticParams setup tried to pre-render every zip
-// it found in the DB at build time, which fails when the build env has
-// no DB or doesn't include all rows.
 export const dynamic = 'force-dynamic';
 export const revalidate = 86400;
 
-// 2. Generate Metadata for SEO
+const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const num = new Intl.NumberFormat('en-US');
+
 export async function generateMetadata({ params }: { params: Promise<{ zipcode: string }> }) {
     const { zipcode } = await params;
     return {
         title: `Real Estate Investment in ${zipcode} | Market Analysis`,
-        description: `Analyze cap rates, rent-to-price ratios, and investment opportunities in ${zipcode}. See average prices and rental yields on OnePercentRealEstate.`,
+        description: `Analyze cap rates, rent-to-price ratios, and investment opportunities in ${zipcode}.`,
     };
 }
 
-// 3. Page Component
 export default async function MarketPage({ params }: { params: Promise<{ zipcode: string }> }) {
     const { zipcode } = await params;
 
-    let properties: any[] = [];
-    let benchmarks: any = null;
-    let acs: any = null;
-
     const client = await pool.connect();
     try {
-        // Fetch properties in this zip
-        const propResult = await client.query(`
-            SELECT 
-                id,
-                address,
-                COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
-                COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
-                raw_data,
-                created_at
+        // Fetch hud_safmr — all bedroom sizes for this zip
+        const hudRes = await client.query(`
+            SELECT bedrooms, safmr FROM hud_safmr
+            WHERE zip_code = $1 AND fy = (SELECT MAX(fy) FROM hud_safmr WHERE zip_code = $1)
+            ORDER BY bedrooms
+        `, [zipcode]);
+        const hudRows = hudRes.rows;
+
+        // Fetch model median rents per bedroom from listings
+        const modelRes = await client.query(`
+            SELECT bedrooms,
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent)::numeric(10,2) AS model_median
             FROM listings
             WHERE raw_data->>'zip_code' = $1
-              AND listing_type = 'for_sale' AND sale_type = 'standard'
-            ORDER BY created_at DESC
-            LIMIT 100
+              AND estimated_rent IS NOT NULL AND estimated_rent > 0
+              AND listing_type = 'for_sale'
+            GROUP BY bedrooms
+            ORDER BY bedrooms
         `, [zipcode]);
-        properties = propResult.rows;
-
-        // Fetch market benchmarks if available
-        const benchResult = await client.query(`
-            SELECT safmr_data FROM market_benchmarks WHERE zip_code = $1
-        `, [zipcode]);
-        benchmarks = benchResult.rows[0] || null;
+        const modelRows = modelRes.rows;
 
         // Fetch ACS ZCTA demographics
         const acsResult = await client.query(`
-            SELECT median_hh_income, median_gross_rent, median_home_value, population
+            SELECT median_hh_income, median_gross_rent, median_home_value, population, vacant_units, total_units
             FROM zcta_demographics
             WHERE zcta = $1
             ORDER BY acs_year DESC
             LIMIT 1
         `, [zipcode]);
-        acs = acsResult.rows[0] || null;
+        const acs = acsResult.rows[0] || null;
+
+        // Fetch sold listings stats (90 days)
+        const soldRes = await client.query(`
+            SELECT count(*)::int AS count,
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY sold_price / NULLIF(sqft, 0))::numeric(10,2) AS med_ppsf
+            FROM sold_listings
+            WHERE zip_code = $1 AND sold_date >= now() - interval '90 days'
+        `, [zipcode]);
+        const soldStats = soldRes.rows[0] || { count: 0, med_ppsf: null };
+
+        // Fetch aggregate counts from listings
+        const aggRes = await client.query(`
+            SELECT
+                count(*)::int AS total_listings,
+                count(*) FILTER (WHERE estimated_rent IS NOT NULL AND estimated_rent > 0
+                    AND (estimated_rent / NULLIF(price, 0)) >= COALESCE(
+                        (SELECT target_ratio FROM resolve_rule(property_type, sale_type, 'buy_hold')), 0.01
+                    ))::int AS clearing,
+                count(*) FILTER (WHERE price_cut_pct > 0)::int AS cuts,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY price)::numeric(10,2) AS med_price
+            FROM listings
+            WHERE raw_data->>'zip_code' = $1
+              AND listing_type = 'for_sale' AND sale_type = 'standard'
+              AND price > 10000
+        `, [zipcode]);
+        const agg = aggRes.rows[0] || { total_listings: 0, clearing: 0, cuts: 0, med_price: null };
+
+        // Fetch flood risk from census_tracts (worst NRI score in ZIP)
+        const floodRes = await client.query(`
+            SELECT t.nri_overall_rating, t.nri_overall_score
+            FROM listings l
+            JOIN census_tracts t ON t.geoid = l.census_tract
+            WHERE l.raw_data->>'zip_code' = $1
+              AND l.census_tract IS NOT NULL
+              AND t.nri_overall_score IS NOT NULL
+            ORDER BY t.nri_overall_score DESC
+            LIMIT 1
+        `, [zipcode]);
+        const floodRow = floodRes.rows[0] || null;
+        const floodRiskLabel = floodRow?.nri_overall_rating || null;
+
+        // Get place name from first listing city/state
+        const placeRes = await client.query(`
+            SELECT raw_data->>'city' AS city, raw_data->>'state' AS state
+            FROM listings
+            WHERE raw_data->>'zip_code' = $1
+            LIMIT 1
+        `, [zipcode]);
+        const placeRow = placeRes.rows[0] || null;
+        const placeName = placeRow
+            ? `${placeRow.city || ''}${placeRow.city && placeRow.state ? ', ' : ''}${placeRow.state || ''}`
+            : zipcode;
+        const displayName = placeName ? `${placeName} · ${zipcode}` : zipcode;
+
+        if (!hudRows.length && !agg.total_listings && !acs) {
+            return notFound();
+        }
+
+        // Build FMR vs Model data
+        const bedLabels: Record<number, string> = { 0: 'Studio', 1: '1 BR', 2: '2 BR', 3: '3 BR', 4: '4 BR', 5: '5 BR' };
+        const fmrVsModel = hudRows.map((h: any) => {
+            const br = Number(h.bedrooms);
+            const modelRow = modelRows.find((m: any) => Number(m.bedrooms) === br);
+            return {
+                br: bedLabels[br] || `${br} BR`,
+                fmr: Number(h.safmr),
+                model: modelRow ? Number(modelRow.model_median) : null,
+            };
+        });
+        const maxRent = Math.max(1, ...fmrVsModel.map((r: any) => Math.max(r.fmr, r.model ?? 0)));
+
+        // Vacancy rate
+        const vacancyPct = acs?.total_units && Number(acs.total_units) > 0
+            ? (Number(acs.vacant_units || 0) / Number(acs.total_units)) * 100
+            : null;
+
+        return (
+            <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
+                <div className="mx-auto max-w-5xl px-6 py-14">
+
+                    {/* ── Masthead ──────────────────────────────────────────── */}
+                    <header className="pb-10" style={{ borderBottom: '1px solid var(--line)' }}>
+                        <p className="prov mb-4 inline-block">market statement · {zipcode}</p>
+                        <h1 style={{ font: '400 var(--display-1)/1.05 var(--font-display)' }}>{displayName}</h1>
+                        <div className="mt-6 flex flex-wrap gap-x-10 gap-y-2 text-[13px]" style={{ color: 'var(--haze)' }}>
+                            <span><b className="figure" style={{ color: 'var(--text)' }}>{num.format(agg.total_listings)}</b> active listings</span>
+                            <span><b className="figure" style={{ color: 'var(--pass-hi)' }}>{num.format(agg.clearing)}</b> clear the line</span>
+                            <span><b className="figure" style={{ color: 'var(--brass-hi)' }}>{num.format(agg.cuts)}</b> price cuts</span>
+                            <span><b className="figure" style={{ color: 'var(--text)' }}>{agg.med_price ? usd0.format(Number(agg.med_price)) : '—'}</b> median ask</span>
+                        </div>
+                    </header>
+
+                    {/* ── Signature chart: model rent vs HUD FMR ───────────── */}
+                    {fmrVsModel.length > 0 && (
+                        <section className="py-14" style={{ borderBottom: '1px solid var(--line)' }}>
+                            <h2 className="prov mb-8 inline-block">modeled rent vs HUD fair market rent</h2>
+                            <div className="space-y-6">
+                                {fmrVsModel.map((r: any) => (
+                                    <div key={r.br} className="grid grid-cols-[64px_1fr] items-center gap-4">
+                                        <span className="text-[13px]" style={{ color: 'var(--haze)' }}>{r.br}</span>
+                                        <div className="relative h-8">
+                                            {/* FMR: hairline reference bar */}
+                                            <div className="absolute top-1 h-2 rounded-full"
+                                                style={{ width: `${(r.fmr / maxRent) * 100}%`, background: 'var(--line-hi)' }} />
+                                            {/* Model: emerald bar (or brass if below FMR) */}
+                                            {r.model != null && (
+                                                <>
+                                                    <div className="absolute bottom-1 h-2 rounded-full"
+                                                        style={{
+                                                            width: `${(r.model / maxRent) * 100}%`,
+                                                            background: r.model >= r.fmr ? 'var(--pass)' : 'var(--brass)',
+                                                        }} />
+                                                    <span className="figure absolute -bottom-0.5 text-[11px]"
+                                                        style={{ left: `calc(${(r.model / maxRent) * 100}% + 8px)`, color: r.model >= r.fmr ? 'var(--pass-hi)' : 'var(--brass-hi)' }}>
+                                                        {usd0.format(r.model)}
+                                                    </span>
+                                                </>
+                                            )}
+                                            <span className="figure absolute -top-0.5 text-[11px]"
+                                                style={{ left: `calc(${(r.fmr / maxRent) * 100}% + 8px)`, color: 'var(--mute)' }}>
+                                                FMR {usd0.format(r.fmr)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="mt-6 text-[12px]" style={{ color: 'var(--mute)' }}>
+                                Model = OnePercent v1 median for this ZIP. FMR = HUD SAFMR FY2026. Where the model bar
+                                is emerald, the market rents above the federal floor.
+                            </p>
+                        </section>
+                    )}
+
+                    {/* ── ACS strip ────────────────────────────────────────── */}
+                    {acs && (
+                        <section className="grid grid-cols-2 gap-y-8 py-14 md:grid-cols-4" style={{ borderBottom: '1px solid var(--line)' }}>
+                            {[
+                                ['Median household income', acs.median_hh_income ? usd0.format(Number(acs.median_hh_income)) : '—'],
+                                ['Median area rent', acs.median_gross_rent ? `${usd0.format(Number(acs.median_gross_rent))}/mo` : '—'],
+                                ['Median home value', acs.median_home_value ? usd0.format(Number(acs.median_home_value)) : '—'],
+                                ['Population', acs.population ? num.format(Number(acs.population)) : '—'],
+                            ].map(([k, v]) => (
+                                <div key={k as string}>
+                                    <p className="figure text-[24px]">{v}</p>
+                                    <p className="mt-1 text-[12px]" style={{ color: 'var(--haze)' }}>{k}</p>
+                                </div>
+                            ))}
+                            <p className="prov col-span-full">
+                                american community survey {acs?.acs_year || '2024'} ·{vacancyPct != null ? ` vacancy ${vacancyPct.toFixed(0)}% ·` : ''} flood risk {floodRiskLabel || '—'} (FEMA NRI)
+                            </p>
+                        </section>
+                    )}
+
+                    {/* ── Sold market truth ────────────────────────────────── */}
+                    <section className="flex flex-wrap items-baseline gap-x-12 gap-y-4 py-14">
+                        <div>
+                            <p className="figure text-[24px]">{soldStats.count > 0 ? num.format(soldStats.count) : '—'}</p>
+                            <p className="mt-1 text-[12px]" style={{ color: 'var(--haze)' }}>closed sales · 90 days</p>
+                        </div>
+                        <div>
+                            <p className="figure text-[24px]">
+                                {soldStats.med_ppsf ? `$${Number(soldStats.med_ppsf).toFixed(0)}` : '—'}
+                                <span className="text-[14px]">/sqft</span>
+                            </p>
+                            <p className="mt-1 text-[12px]" style={{ color: 'var(--haze)' }}>median sold $/sqft</p>
+                        </div>
+                        <Link
+                            href={`/search?pmin=${Math.max(0, Number(agg.med_price || 0) * 0.5).toFixed(0)}&pmax=${(Number(agg.med_price || 0) * 1.5).toFixed(0)}`}
+                            className="ml-auto text-[13px]" style={{ color: 'var(--pass-hi)' }}>
+                            Browse the {agg.total_listings} listings in {zipcode} →
+                        </Link>
+                    </section>
+
+                </div>
+            </div>
+        );
     } catch (error) {
         console.error('Database error:', error);
+        return (
+            <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
+                <div className="mx-auto max-w-5xl px-6 py-20 text-center">
+                    <h1 style={{ font: '400 var(--display-1)/1.05 var(--font-display)' }}>Market data unavailable</h1>
+                    <p className="mt-4" style={{ color: 'var(--haze)' }}>Could not load data for {zipcode}.</p>
+                    <Link href="/market" className="mt-6 inline-block rounded-full px-6 py-2.5 text-sm font-semibold transition-colors" style={{ background: 'var(--pass)', color: '#fff' }}>
+                        Browse markets
+                    </Link>
+                </div>
+            </div>
+        );
     } finally {
         client.release();
     }
-
-    const activeProperties = properties || [];
-    const count = activeProperties.length;
-
-    // Calculate Averages
-    const avgPrice = count > 0
-        ? activeProperties.reduce((acc, p) => acc + (Number(p.listing_price) || 0), 0) / count
-        : 0;
-
-    // Use SAFMR data if available, otherwise check if we have enough estimated_rent data
-    const validRents = activeProperties.filter(p => p.estimated_rent && Number(p.estimated_rent) > 0);
-    const rentCount = validRents.length;
-
-    const avgRent = benchmarks?.safmr_data?.['2br'] ||
-        (rentCount > 0 ? validRents.reduce((acc, p) => acc + (Number(p.estimated_rent) || 0), 0) / rentCount : 0);
-
-    if (count === 0 && !benchmarks) {
-        return notFound();
-    }
-
-    return (
-        <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
-            <div className="bg-slate-900 text-white py-12">
-                <div className="mx-auto max-w-7xl px-8">
-                    <Link href="/" className="inline-flex items-center text-sm text-gray-400 hover:text-white mb-6 transition-colors">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
-                    </Link>
-                    <h1 className="text-4xl font-bold mb-4">Market Analysis: <span className="text-emerald-400">{zipcode}</span></h1>
-                    <p className="text-xl text-gray-300">Real estate investment data and active opportunities.</p>
-                </div>
-            </div>
-
-            <div className="mx-auto max-w-7xl px-8 py-12">
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-12">
-                    <div className="bg-white overflow-hidden rounded-xl shadow-sm border border-gray-100 p-6">
-                        <div className="flex items-center">
-                            <div className="p-3 rounded-full bg-blue-100 text-blue-600">
-                                <Building className="h-6 w-6" />
-                            </div>
-                            <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-500">Average List Price</p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(avgPrice)}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white overflow-hidden rounded-xl shadow-sm border border-gray-100 p-6">
-                        <div className="flex items-center">
-                            <div className="p-3 rounded-full bg-emerald-100 text-emerald-600">
-                                <Wallet className="h-6 w-6" />
-                            </div>
-                            <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-500">Average 2BR Rent</p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {avgRent > 0
-                                        ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(avgRent)
-                                        : <span className="text-gray-400 text-lg italic">Calculating...</span>
-                                    }
-                                </p>
-                                <span className="text-xs text-gray-400">HUD FMR / Est.</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white overflow-hidden rounded-xl shadow-sm border border-gray-100 p-6">
-                        <div className="flex items-center">
-                            <div className="p-3 rounded-full bg-purple-100 text-purple-600">
-                                <TrendingUp className="h-6 w-6" />
-                            </div>
-                            <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-500">Est. Gross Yield</p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {avgPrice > 0 && avgRent > 0 ? ((avgRent * 12 / avgPrice) * 100).toFixed(2) + '%' : '-'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {acs && (
-                        <div className="bg-white overflow-hidden rounded-xl shadow-sm border border-gray-100 p-6 sm:col-span-3">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-500">Median Household Income</p>
-                                    <p className="text-xl font-bold text-gray-900">
-                                        {acs.median_hh_income
-                                            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(acs.median_hh_income))
-                                            : '-'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-500">Median Gross Rent</p>
-                                    <p className="text-xl font-bold text-gray-900">
-                                        {acs.median_gross_rent
-                                            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(acs.median_gross_rent))
-                                            : '-'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-500">Median Home Value</p>
-                                    <p className="text-xl font-bold text-gray-900">
-                                        {acs.median_home_value
-                                            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(acs.median_home_value))
-                                            : '-'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-500">Population</p>
-                                    <p className="text-xl font-bold text-gray-900">
-                                        {acs.population
-                                            ? Number(acs.population).toLocaleString()
-                                            : '-'}
-                                    </p>
-                                </div>
-                            </div>
-                            <p className="text-xs text-gray-400 mt-2">ACS 5-year estimates (Census Bureau)</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Properties Grid */}
-                <h2 className="text-2xl font-bold mb-6 flex items-center">
-                    <MapPin className="mr-2 h-6 w-6 text-slate-500" />
-                    Active Opportunities in {zipcode}
-                </h2>
-
-                {count > 0 ? (
-                    <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                        {activeProperties.map((property) => (
-                            <PropertyCard key={property.id} property={property} />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-                        <p className="text-gray-500">No active properties found in this market currently.</p>
-                        <Link href="/" className="mt-4 inline-block text-emerald-600 font-medium hover:underline">
-                            Back to Dashboard
-                        </Link>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
 }

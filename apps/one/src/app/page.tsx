@@ -59,6 +59,13 @@ export default function Dashboard() {
   const strategy = asStrategy(qs.strat);
   const stratMeta = STRATEGY_BY_ID[strategy];
   const { data: stats } = useStats(strategy);
+  const [priceCuts, setPriceCuts] = useState<number | undefined>(undefined);
+  const [mortgageRate, setMortgageRate] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/mortgage-rates').then(r => r.json()).then(d => setMortgageRate(d.rate ?? null)).catch(() => {});
+    fetch('/api/stats/cuts').then(r => r.ok ? r.json().then(d => setPriceCuts(d.count)) : null).catch(() => {});
+  }, []);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast, ToastView } = useToast();
@@ -127,10 +134,9 @@ export default function Dashboard() {
     <div className="min-h-screen bg-ink font-sans text-foreground">
       <Header />
       <HomeHero
-        strategy={strategy}
-        onStrategy={(s) => setQs({ strat: s })}
         stats={stats ?? null}
-        onBrowse={scrollToOpportunities}
+        priceCuts={priceCuts}
+        mortgageRate={mortgageRate}
       />
       <FeaturedDeals strategy={strategy} rentCalcPending={stats?.rentCalcPending ?? 0} />
       <ReducedRail />

@@ -42,7 +42,7 @@ export default function LoginPage() {
     return (
         <div className="flex min-h-screen flex-col items-center justify-center bg-ink py-12 sm:px-6 lg:px-8">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-white">
+                <h2 className="mt-6 text-center text-3xl font-bold tracking-tight" style={{ font: '400 var(--display-2)/1.1 var(--font-display)', color: 'var(--text)' }}>
                     {mode === 'login' ? 'Welcome back' : 'Create your account'}
                 </h2>
                 <p className="mt-2 text-center text-sm text-haze">
@@ -64,12 +64,12 @@ export default function LoginPage() {
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="mt-1 block w-full rounded-md border border-line bg-white/[0.04] px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-pass"
+                                className="mt-1 block w-full rounded-md border border-line bg-white/[0.04] px-3 py-2 text-white placeholder-[var(--mute)] focus:outline-none focus:ring-2 focus:ring-pass"
                             />
                         </div>
                         <div>
                             <label htmlFor="password" className="block text-sm font-medium text-haze">
-                                Password {mode === 'signup' && <span className="text-zinc-500">(8+ characters)</span>}
+                                Password {mode === 'signup' && <span style={{ color: 'var(--mute)' }}>(8+ characters)</span>}
                             </label>
                             <input
                                 id="password"
@@ -79,14 +79,14 @@ export default function LoginPage() {
                                 minLength={8}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="mt-1 block w-full rounded-md border border-line bg-white/[0.04] px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-pass"
+                                className="mt-1 block w-full rounded-md border border-line bg-white/[0.04] px-3 py-2 text-white placeholder-[var(--mute)] focus:outline-none focus:ring-2 focus:ring-pass"
                             />
                         </div>
 
                         {message && (
                             <p
                                 role="alert"
-                                className={`text-sm ${message.type === 'error' ? 'text-rose-400' : 'text-pass-hi'}`}
+                                className="text-sm" style={{ color: message.type === 'error' ? 'var(--loss)' : 'var(--pass-hi)' }}
                             >
                                 {message.text}
                             </p>
@@ -119,8 +119,8 @@ export default function LoginPage() {
                             </>
                         )}
                     </div>
-                    <p className="mt-4 text-center text-xs text-zinc-500">
-                        <Link href="/" className="hover:underline">← back to the map</Link>
+                    <p className="mt-4 text-center text-xs" style={{ color: 'var(--mute)' }}>
+                        <Link href="/" className="hover:underline" style={{ color: 'var(--mute)' }}>← back to the map</Link>
                     </p>
                 </div>
             </div>

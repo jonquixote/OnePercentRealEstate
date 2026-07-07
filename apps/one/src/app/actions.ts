@@ -127,10 +127,12 @@ export async function getProperties(
         if (filters?.onlyOnePercentRule) {
             // Per (property_type, sale_type, strategy) target via the single
             // source of truth resolve_rule(); strategy is whitelisted above.
-            // When the resolved rule has no target_ratio (flip / STR), the
-            // comparison is NULL and COALESCE→TRUE, i.e. the 1%/rent gate is a
-            // no-op for strategies it doesn't apply to (no bogus 1% on flips).
-            whereClauses.push(`COALESCE((estimated_rent / NULLIF(price, 0)) >= (SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, $${paramIndex++})), TRUE)`);
+            // Non-rentable types (land, vacant, farms) are excluded entirely
+            // and rows without a rent estimate can't pass the gate. When the
+            // resolved rule has no target_ratio (flip / STR), the comparison
+            // is NULL and COALESCE→TRUE, i.e. the 1%/rent gate is a no-op for
+            // strategies it doesn't apply to (no bogus 1% on flips).
+            whereClauses.push(`public.is_rentable(listings.property_type) AND estimated_rent IS NOT NULL AND COALESCE((estimated_rent / NULLIF(price, 0)) >= (SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, $${paramIndex++})), TRUE)`);
             params.push(strategy);
         }
         if (filters?.minCapRate && filters.minCapRate > 0) {
@@ -183,6 +185,8 @@ export async function getProperties(
   const selectClause = `
 id,
 address,
+property_type,
+public.is_rentable(property_type) AS is_rentable,
 COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
 COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
 COALESCE(bedrooms, (raw_data->>'beds')::numeric) as bedrooms,
@@ -309,17 +313,21 @@ export async function getHudBenchmark(zipCode: string) {
 
 const client = await pool.connect();
     try {
-      const cacheQuery = 'SELECT safmr_data, last_updated FROM market_benchmarks WHERE zip_code = $1';
-      const cacheRes = await client.query(cacheQuery, [zipCode]);
+      const hudRes = await client.query(`
+        SELECT jsonb_agg(jsonb_build_object('bedrooms', bedrooms, 'safmr', safmr) ORDER BY bedrooms) AS safmr_data,
+               MAX(fy) AS fy
+        FROM hud_safmr
+        WHERE zip_code = $1
+      `, [zipCode]);
 
-      if (cacheRes.rows.length > 0) {
-        const cached = cacheRes.rows[0].safmr_data;
+      if (hudRes.rows.length > 0 && hudRes.rows[0].safmr_data) {
+        const result = hudRes.rows[0].safmr_data;
         try {
-          await redis.set(cacheKey, JSON.stringify(cached), 'EX', HUD_CACHE_TTL);
+          await redis.set(cacheKey, JSON.stringify(result), 'EX', HUD_CACHE_TTL);
         } catch (err) {
           console.warn('Redis cache write failed:', err);
         }
-        return cached;
+        return result;
       }
 
       console.log(`No HUD SAFMR data available for ${zipCode}`);
@@ -368,6 +376,7 @@ last_sold_price,
 last_sold_date,
 description,
 style,
+rent_model_version,
 days_on_market,
 price_cut_pct,
 price_cut_count,
@@ -432,6 +441,7 @@ const client = await pool.connect();
         // pg returns NUMERIC as strings; coerce the typed-columns we promote
         // so downstream consumers (resolveCosts, calc helpers, UI) work on
         // numbers like the existing sqft/price fields do.
+        rent_model_version: row.rent_model_version ?? null,
         hoa_fee: row.hoa_fee != null ? Number(row.hoa_fee) : null,
         tax_annual_amount: row.tax_annual_amount != null ? Number(row.tax_annual_amount) : null,
         assessed_value: row.assessed_value != null ? Number(row.assessed_value) : null,
@@ -454,6 +464,47 @@ const client = await pool.connect();
 
     } catch (error) {
         console.error('Database fetch error:', error);
+        return null;
+    }
+}
+
+export async function getDemographics(zipCode: string) {
+    try {
+        const client = await pool.connect();
+        try {
+            const [acsRes, floodRes] = await Promise.all([
+                client.query(`
+                    SELECT median_hh_income, median_gross_rent, median_home_value, acs_year
+                    FROM zcta_demographics
+                    WHERE zcta = $1
+                    ORDER BY acs_year DESC
+                    LIMIT 1
+                `, [zipCode]),
+                client.query(`
+                    SELECT t.nri_overall_rating
+                    FROM census_tracts t
+                    JOIN listings l ON l.census_tract = t.geoid
+                    WHERE l.raw_data->>'zip_code' = $1
+                      AND l.census_tract IS NOT NULL
+                      AND t.nri_overall_score IS NOT NULL
+                    ORDER BY t.nri_overall_score DESC
+                    LIMIT 1
+                `, [zipCode]),
+            ]);
+            const acs = acsRes.rows[0] || null;
+            const floodRow = floodRes.rows[0] || null;
+            if (!acs && !floodRow) return null;
+            return {
+                median_hh_income: acs?.median_hh_income ? Number(acs.median_hh_income) : null,
+                median_gross_rent: acs?.median_gross_rent ? Number(acs.median_gross_rent) : null,
+                median_home_value: acs?.median_home_value ? Number(acs.median_home_value) : null,
+                nri_rating: floodRow?.nri_overall_rating || null,
+            };
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Demographics fetch error:', error);
         return null;
     }
 }
