@@ -1,0 +1,114 @@
+/* ==========================================================================
+   OnePercent — refined token layer ("Private Bank for Property")
+   Evolution of the existing ink/emerald/brass system in apps/one globals.css.
+   Adoption = extend, don't replace: raw token names kept where they exist.
+   ========================================================================== */
+
+:root {
+  /* --- Surfaces: deeper, warmer ink. Three elevations only. -------------- */
+  --ink:        #0b0d10;   /* page — near-black, blue-warm            */
+  --ink-2:      #101318;   /* section alternation                     */
+  --ink-panel:  #161a21;   /* interactive panels / inputs             */
+  --ink-mat:    #0e1014;   /* photo mats (between ink and ink-2)      */
+
+  /* --- Structure: hairlines carry the layout ----------------------------- */
+  --line:       #232833;   /* 1px rules, borders                      */
+  --line-hi:    #323a48;   /* hover/focus rules                       */
+
+  /* --- Type ramp ---------------------------------------------------------- */
+  --text:       #e8e6e1;   /* warm off-white body                     */
+  --haze:       #9aa1ad;   /* secondary                               */
+  --mute:       #5c6470;   /* captions, provenance                    */
+
+  /* --- The two voices (never shout together) ----------------------------- */
+  --pass:       #0f9d6e;   /* emerald — rule passes, positive cash    */
+  --pass-hi:    #34d399;
+  --pass-dim:   rgba(15,157,110,.14);   /* fills, band bars           */
+  --brass:      #c9a35c;   /* champagne brass — opportunity/caution   */
+  --brass-hi:   #e3c184;
+  --brass-dim:  rgba(201,163,92,.13);
+
+  /* --- Signals ------------------------------------------------------------ */
+  --loss:       #e5484d;   /* negatives only — used sparingly         */
+  --info:       #6ca0f6;   /* links, neutral-informational            */
+
+  /* --- Typography ---------------------------------------------------------
+     Display serif via next/font: Fraunces (opsz 9..144, SOFT 0, WONK 0).
+     UI sans stays Geist; figures JetBrains Mono where alignment matters.  */
+  --font-display: var(--font-fraunces), "Fraunces", ui-serif, Georgia, serif;
+  --font-ui:      var(--font-geist-sans), ui-sans-serif, system-ui;
+  --font-num:     var(--font-jetbrains), ui-monospace, "JetBrains Mono", monospace;
+
+  /* --- Scale (px) ----------------------------------------------------------
+     Display sizes are fluid; everything snaps to a 4px baseline grid.     */
+  --display-1: clamp(40px, 5.5vw, 72px);   /* home hero                    */
+  --display-2: clamp(28px, 3.2vw, 44px);   /* section heads                */
+  --title:     20px;
+  --body:      15px;
+  --caption:   12.5px;
+  --micro:     11px;                        /* provenance chips, uppercase */
+
+  /* --- Shape & depth -------------------------------------------------------
+     Softer than cards, crisper than pills. Depth from borders, not shadow. */
+  --r-panel:   14px;
+  --r-chip:    999px;
+  --r-mat:     10px;
+  --shadow-pop: 0 12px 40px rgba(0,0,0,.45);  /* popovers/map cards only  */
+
+  /* --- Motion --------------------------------------------------------------
+     One curve, two durations. Respect prefers-reduced-motion everywhere.  */
+  --ease:      cubic-bezier(.22,.8,.24,1);
+  --t-fast:    140ms;
+  --t-slow:    320ms;
+}
+
+/* --- Signature pieces ----------------------------------------------------- */
+
+/* The Rule Line — the brand motif, drawn as an engraved hairline with a
+   soft emerald glow. Anything ABOVE the line passes.                       */
+.rule-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--pass) 18%, var(--pass) 82%, transparent);
+  box-shadow: 0 0 14px 0 rgba(15,157,110,.35);
+}
+
+/* Confidence band — every model number carries its p10–p90 range.
+   Usage: <div class="band"><div class="band-fill" style="left:22%;width:56%"/>
+          <div class="band-mark" style="left:47%"/></div>                    */
+.band { position: relative; height: 4px; border-radius: 2px; background: var(--line); }
+.band-fill { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: var(--pass-dim); }
+.band-mark { position: absolute; top: -3px; width: 2px; height: 10px; border-radius: 1px; background: var(--pass-hi); }
+.band--brass .band-fill { background: var(--brass-dim); }
+.band--brass .band-mark { background: var(--brass-hi); }
+
+/* Provenance chip — micro-typography, engraved not badged.                 */
+.prov {
+  font: 600 var(--micro)/1 var(--font-ui);
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--mute);
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--r-chip);
+}
+.prov--real  { color: var(--pass-hi);  border-color: rgba(15,157,110,.35); }
+.prov--est   { color: var(--haze); }
+.prov--brass { color: var(--brass-hi); border-color: rgba(201,163,92,.35); }
+
+/* Photo mat.                                                               */
+.mat {
+  background: var(--ink-mat);
+  border: 1px solid var(--line);
+  border-radius: var(--r-mat);
+  padding: 6px;
+}
+
+/* Engraved figures — large numbers set like a bank statement.              */
+.figure { font: 500 1em/1.05 var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.figure--pass { color: var(--pass-hi); }
+.figure--loss { color: var(--loss); }
+
+/* Map palette (MapLibre paint values, mirrored here for reference):
+   basemap: openfreemap dark w/ label lightness raised via style overrides
+   cluster fill      : rgba(15,157,110,.85), 1.5px stroke #0b0d10
+   point fill        : #34d399, 5→11px radius, PLUS an invisible 22px
+                       hit-layer underneath (the click-target fix)
+   point (cut>0)     : #e3c184 (brass — motivated sellers pop on the map)
+   selected halo     : 2px #e8e6e1                                          */
