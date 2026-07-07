@@ -76,8 +76,10 @@ export default function PricingPage() {
     setError(null);
 
     try {
+      // pro -> the monthly price; agency has its own plan key (400s cleanly
+      // until STRIPE_PRICE_AGENCY exists — never silently bills the pro price).
       const body: Record<string, string> = {
-        plan: tierId === 'agency' ? 'monthly' : 'monthly',
+        plan: tierId === 'agency' ? 'agency' : 'monthly',
         propertyId: 'subscription_upgrade',
       };
 
