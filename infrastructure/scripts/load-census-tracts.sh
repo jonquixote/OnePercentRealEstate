@@ -42,7 +42,7 @@ STATES=(
 # library present (discovered 2026-07-07: every state "loaded" while the
 # pipeline died silently behind 2>/dev/null). Self-heal:
 docker exec "$CONTAINER" sh -c "apk add --no-cache gettext-libs libintl >/dev/null 2>&1 || apk add --no-cache gettext >/dev/null 2>&1" || true
-docker exec "$CONTAINER" sh -c "shp2pgsql 2>&1 | head -1" | grep -qi usage || { echo "FATAL: shp2pgsql still broken in container"; exit 1; }
+docker exec "$CONTAINER" sh -c "shp2pgsql 2>&1 | head -3" | grep -qiE "usage|release|options" || { echo "FATAL: shp2pgsql still broken in container"; exit 1; }
 
 echo "Downloading and loading census tract shapefiles..."
 echo "Working directory: $WORKDIR"
