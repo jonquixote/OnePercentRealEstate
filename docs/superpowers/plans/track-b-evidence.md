@@ -21,4 +21,4 @@
 - NOT implemented in the user's Track B pass — deliberately folded into the frontend overhaul spec (F3 in `docs/superpowers/specs/2026-07-07-frontend-overhaul-design.md`) since it's a detail-page feature.
 
 ## Backfill completion
-_(appended when the watcher fires)_
+**954,400 / 957,371 geocoded listings tagged with census_tract (99.7%)** — the 2,971 remainder sit outside TIGER tract polygons (offshore points, territories, geocode edge cases). Acceptance bar was ≥95%. NRI joins live through `census_tract`.
