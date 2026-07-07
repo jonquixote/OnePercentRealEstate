@@ -147,7 +147,7 @@ def _hud_anchor(zip_code: str, beds: Optional[float], hud_safmr: Optional[float]
 
 
 def _zcta_anchor(
-    col: str, row_val: Optional[float], meta: dict, global_key: str, hardcoded: float
+    row_val: Optional[float], meta: dict, global_key: str, hardcoded: float
 ) -> float:
     if row_val is not None and row_val == row_val and row_val > 0:
         return float(row_val)
@@ -177,11 +177,11 @@ def build_feature_row(row: dict[str, Any], meta: dict) -> list[float]:
     zip_te = float(meta["zip_te"].get(str(row.get("zip") or ""), meta["global_mean_log"]))
     hud = _hud_anchor(str(row.get("zip") or ""), beds, row.get("hud_safmr"), meta)
     zcta_income = _zcta_anchor(
-        "zcta_med_income", num(row.get("zcta_med_income"), None),
+        num(row.get("zcta_med_income"), None),
         meta, "zcta_income_global_median", 60000.0,
     )
     zcta_rent = _zcta_anchor(
-        "zcta_med_rent", num(row.get("zcta_med_rent"), None),
+        num(row.get("zcta_med_rent"), None),
         meta, "zcta_rent_global_median", 1000.0,
     )
 

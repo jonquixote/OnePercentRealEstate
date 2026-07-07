@@ -31,6 +31,8 @@ export function WatchSearchButton({ filters }: { filters: FilterState }) {
 
     const save = async () => {
         setState('saving');
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 10_000);
         try {
             const query = buildQuery();
             const label = Object.keys(query).filter((k) => k !== 'sale_type').join(' · ') || 'all listings';
@@ -38,12 +40,15 @@ export function WatchSearchButton({ filters }: { filters: FilterState }) {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ name: `Watch: ${label}`.slice(0, 100), query }),
+                signal: ctrl.signal,
             });
+            clearTimeout(timer);
             if (res.status === 401) { setState('login'); return; }
             if (!res.ok) { setState('error'); return; }
             setState('saved');
             setTimeout(() => setState('idle'), 2500);
         } catch {
+            clearTimeout(timer);
             setState('error');
         }
     };

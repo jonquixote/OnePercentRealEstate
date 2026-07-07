@@ -29,9 +29,8 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
     let benchmarks: any = null;
     let acs: any = null;
 
+    const client = await pool.connect();
     try {
-        const client = await pool.connect();
-
         // Fetch properties in this zip
         const propResult = await client.query(`
             SELECT 
@@ -64,10 +63,10 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
             LIMIT 1
         `, [zipcode]);
         acs = acsResult.rows[0] || null;
-
-        client.release();
     } catch (error) {
         console.error('Database error:', error);
+    } finally {
+        client.release();
     }
 
     const activeProperties = properties || [];

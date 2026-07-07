@@ -75,23 +75,27 @@ def main() -> None:
 
     conn = psycopg2.connect(dsn)
     try:
-        with conn.cursor() as cur:
-            updated = 0
-            for r in rows:
-                cur.execute(
+        from psycopg2.extras import execute_values
+
+        CHUNK = 5000
+        updated = 0
+        for i in range(0, len(rows), CHUNK):
+            chunk = rows[i : i + CHUNK]
+            with conn.cursor() as cur:
+                execute_values(
+                    cur,
                     """UPDATE census_tracts
-                          SET nri_flood_riverine_score = %s,
-                              nri_flood_coastal_score  = %s,
-                              nri_overall_score        = %s,
-                              nri_overall_rating       = %s
-                        WHERE geoid = %s""",
-                    (r["riverine"], r["coastal"], r["overall_score"], r["overall_rating"], r["geoid"]),
+                          SET nri_flood_riverine_score = data.riverine,
+                              nri_flood_coastal_score  = data.coastal,
+                              nri_overall_score        = data.overall_score,
+                              nri_overall_rating       = data.overall_rating
+                         FROM (VALUES %s) AS data(geoid, riverine, coastal, overall_score, overall_rating)
+                        WHERE census_tracts.geoid = data.geoid""",
+                    [(r["geoid"], r["riverine"], r["coastal"], r["overall_score"], r["overall_rating"]) for r in chunk],
                 )
                 updated += cur.rowcount
-                if updated % 10000 == 0:
-                    conn.commit()
-                    print(f"  updated {updated} rows...", file=sys.stderr)
             conn.commit()
+            print(f"  updated {updated} rows...", file=sys.stderr)
         print(f"NRI update complete: {updated} census_tracts updated", file=sys.stderr)
     finally:
         conn.close()

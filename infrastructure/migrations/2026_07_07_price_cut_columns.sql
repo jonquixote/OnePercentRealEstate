@@ -26,7 +26,10 @@ BEGIN
   -- Maintain price-cut facts. first_list_price is sticky once set.
   IF NEW.price IS NOT NULL THEN
     IF NEW.first_list_price IS NULL THEN
-      NEW.first_list_price := COALESCE(OLD.first_list_price, OLD.price, NEW.price);
+      NEW.first_list_price := COALESCE(
+        (SELECT MIN(lh.price) FROM listings_history lh WHERE lh.listing_id = NEW.id),
+        OLD.first_list_price, OLD.price, NEW.price
+      );
     END IF;
     IF OLD.price IS NOT NULL AND NEW.price < OLD.price THEN
       NEW.price_cut_count := COALESCE(OLD.price_cut_count, 0) + 1;

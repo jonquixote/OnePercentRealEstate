@@ -21,7 +21,6 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
 CONTAINER="infrastructure-postgres-1"
-DB_URL="postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432/postgres"
 
 # All 50 states + DC by FIPS code
 STATES=(
@@ -52,14 +51,17 @@ for entry in "${STATES[@]}"; do
   echo "--- ${FIPS}: ${NAME} ---"
 
   # Download
-  curl -sL -o "$WORKDIR/$ZIP" "$URL"
-  if [ ! -f "$WORKDIR/$ZIP" ]; then
-    echo "  WARN: download failed, skipping"
+  if ! curl -sL -o "$WORKDIR/$ZIP" "$URL"; then
+    echo "  WARN: download failed (curl exit $?), skipping"
     continue
   fi
 
   # Extract
-  unzip -q -o "$WORKDIR/$ZIP" -d "$WORKDIR/${FIPS}" 2>/dev/null
+  if ! unzip -q -o "$WORKDIR/$ZIP" -d "$WORKDIR/${FIPS}" 2>/dev/null; then
+    echo "  WARN: extract failed, skipping"
+    rm -f "$WORKDIR/$ZIP"
+    continue
+  fi
   rm "$WORKDIR/$ZIP"
 
   # Copy into container

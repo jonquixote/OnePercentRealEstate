@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useViewport } from "@oper/api-client";
 import { useHotkey } from "@oper/primitives";
 import { toRows } from "@/lib/coerce";
+import type { ViewportResponse } from "@oper/api-client";
 import { useSelection } from "@/lib/selection";
 import { StatBar } from "@/components/StatBar";
 import { PropertyTable } from "@/components/PropertyTable";
@@ -64,6 +65,7 @@ export default function TerminalPage() {
         })
         .catch((err) => {
           if (err?.name === 'AbortError') return;
+          setQueryRows(null);
           setQueryState('error');
         });
     };
@@ -75,7 +77,7 @@ export default function TerminalPage() {
   // Memoised so the table + StatBar don't recompute on every selection change.
   const rows = React.useMemo(() => {
     if (queryRows !== null) {
-      return toRows({ type: 'properties', data: queryRows } as never);
+      return toRows({ type: 'properties', data: queryRows } as ViewportResponse);
     }
     return toRows(data);
   }, [data, queryRows]);

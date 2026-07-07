@@ -102,7 +102,7 @@ export interface GeocodeProvider {
 // Census Bureau Geocoder (primary)
 // ---------------------------------------------------------------------------
 
-const CENSUS_BENCHMARK = 'Public_AR_Currenty';
+const CENSUS_BENCHMARK = 'Public_AR_Current';
 
 export class CensusGeocoder implements GeocodeProvider {
   async lookup(query: string): Promise<GeocodeResult | null> {

@@ -26,7 +26,7 @@ if not DATABASE_URL:
 
 DEFAULT_USER_ID = os.getenv("DEFAULT_USER_ID")
 
-CENSUS_BENCHMARK = 'Public_AR_Currenty'
+CENSUS_BENCHMARK = 'Public_AR_Current'
 
 def get_db_connection():
     try:

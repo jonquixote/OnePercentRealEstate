@@ -32,7 +32,7 @@ let lastHighWater = null;
 async function tilesInputChanged(log2) {
     try {
         const res = await pool.query(`SELECT coalesce(max(created_at)::text, '') || '|' ||
-              coalesce((SELECT max(id)::text FROM listings_history), '') AS hw
+              coalesce((SELECT max(observed_at)::text FROM listings_history), '') AS hw
          FROM listings`);
         const hw = res.rows[0]?.hw ?? '';
         if (hw !== lastHighWater) {

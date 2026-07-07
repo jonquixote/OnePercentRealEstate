@@ -5,19 +5,17 @@ import { getSessionUser } from '@/lib/auth';
 /**
  * Wave 5 minimal saved searches endpoint.
  *
- * SECURITY: User identity comes from a request-controlled field (header
- * `x-user-id` or `?user_id=`) because Wave 8 auth is not yet wired. This
- * is a known IDOR/spoofing surface — any caller can read or delete any
- * row by supplying the matching user_id. Mitigations until Wave 8:
+ * SECURITY: Session identity (`getSessionUser()`) is the primary source
+ * for userId. The legacy `x-user-id` header / `?user_id=` query fallback
+ * is available only in non-production environments and is gated behind
+ * ADMIN_API_KEY in production.
  *
- *   1. Production builds (NODE_ENV=production) require ADMIN_API_KEY in
- *      the `Authorization: Bearer <key>` header. Without it the route
- *      returns 501 so the endpoint is unreachable from the public web.
- *   2. Dev/test builds pass through with the spoofable user_id so the
- *      UI prototype keeps working locally.
+ * Production builds (NODE_ENV=production) require ADMIN_API_KEY in
+ * the `Authorization: Bearer <key>` header. Without it the route returns
+ * 501 so the endpoint is unreachable from the public web.
  *
- * When Wave 8 lands, derive userId from `getServerSession()` and remove
- * the env-gated bypass.
+ * Dev/test builds pass through with the spoofable user_id so the
+ * UI prototype keeps working locally.
  */
 
 const PROD_GATE_HEADER = 'authorization';

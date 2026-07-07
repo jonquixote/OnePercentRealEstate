@@ -119,7 +119,7 @@ export function calculatePropertyMetrics(
     }
 
     // 3. Fixed Monthly Expenses
-    const monthlyPropertyTax = expenses.taxAnnual && expenses.taxAnnual > 0
+    const monthlyPropertyTax = expenses.taxAnnual != null && expenses.taxAnnual > 0
         ? expenses.taxAnnual / 12
         : (price * expenses.propertyTaxRate) / 12;
     const monthlyInsurance = expenses.insuranceAnnual / 12;

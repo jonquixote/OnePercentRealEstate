@@ -45,7 +45,7 @@ BEGIN
         v_total := v_total + v_rows;
         COMMIT;
         RAISE NOTICE 'backfill_census_tract: % this batch (cumulative %)', v_rows, v_total;
-        EXIT WHEN v_rows = 0;
+        EXIT WHEN (SELECT COUNT(*) FROM public.listings WHERE census_tract IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL) = 0;
         PERFORM pg_sleep(p_sleep);
     END LOOP;
     RAISE NOTICE 'backfill_census_tract complete: % rows', v_total;

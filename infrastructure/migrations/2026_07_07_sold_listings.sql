@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS sold_listings (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sold_unique ON sold_listings (address, sold_date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sold_unique ON sold_listings (address, COALESCE(sold_date, '1970-01-01'));
 CREATE INDEX IF NOT EXISTS idx_sold_geo ON sold_listings USING gist (geom);
 CREATE INDEX IF NOT EXISTS idx_sold_zip ON sold_listings (zip_code, sold_date DESC);
 

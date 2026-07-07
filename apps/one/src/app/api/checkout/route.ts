@@ -18,8 +18,6 @@ const checkoutSchema = z.object({
   plan: z.enum(['monthly', 'annual', 'agency']).optional(),
   priceId: z.string().startsWith('price_').max(200).optional(),
   propertyId: z.string().max(200).optional(),
-  userId: z.string().max(200).optional(),
-  email: z.string().email().max(320).optional(),
 }).refine(
   (data) => Boolean(data.plan) !== Boolean(data.priceId),
   { message: 'Provide either plan or priceId, not both' }

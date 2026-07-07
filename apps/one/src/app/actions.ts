@@ -250,6 +250,12 @@ const client = await pool.connect();
         ...row,
         listing_price: row.listing_price != null ? Number(row.listing_price) : null,
         estimated_rent: Math.round(rent),
+        days_on_market: row.days_on_market != null ? Number(row.days_on_market) : null,
+        price_cut_pct: row.price_cut_pct != null ? Number(row.price_cut_pct) : null,
+        price_cut_count: row.price_cut_count != null ? Number(row.price_cut_count) : null,
+        rent_low: row.rent_low != null ? Number(row.rent_low) : null,
+        rent_high: row.rent_high != null ? Number(row.rent_high) : null,
+        motivated_score: row.motivated_score != null ? Number(row.motivated_score) : null,
         financial_snapshot: {
           bedrooms: Number(row.bedrooms) || 0,
           bathrooms: Number(row.bathrooms) || 0,
