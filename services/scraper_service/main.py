@@ -10,7 +10,7 @@ import urllib.parse
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import sleep
-from enrichment import extract_enrichment
+from enrichment import extract_enrichment, _num, _date
 
 app = FastAPI()
 
@@ -128,7 +128,8 @@ def scrape_listings(req: ScrapeRequest):
         )
         
         is_rental = req.listing_type == 'for_rent'
-        target_table = 'rental_listings' if is_rental else 'listings'
+        is_sold = req.listing_type == 'sold'
+        target_table = 'rental_listings' if is_rental else 'sold_listings' if is_sold else 'listings'
         print(f"Target table: {target_table}")
         
         if df is None or (hasattr(df, "empty") and df.empty):
@@ -174,7 +175,7 @@ def scrape_listings(req: ScrapeRequest):
         address_list = []
         for i, row in enumerate(clean_records):
             zip_raw = row.get('zip_code')
-            zip_code = str(zip_raw).split('.')[0] if zip_raw else ""
+            zip_code = str(zip_raw).split('.')[0].zfill(5) if zip_raw else ""
             address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
             if address:
                 address_list.append((i, address))
@@ -197,7 +198,7 @@ def scrape_listings(req: ScrapeRequest):
         try:
             for i, row in enumerate(clean_records):
                 zip_raw = row.get('zip_code')
-                zip_code = str(zip_raw).split('.')[0] if zip_raw else ""
+                zip_code = str(zip_raw).split('.')[0].zfill(5) if zip_raw else ""
                 address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
                 
                 if not address or address == "":
@@ -258,6 +259,39 @@ def scrape_listings(req: ScrapeRequest):
                             'homeharvest', Json(raw_data)
                         ))
                         inserted += 1
+                elif is_sold:
+                    sold_price = _num(row.get('sold_price'))
+                    sold_date = _date(row.get('last_sold_date'))
+                    list_price = _num(row.get('list_price'))
+                    if not sold_price or sold_price <= 0 or not sold_date:
+                        skipped += 1
+                        continue
+                    cursor.execute("""
+                        INSERT INTO sold_listings (
+                            address, city, state, zip_code,
+                            sold_price, sold_date, list_price,
+                            bedrooms, bathrooms, sqft, year_built, lot_sqft,
+                            property_type, latitude, longitude, source, raw_data
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (address, sold_date) DO NOTHING
+                    """, (
+                        address, row.get('city'), row.get('state'), zip_code,
+                        sold_price, sold_date, list_price,
+                        _num(row.get('beds')), _num(row.get('baths')),
+                        int(_num(row.get('sqft'))) if _num(row.get('sqft')) else None,
+                        int(_num(row.get('year_built'))) if _num(row.get('year_built')) else None,
+                        _num(row.get('lot_sqft')),
+                        get_property_type(row),
+                        raw_data.get("lat"), raw_data.get("lon"),
+                        'homeharvest', Json(raw_data)
+                    ))
+                    if cursor.rowcount > 0:
+                        inserted += 1
+                    else:
+                        skipped += 1
+                # NOTE: census_tract is assigned via nightly backfill
+                # (backfill_census_tract.sql) instead of at-scrape ST_Contains,
+                # which was measured as too slow per spec §B3 fallback plan.
                 else:
                     cursor.execute("""
                         INSERT INTO listings (

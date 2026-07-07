@@ -31,6 +31,10 @@ _hud: dict[tuple[str, int], float] = {}
 _hud_loaded_at: float = 0.0
 _HUD_TTL_S = 24 * 3600
 
+_zcta: dict[str, tuple[float | None, float | None]] = {}
+_zcta_loaded_at: float = 0.0
+_ZCTA_TTL_S = 24 * 3600
+
 
 def loaded_version() -> Optional[str]:
     return _loaded_version
@@ -67,7 +71,7 @@ def refresh(active_version: str, database_url: Optional[str]) -> bool:
         _boosters, _meta, _loaded_version = boosters, meta, active_version
         _loaded_meta_mtime = os.path.getmtime(meta_path)
         log.info("model store loaded %s (train_rows=%s)", active_version, meta.get("train_rows"))
-        _maybe_refresh_hud(database_url, force=not _hud)
+        _maybe_refresh_hud(database_url, force=not _hud or not _zcta)
         return True
     except Exception as exc:
         log.warning("model load failed for %s: %s", active_version, exc)
@@ -75,10 +79,12 @@ def refresh(active_version: str, database_url: Optional[str]) -> bool:
 
 
 def _maybe_refresh_hud(database_url: Optional[str], force: bool = False) -> None:
-    global _hud, _hud_loaded_at
+    global _hud, _hud_loaded_at, _zcta, _zcta_loaded_at
     if not database_url:
         return
-    if not force and (time.monotonic() - _hud_loaded_at) < _HUD_TTL_S and _hud:
+    needs_hud = force or not ((time.monotonic() - _hud_loaded_at) < _HUD_TTL_S and _hud)
+    needs_zcta = force or not ((time.monotonic() - _zcta_loaded_at) < _ZCTA_TTL_S and _zcta)
+    if not needs_hud and not needs_zcta:
         return
     try:
         import psycopg2
@@ -86,23 +92,33 @@ def _maybe_refresh_hud(database_url: Optional[str], force: bool = False) -> None
         conn = psycopg2.connect(database_url)
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    """SELECT DISTINCT ON (zip_code, bedrooms) zip_code, bedrooms, safmr
-                       FROM hud_safmr ORDER BY zip_code, bedrooms, fy DESC"""
-                )
-                _hud = {(z, int(b)): float(s) for z, b, s in cur.fetchall()}
+                if needs_hud:
+                    cur.execute(
+                        """SELECT DISTINCT ON (zip_code, bedrooms) zip_code, bedrooms, safmr
+                           FROM hud_safmr ORDER BY zip_code, bedrooms, fy DESC"""
+                    )
+                    _hud = {(z, int(b)): float(s) for z, b, s in cur.fetchall()}
+                    _hud_loaded_at = time.monotonic()
+                    log.info("hud cache loaded: %d entries", len(_hud))
+                if needs_zcta:
+                    cur.execute(
+                        """SELECT DISTINCT ON (zcta) zcta, median_hh_income, median_gross_rent
+                           FROM zcta_demographics ORDER BY zcta, acs_year DESC"""
+                    )
+                    _zcta = {z: (income, rent) for z, income, rent in cur.fetchall()}
+                    _zcta_loaded_at = time.monotonic()
+                    log.info("zcta cache loaded: %d entries", len(_zcta))
         finally:
             conn.close()
-        _hud_loaded_at = time.monotonic()
-        log.info("hud cache loaded: %d entries", len(_hud))
     except Exception as exc:
-        log.warning("hud cache refresh failed: %s", exc)
+        log.warning("hud/zcta cache refresh failed: %s", exc)
 
 
 def _row_from_request(req: Any) -> dict:
     beds = req.bedrooms if req.bedrooms is not None else 2
     zip_code = str(req.zip_code or "")
     hud = _hud.get((zip_code, int(min(max(beds or 0, 0), 4))))
+    zcta = _zcta.get(zip_code, (None, None))
     return {
         "beds": req.bedrooms,
         "baths": req.bathrooms,
@@ -115,6 +131,8 @@ def _row_from_request(req: Any) -> dict:
         "ptype": req.property_type,
         "zip": zip_code,
         "hud_safmr": hud,
+        "zcta_med_income": zcta[0],
+        "zcta_med_rent": zcta[1],
     }
 
 

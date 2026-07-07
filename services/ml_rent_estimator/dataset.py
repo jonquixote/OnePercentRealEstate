@@ -28,6 +28,8 @@ FEATURE_NAMES = [
     "ptype_code",
     "zip_te",
     "hud_anchor_log",
+    "zcta_med_income_log",
+    "zcta_med_rent_log",
 ]
 
 TRAINING_SQL = """
@@ -46,7 +48,9 @@ SELECT DISTINCT ON (r.address, r.listing_date)
        coalesce(r.zip_code, '') AS zip,
        upper(coalesce(r.state, '')) AS state,
        r.listing_date,
-       h.safmr::float          AS hud_safmr
+        h.safmr::float          AS hud_safmr,
+        z.median_hh_income::float  AS zcta_med_income,
+        z.median_gross_rent::float AS zcta_med_rent
 FROM rental_listings r
 LEFT JOIN (
     SELECT DISTINCT ON (zip_code, bedrooms) zip_code, bedrooms, safmr
@@ -54,6 +58,11 @@ LEFT JOIN (
     ORDER BY zip_code, bedrooms, fy DESC
 ) h ON h.zip_code = r.zip_code
       AND h.bedrooms = LEAST(GREATEST(coalesce(r.bedrooms, 2)::int, 0), 4)
+LEFT JOIN (
+    SELECT DISTINCT ON (zcta) zcta, median_hh_income, median_gross_rent
+    FROM zcta_demographics
+    ORDER BY zcta, acs_year DESC
+) z ON z.zcta = r.zip_code
 WHERE r.price BETWEEN 300 AND 20000
 ORDER BY r.address, r.listing_date, r.created_at DESC
 """
@@ -89,6 +98,18 @@ def fit_encoders(train_df) -> dict:
         .items()
     }
 
+    # ACS global median fallback for zips missing from zcta_demographics.
+    zcta_income_global_median = float(
+        train_df["zcta_med_income"].dropna().median()
+        if "zcta_med_income" in train_df and train_df["zcta_med_income"].notna().any()
+        else 60000.0
+    )
+    zcta_rent_global_median = float(
+        train_df["zcta_med_rent"].dropna().median()
+        if "zcta_med_rent" in train_df and train_df["zcta_med_rent"].notna().any()
+        else 1000.0
+    )
+
     # Numeric imputation stats.
     sqft_median_by_beds = {
         str(int(b)): float(m)
@@ -106,6 +127,8 @@ def fit_encoders(train_df) -> dict:
         "ptype_map": ptype_map,
         "hud_beds_median": hud_beds_median,
         "sqft_median_by_beds": sqft_median_by_beds,
+        "zcta_income_global_median": zcta_income_global_median,
+        "zcta_rent_global_median": zcta_rent_global_median,
     }
 
 
@@ -121,6 +144,14 @@ def _hud_anchor(zip_code: str, beds: Optional[float], hud_safmr: Optional[float]
         return float(hud_safmr)
     b = str(int(min(max(beds if beds is not None else 2, 0), 4)))
     return float(meta["hud_beds_median"].get(b, 1500.0))
+
+
+def _zcta_anchor(
+    col: str, row_val: Optional[float], meta: dict, global_key: str, hardcoded: float
+) -> float:
+    if row_val is not None and row_val == row_val and row_val > 0:
+        return float(row_val)
+    return float(meta.get(global_key, hardcoded))
 
 
 def build_feature_row(row: dict[str, Any], meta: dict) -> list[float]:
@@ -145,6 +176,14 @@ def build_feature_row(row: dict[str, Any], meta: dict) -> list[float]:
     ptype_code = float(meta["ptype_map"].get(str(row.get("ptype") or "UNKNOWN").upper(), -1))
     zip_te = float(meta["zip_te"].get(str(row.get("zip") or ""), meta["global_mean_log"]))
     hud = _hud_anchor(str(row.get("zip") or ""), beds, row.get("hud_safmr"), meta)
+    zcta_income = _zcta_anchor(
+        "zcta_med_income", num(row.get("zcta_med_income"), None),
+        meta, "zcta_income_global_median", 60000.0,
+    )
+    zcta_rent = _zcta_anchor(
+        "zcta_med_rent", num(row.get("zcta_med_rent"), None),
+        meta, "zcta_rent_global_median", 1000.0,
+    )
 
     return [
         beds,
@@ -158,6 +197,8 @@ def build_feature_row(row: dict[str, Any], meta: dict) -> list[float]:
         ptype_code,
         zip_te,
         math.log(max(hud, 100.0)),
+        math.log(max(zcta_income, 10000.0)),
+        math.log(max(zcta_rent, 100.0)),
     ]
 
 

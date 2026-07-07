@@ -27,6 +27,7 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
 
     let properties: any[] = [];
     let benchmarks: any = null;
+    let acs: any = null;
 
     try {
         const client = await pool.connect();
@@ -53,6 +54,16 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
             SELECT safmr_data FROM market_benchmarks WHERE zip_code = $1
         `, [zipcode]);
         benchmarks = benchResult.rows[0] || null;
+
+        // Fetch ACS ZCTA demographics
+        const acsResult = await client.query(`
+            SELECT median_hh_income, median_gross_rent, median_home_value, population
+            FROM zcta_demographics
+            WHERE zcta = $1
+            ORDER BY acs_year DESC
+            LIMIT 1
+        `, [zipcode]);
+        acs = acsResult.rows[0] || null;
 
         client.release();
     } catch (error) {
@@ -138,6 +149,46 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                             </div>
                         </div>
                     </div>
+
+                    {acs && (
+                        <div className="bg-white overflow-hidden rounded-xl shadow-sm border border-gray-100 p-6 sm:col-span-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div>
+                                    <p className="text-sm font-medium text-gray-500">Median Household Income</p>
+                                    <p className="text-xl font-bold text-gray-900">
+                                        {acs.median_hh_income
+                                            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(acs.median_hh_income))
+                                            : '-'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-gray-500">Median Gross Rent</p>
+                                    <p className="text-xl font-bold text-gray-900">
+                                        {acs.median_gross_rent
+                                            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(acs.median_gross_rent))
+                                            : '-'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-gray-500">Median Home Value</p>
+                                    <p className="text-xl font-bold text-gray-900">
+                                        {acs.median_home_value
+                                            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(acs.median_home_value))
+                                            : '-'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-gray-500">Population</p>
+                                    <p className="text-xl font-bold text-gray-900">
+                                        {acs.population
+                                            ? Number(acs.population).toLocaleString()
+                                            : '-'}
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2">ACS 5-year estimates (Census Bureau)</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Properties Grid */}
