@@ -77,8 +77,10 @@ export async function POST(req: Request) {
           quantity: 1,
         },
       ],
-      success_url: `${req.headers.get('origin')}/?upgrade_success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/pricing?canceled=true`,
+      // Origin header is absent on non-browser clients; fall back to the
+      // canonical site URL rather than sending Stripe an invalid "null/..."
+      success_url: `${req.headers.get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://one.octavo.press'}/?upgrade_success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://one.octavo.press'}/pricing?canceled=true`,
       metadata: {
         propertyId: body.propertyId || '',
         userId: sessionUser.id,

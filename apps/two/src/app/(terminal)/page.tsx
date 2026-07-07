@@ -200,7 +200,9 @@ export default function TerminalPage() {
       a.href = URL.createObjectURL(blob);
       a.download = `octavo-terminal-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
-      URL.revokeObjectURL(a.href);
+      // Deferred revoke: synchronous revocation can cancel the download in
+      // some browsers (PR #9 review).
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
     },
     { description: "Export current rows to CSV", group: "Data" },
   );

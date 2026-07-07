@@ -17,14 +17,15 @@ export async function POST(request: NextRequest) {
     }
 
     const { email, password } = await request.json().catch(() => ({}));
-    if (typeof email !== 'string' || !EMAIL_RE.test(email) || email.length > 254) {
+    const normalizedInput = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (!EMAIL_RE.test(normalizedInput) || normalizedInput.length > 254) {
       return NextResponse.json({ error: 'Valid email required' }, { status: 400 });
     }
     if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
       return NextResponse.json({ error: 'Password must be 8–128 characters' }, { status: 400 });
     }
 
-    const normalized = email.trim().toLowerCase();
+    const normalized = normalizedInput;
     const hash = await bcrypt.hash(password, 12);
     const id = randomUUID();
 

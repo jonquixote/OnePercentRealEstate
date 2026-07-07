@@ -1,82 +1,75 @@
-# Alertmanager config for OnePercentRealEstate.
+# Alertmanager config TEMPLATE for OnePercentRealEstate.
 #
-# Routing:
-# * default (warn) -> email + telegram
-# * severity=crit -> email + telegram + slack (future)
+# ── Telegram is the alert channel (owner decision 2026-07-07) ────────────
+# THIS FILE IS A TEMPLATE. The live config is a SERVER-ONLY file at
+#   /opt/onepercent/infrastructure/monitoring/alertmanager/alertmanager.runtime.yml
+# (mounted by docker-compose; it does not exist in the repo, so rsync can
+# never clobber it and secrets never land in git — a real bot token was
+# committed once on 2026-07-07 and had to be revoked. Don't repeat that.)
 #
-# Secrets are read from env vars at startup. Set them via the
-# `environment:` block on the alertmanager service in docker-compose.yml:
+# To (re)create the runtime file: copy this template, replace the two
+# placeholders below with the real values, save it AT THE RUNTIME PATH, and
+#   ./infrastructure/deploy.sh restart alertmanager
 #
-# ALERTMANAGER_SMTP_HOST=smtp.fastmail.com:465
-# ALERTMANAGER_SMTP_FROM=alerts@octavo.press
-# ALERTMANAGER_SMTP_USER=alerts@octavo.press
-# ALERTMANAGER_SMTP_PASSWORD=<app password>
-# ALERTMANAGER_SMTP_TO=ops@octavo.press
-# TELEGRAM_BOT_TOKEN=8994347127:AAG4To9njFQw5o3Jldyb1K7VxjtiE9iq9-k
-# ALERTMANAGER_TELEGRAM_CHAT_ID=5760742258
-#
-# Alertmanager expands `$VAR` syntax in values — not Go template
-# substitution. So we hardcode the templated fields and read secrets
-# from `--config.file` reload after env injection.
+# Getting the two values (~2 min):
+#   1. @BotFather -> /newbot (or /revoke + /token for an existing bot)
+#      TELEGRAM_BOT_TOKEN=<from @BotFather — server runtime file only, never commit>
+#   2. Add the bot to your chat, then read the chat id from
+#      https://api.telegram.org/bot<TOKEN>/getUpdates
+#      TELEGRAM_CHAT_ID=<integer chat id — server runtime file only>
+# NOTE: alertmanager yaml does NOT expand $ENV_VARS — values must be
+# literal in the runtime file (which is why it stays server-only).
 
 global:
   resolve_timeout: 5m
-  smtp_smarthost: smtp.example.com:465
-  smtp_from: alerts@octavo.press
-  smtp_auth_username: alerts@octavo.press
-  smtp_auth_password: REPLACE_WITH_APP_PASSWORD
-  smtp_require_tls: false # using SMTPS on 465; not STARTTLS on 587
-  smtp_hello: octavo.press
-  telegram_api_key: $TELEGRAM_BOT_TOKEN
-  telegram_chat_id: $ALERTMANAGER_TELEGRAM_CHAT_ID
 
-# Route tree: every alert hits the default route; severity=crit also
-# gets the slack receiver via a child route.
 route:
-  receiver: email-default
+  receiver: tg-default
   group_by: ["alertname", "severity"]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
   routes:
-  - matchers:
-    - severity = "crit"
-    receiver: crit-fanout
-    group_wait: 10s
-    repeat_interval: 1h
-    continue: false
+    - matchers:
+        - severity = "crit"
+      receiver: tg-crit
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: false
 
 receivers:
-  - name: email-default
-    email_configs:
-    - to: ops@octavo.press
-      send_resolved: true
-      headers:
-        Subject: '[onepercent {{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
-
-  - name: crit-fanout
-    email_configs:
-    - to: ops@octavo.press
-      send_resolved: true
-      headers:
-        Subject: '[onepercent CRIT {{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+  - name: tg-default
     telegram_configs:
-    - chat_id: $ALERTMANAGER_TELEGRAM_CHAT_ID
-      bot_token: $TELEGRAM_BOT_TOKEN
-      parse_mode: HTML
-      message: |
-        <b>[onepercent {{ .Status | toUpper }}]</b>
-        {{ .CommonLabels.alertname }}
-        {{ range .Alerts }}
-        • {{ .Annotations.summary }}
-        {{ end }}
+      - bot_token: 'REPLACE_WITH_TELEGRAM_BOT_TOKEN'
+        chat_id: -1  # REPLACE_WITH_TELEGRAM_CHAT_ID (integer)
+        api_url: https://api.telegram.org
+        parse_mode: HTML
+        send_resolved: true
+        message: |
+          <b>[onepercent {{ .Status | toUpper }}]</b> {{ .CommonLabels.alertname }}
+          {{ range .Alerts }}{{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+
+  - name: tg-crit
+    telegram_configs:
+      - bot_token: 'REPLACE_WITH_TELEGRAM_BOT_TOKEN'
+        chat_id: -1  # REPLACE_WITH_TELEGRAM_CHAT_ID (integer)
+        api_url: https://api.telegram.org
+        parse_mode: HTML
+        send_resolved: true
+        message: |
+          <b>🔴 [onepercent CRIT {{ .Status | toUpper }}]</b> {{ .CommonLabels.alertname }}
+          {{ range .Alerts }}{{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
 
 inhibit_rules:
-# If a service is down (crit), don't also page about high error rate
-# / latency on that service — they're caused by the down-ness.
+  # If a service is down (crit), don't also page about high error rate
+  # / latency on that service — they're caused by the down-ness.
   - source_matchers:
-    - severity = "crit"
-    - alertname =~ "PostgresDown|RedisDown"
+      - severity = "crit"
+      - alertname =~ "PostgresDown|RedisDown"
     target_matchers:
-    - severity = "warn"
+      - severity = "warn"
     equal: ["host"]

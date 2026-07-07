@@ -536,7 +536,10 @@ services:
     image: prom/alertmanager:v0.27.0
     restart: always
     volumes:
-      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      # Wave 8: the RUNTIME config is server-only (real Telegram secrets;
+      # created from the repo template — see the template header). rsync
+      # never touches it because the path doesn't exist in the repo.
+      - ./monitoring/alertmanager/alertmanager.runtime.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
     ports:
       - "127.0.0.1:9093:9093"

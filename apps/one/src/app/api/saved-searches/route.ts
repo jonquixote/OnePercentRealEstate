@@ -65,8 +65,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const session = await getSessionUser();
-    const userId = session?.id ?? readUserId(request);
+    const userId = sessionUser?.id ?? readUserId(request);
     if (!userId) {
       return NextResponse.json(
         { error: 'user_id required (alphanumeric, max 64 chars)' },
@@ -100,8 +99,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const { user_id, name, params } = body ?? {};
 
-    const session = await getSessionUser();
-    const userId = session?.id ?? readUserId(request, typeof user_id === 'string' ? user_id : undefined);
+    const userId = sessionUser?.id ?? readUserId(request, typeof user_id === 'string' ? user_id : undefined);
 
     if (!userId) {
       return NextResponse.json(
@@ -150,8 +148,7 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const id = request.nextUrl.searchParams.get('id');
-    const session = await getSessionUser();
-    const userId = session?.id ?? readUserId(request);
+    const userId = sessionUser?.id ?? readUserId(request);
 
     if (!id || !/^\d+$/.test(id) || !userId) {
       return NextResponse.json(
