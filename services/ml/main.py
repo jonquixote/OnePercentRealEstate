@@ -434,4 +434,19 @@ async def run_train() -> OpResponse:
             ok=False, lines=["PROMOTED ON DISK BUT ACTIVATION FAILED"] + lines, exit_code=1, alert=True
         )
 
+    # Append the promoted model's eval report to the rolling history (a
+    # queryable record of every promote's metrics — ratchets become visible,
+    # and eval_v1.rolling_min_highvar() can read it for a stricter gate).
+    # The report rode along inside the swapped dir, so it is now at live/.
+    try:
+        report_path = os.path.join(live, "eval_report.json")
+        if os.path.isfile(report_path):
+            with open(report_path) as f:
+                report = json.load(f)
+            report["promoted_at"] = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+            with open(os.path.join(model_dir, "eval_history.jsonl"), "a") as f:
+                f.write(json.dumps(report) + "\n")
+    except (OSError, ValueError) as exc:  # history is observability, never block a good promote
+        log.warning("eval_history append failed: %s", exc)
+
     return OpResponse(ok=True, lines=["PROMOTED"] + lines, exit_code=0, alert=False)

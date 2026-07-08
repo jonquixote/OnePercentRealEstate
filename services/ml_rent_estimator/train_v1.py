@@ -33,11 +33,21 @@ MODEL_DIR = os.environ.get("MODEL_DIR", "/models")
 _SUBDIR = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "rent_v1"
 OUT_DIR = os.path.join(MODEL_DIR, _SUBDIR)
 
+# Tree-config discipline (spec §Tree-config): these are the ONLY knobs the
+# P4 capacity A/B is allowed to move, and only if the holdout gate improves.
+# Recorded here and in the spec's Sizing notes as the documented baseline.
+NUM_LEAVES = 63       # baseline as of 2026-07-08
+N_ESTIMATORS = 400    # baseline as of 2026-07-08 (a.k.a. num_boost_round)
+
+# Retrain subprocess ceiling (services/ml/main.py:/ops/run-train passes 1800s).
+# Kept in sync here so the wall-time budget warning has the right denominator.
+TRAIN_TIMEOUT_SECONDS = 1800
+
 # Native lightgbm.train params (the sklearn wrapper would drag in a
 # scikit-learn dependency for nothing).
 PARAMS: dict[str, Any] = dict(
     learning_rate=0.06,
-    num_leaves=63,
+    num_leaves=NUM_LEAVES,
     min_data_in_leaf=40,
     bagging_fraction=0.9,
     bagging_freq=1,
@@ -45,7 +55,7 @@ PARAMS: dict[str, Any] = dict(
     num_threads=2,
     verbose=-1,
 )
-NUM_ROUNDS = 400
+NUM_ROUNDS = N_ESTIMATORS
 
 
 def main() -> None:
@@ -104,7 +114,21 @@ def main() -> None:
     with open(os.path.join(OUT_DIR, "metadata.json"), "w") as f:
         json.dump(meta_out, f)
 
-    print(json.dumps({"done": True, "wall_s": round(time.time() - t0), **quick}), flush=True)
+    wall = time.time() - t0
+    # Early signal before the /ops/run-train subprocess timeout actually
+    # trips: warn at 60% of the ceiling so tree size / row count can be
+    # reviewed while the pipeline still works.
+    if wall > 0.6 * TRAIN_TIMEOUT_SECONDS:
+        print(
+            f"WARNING training wall time {wall:.0f}s approaching timeout ceiling "
+            f"({TRAIN_TIMEOUT_SECONDS}s) — review num_leaves/n_estimators or prune "
+            f"rental_listings",
+            flush=True,
+        )
+    print(
+        json.dumps({"done": True, "wall_s": round(wall), "train_wall_seconds": round(wall), **quick}),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
