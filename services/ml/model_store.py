@@ -35,9 +35,19 @@ _zcta: dict[str, tuple[float | None, float | None]] = {}
 _zcta_loaded_at: float = 0.0
 _ZCTA_TTL_S = 24 * 3600
 
+# Set False by the predict-time preflight when the built vector width does
+# not match the loaded booster's expected feature count. Surfaced on
+# /healthz so a feature/model mismatch (the 2026-07-08 outage class) is
+# observable instead of silently degrading to the v2 fallback.
+_feature_match_ok: bool = True
+
 
 def loaded_version() -> Optional[str]:
     return _loaded_version
+
+
+def feature_match_ok() -> bool:
+    return _feature_match_ok
 
 
 def refresh(active_version: str, database_url: Optional[str]) -> bool:
@@ -145,8 +155,24 @@ def predict_rows(reqs: list[Any]) -> Optional[list[dict]]:
 
     from ml_rent_estimator.dataset import build_feature_row
 
+    global _feature_match_ok
     try:
         X = np.asarray([build_feature_row(_row_from_request(r), _meta) for r in reqs], dtype=float)
+        # Preflight: the built vector width MUST equal what the booster was
+        # trained on. A mismatch means FEATURE_NAMES and the artifact have
+        # diverged (stale model vs new code, or vice versa) — scoring anyway
+        # yields a LightGBMError per row and, worse, silently condemns the
+        # backlog. Fail closed to the v2 fallback and flag it for /healthz.
+        n_expected = _boosters["p50"].num_feature()
+        if X.shape[1] != n_expected:
+            _feature_match_ok = False
+            log.critical(
+                "feature count mismatch: built %d, model expects %d — check "
+                "FEATURE_NAMES vs artifact metadata; serving v2 fallback",
+                X.shape[1], n_expected,
+            )
+            return None
+        _feature_match_ok = True
         p10 = np.exp(np.asarray(_boosters["p10"].predict(X), dtype=float))
         p50 = np.exp(np.asarray(_boosters["p50"].predict(X), dtype=float))
         p90 = np.exp(np.asarray(_boosters["p90"].predict(X), dtype=float))

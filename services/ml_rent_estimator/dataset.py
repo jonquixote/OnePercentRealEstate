@@ -154,9 +154,22 @@ def _zcta_anchor(
     return float(meta.get(global_key, hardcoded))
 
 
-def build_feature_row(row: dict[str, Any], meta: dict) -> list[float]:
-    """row keys: beds, baths, sqft, year_built, lot_sqft, hoa_fee, lat, lng,
-    ptype, zip, hud_safmr (any may be None/NaN). Mirrors training exactly."""
+def compute_features(row: dict[str, Any], meta: dict, asof: Any = None) -> dict[str, float]:
+    """Compute EVERY registered feature for a row, keyed by feature name.
+
+    Returns a superset dict — it always computes the current module's full
+    FEATURE_NAMES set. Serving emits a subset in the artifact's order via
+    vector_from_features(), which is how new code stays able to serve an
+    older (shorter) model artifact after a deploy (incident 2026-07-08).
+
+    `asof` (a date) is the reference point for time-relative history features
+    (Phase 2+); defaults to today for serving, the listing_date for training.
+    Not consumed by any current feature — plumbed for forward compatibility.
+
+    row keys: beds, baths, sqft, year_built, lot_sqft, hoa_fee, lat, lng,
+    ptype, zip, hud_safmr, zcta_med_income, zcta_med_rent (any may be
+    None/NaN). Mirrors training exactly.
+    """
 
     def num(v, default):
         try:
@@ -185,21 +198,39 @@ def build_feature_row(row: dict[str, Any], meta: dict) -> list[float]:
         meta, "zcta_rent_global_median", 1000.0,
     )
 
-    return [
-        beds,
-        baths,
-        math.log(max(sqft, 100.0)),
-        year_built,
-        math.log1p(max(lot, 0.0)),
-        hoa,
-        lat,
-        lng,
-        ptype_code,
-        zip_te,
-        math.log(max(hud, 100.0)),
-        math.log(max(zcta_income, 10000.0)),
-        math.log(max(zcta_rent, 100.0)),
-    ]
+    return {
+        "beds": beds,
+        "baths": baths,
+        "sqft_log": math.log(max(sqft, 100.0)),
+        "year_built": year_built,
+        "lot_sqft_log": math.log1p(max(lot, 0.0)),
+        "hoa_fee": hoa,
+        "lat": lat,
+        "lng": lng,
+        "ptype_code": ptype_code,
+        "zip_te": zip_te,
+        "hud_anchor_log": math.log(max(hud, 100.0)),
+        "zcta_med_income_log": math.log(max(zcta_income, 10000.0)),
+        "zcta_med_rent_log": math.log(max(zcta_rent, 100.0)),
+    }
+
+
+def vector_from_features(feats: dict[str, float], meta: dict) -> list[float]:
+    """Emit the feature vector in the ARTIFACT'S declared order.
+
+    The registry is append-only, so new code computes a superset of any
+    older artifact's names — emitting in meta["feature_names"] order keeps
+    old models servable across deploys. An unknown name is a programmer
+    error (a model trained on a feature this code no longer computes), so
+    it raises rather than silently zero-filling.
+    """
+    return [feats[name] for name in meta["feature_names"]]
+
+
+def build_feature_row(row: dict[str, Any], meta: dict, asof: Any = None) -> list[float]:
+    """Back-compat entrypoint: compute + order in one call, using the
+    artifact's feature order."""
+    return vector_from_features(compute_features(row, meta, asof), meta)
 
 
 def frame_to_matrix(df, meta: dict):

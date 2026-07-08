@@ -192,6 +192,11 @@ def healthz() -> dict:
         "ok": True,
         "estimator_loaded": estimate_rent_v2 is not None,
         "import_error": _IMPORT_ERR,
+        # Feature/model width agreement — False after a mismatch preflight
+        # trip (the 2026-07-08 outage class). True until a predict proves
+        # otherwise; observable so a bad deploy is caught before the backlog.
+        "model_feature_match": model_store.feature_match_ok(),
+        "model_loaded_version": model_store.loaded_version(),
     }
 
 
