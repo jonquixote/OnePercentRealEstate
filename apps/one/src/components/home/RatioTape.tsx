@@ -86,7 +86,7 @@ export function RatioTape({ bins, thresholdPct, clears, total, loading }: RatioT
   const ticks = [0.4, 0.7, 1.0, 1.3, 1.6];
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-b from-ink-panel to-ink-2 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.8)]">
+    <div className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-b from-ink-panel to-ink-2 shadow-[0_30px_80px_-40px_rgba(42,37,32,0.12)]">
       {/* radial pass glow near the line */}
       <div
         aria-hidden
@@ -94,7 +94,7 @@ export function RatioTape({ bins, thresholdPct, clears, total, loading }: RatioT
         style={{
           left: `${(lineX / W) * 100}%`,
           transform: 'translateX(-50%)',
-          background: 'radial-gradient(circle, rgba(52,224,161,0.13) 0%, transparent 65%)',
+          background: 'radial-gradient(circle, rgba(31,157,110,0.16) 0%, transparent 65%)',
         }}
       />
       <div className="flex items-baseline justify-between px-5 pt-4">
@@ -122,7 +122,7 @@ export function RatioTape({ bins, thresholdPct, clears, total, loading }: RatioT
         {/* axis ticks */}
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={xOf(t)} y1={H - 32} x2={xOf(t)} y2={H - 28} stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
+            <line x1={xOf(t)} y1={H - 32} x2={xOf(t)} y2={H - 28} stroke="rgba(42,37,32,0.20)" strokeWidth="1" />
             <text x={xOf(t)} y={H - 14} fill="var(--muted-foreground)" fontFamily="var(--font-geist-mono)" fontSize="10" textAnchor="middle">
               {t.toFixed(1)}%
             </text>

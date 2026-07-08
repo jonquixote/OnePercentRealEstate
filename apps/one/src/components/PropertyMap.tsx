@@ -109,7 +109,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: 'https://tiles.openfreemap.org/styles/dark',
+      style: 'https://tiles.openfreemap.org/styles/positron',
       center: [-98.6, 39.8],
       zoom: 3.5,
       attributionControl: false,
@@ -131,8 +131,8 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       const labelLayers = map.getStyle().layers.filter(l => l.id.includes('label') || l.id.includes('place') || l.id.includes('road'));
       for (const layer of labelLayers) {
         try {
-          map.setPaintProperty(layer.id, 'text-color', '#e8e6e1');
-          map.setPaintProperty(layer.id, 'text-halo-color', '#0b0d10');
+          map.setPaintProperty(layer.id, 'text-color', '#2a2520');
+          map.setPaintProperty(layer.id, 'text-halo-color', 'rgba(250,247,242,.85)');
           map.setPaintProperty(layer.id, 'text-halo-width', 1.5);
         } catch { /* skip non-text layers */ }
       }
@@ -152,9 +152,9 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
         maxzoom: 10,
         filter: ['==', ['get', 'cluster'], true],
         paint: {
-          'circle-color': '#0e9f6e',
+          'circle-color': '#0e7a52',
           'circle-opacity': 0.85,
-          'circle-stroke-color': '#34e0a1',
+          'circle-stroke-color': '#faf7f2',
           'circle-stroke-width': 1.5,
           'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 12, 50, 18, 500, 26, 5000, 36, 50000, 48],
         },
@@ -172,7 +172,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
           'text-size': 12,
           'text-allow-overlap': true,
         },
-        paint: { 'text-color': '#04140d' },
+         paint: { 'text-color': '#faf7f2' },
       });
 
       // Fix 1: Invisible hit layer under mvt-points — radius 22 for Fitts-friendly clicks
@@ -198,11 +198,11 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
         minzoom: 9,
         paint: {
           'circle-color': ['case',
-            ['>', ['coalesce', ['get', 'price_cut_pct'], 0], 0], '#e3c184', // brass for cuts
-            '#34d399', // emerald for normal
+            ['>', ['coalesce', ['get', 'price_cut_pct'], 0], 0], '#c9a35c', // brass for cuts
+            '#1f9d6e', // emerald for normal
           ],
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 7, 16, 10],
-          'circle-stroke-color': '#0b0d10',
+          'circle-stroke-color': '#faf7f2',
           'circle-stroke-width': 1.5,
           'circle-opacity': 0.95,
         },
@@ -219,7 +219,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
         paint: {
           'circle-color': 'transparent',
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 8, 14, 12, 16, 15],
-          'circle-stroke-color': '#e8e6e1',
+          'circle-stroke-color': '#2a2520',
           'circle-stroke-width': 2,
           'circle-opacity': 0.9,
         },
@@ -271,7 +271,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
       const [lng, lat] = geom.coordinates as [number, number];
 
       const root = document.createElement('div');
-      root.style.cssText = 'background:var(--ink-panel);border:1px solid var(--line-hi);border-radius:12px;padding:12px;min-width:220px;box-shadow:0 12px 40px rgba(0,0,0,.45);font-family:var(--font-geist-sans)';
+       root.style.cssText = 'background:var(--ink-panel);border:1px solid var(--line-hi);border-radius:12px;padding:12px;min-width:220px;box-shadow:0 12px 40px rgba(42,37,32,.18);font-family:var(--font-geist-sans)';
 
       // Photo mat
       if (p.primary_photo) {
@@ -308,7 +308,7 @@ export function PropertyMap({ filters, onMarkerClick }: PropertyMapProps) {
         const band = document.createElement('div');
         band.style.cssText = 'position:relative;height:4px;border-radius:2px;background:var(--line);margin-top:6px';
         const fill = document.createElement('div');
-        fill.style.cssText = `position:absolute;top:0;bottom:0;left:${Math.max(0, loPct)}%;width:${Math.min(100 - loPct, hiPct - loPct)}%;border-radius:2px;background:rgba(15,157,110,.14)`;
+        fill.style.cssText = `position:absolute;top:0;bottom:0;left:${Math.max(0, loPct)}%;width:${Math.min(100 - loPct, hiPct - loPct)}%;border-radius:2px;background:rgba(14,122,82,.12)`;
         band.append(fill);
         const mark = document.createElement('div');
         mark.style.cssText = `position:absolute;top:-3px;left:44%;width:2px;height:10px;border-radius:1px;background:var(--pass-hi)`;

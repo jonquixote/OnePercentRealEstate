@@ -42,12 +42,12 @@ export function PriceSparkline({ propertyId }: { propertyId: string | number }) 
                 <polyline
                     points={xy.join(' ')}
                     fill="none"
-                    stroke={falling ? 'var(--brass-hi, #d4a373)' : 'var(--pass, #0e9f6e)'}
+                    stroke={falling ? 'var(--brass-hi, #c9a35c)' : 'var(--pass, #0e7a52)'}
                     strokeWidth="2"
                     strokeLinejoin="round"
                     strokeLinecap="round"
                 />
-                <circle cx={xy[xy.length - 1].split(',')[0]} cy={xy[xy.length - 1].split(',')[1]} r="2.5" fill={falling ? 'var(--brass-hi, #d4a373)' : 'var(--pass, #0e9f6e)'} />
+                <circle cx={xy[xy.length - 1].split(',')[0]} cy={xy[xy.length - 1].split(',')[1]} r="2.5" fill={falling ? 'var(--brass-hi, #c9a35c)' : 'var(--pass, #0e7a52)'} />
             </svg>
             <span className="text-xs tabular-nums text-muted-foreground">{priced.length} price points</span>
         </span>

@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 86400;
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -52,6 +51,23 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
         `, [zipcode]);
         const acs = acsResult.rows[0] || null;
 
+        // Fetch similar ZCTAs by median household income
+        let similarZips: any[] = [];
+        if (acs?.median_hh_income) {
+            const income = Number(acs.median_hh_income);
+            const simRes = await client.query(`
+                SELECT zcta, median_hh_income, median_home_value, median_gross_rent, population
+                FROM zcta_demographics
+                WHERE zcta != $1
+                  AND median_hh_income BETWEEN $2 AND $3
+                  AND median_home_value IS NOT NULL
+                  AND acs_year = (SELECT MAX(acs_year) FROM zcta_demographics zd2 WHERE zd2.zcta = zcta_demographics.zcta)
+                ORDER BY abs(median_hh_income - $4), population DESC
+                LIMIT 5
+            `, [zipcode, income * 0.8, income * 1.2, income]);
+            similarZips = simRes.rows;
+        }
+
         // Fetch sold listings stats (90 days)
         const soldRes = await client.query(`
             SELECT count(*)::int AS count,
@@ -92,7 +108,7 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
         const floodRow = floodRes.rows[0] || null;
         const floodRiskLabel = floodRow?.nri_overall_rating || null;
 
-        // Get place name from first listing city/state
+        // Get place name
         const placeRes = await client.query(`
             SELECT raw_data->>'city' AS city, raw_data->>'state' AS state
             FROM listings
@@ -218,11 +234,36 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                             <p className="mt-1 text-[12px]" style={{ color: 'var(--haze)' }}>median sold $/sqft</p>
                         </div>
                         <Link
-                            href={`/search?pmin=${Math.max(0, Number(agg.med_price || 0) * 0.5).toFixed(0)}&pmax=${(Number(agg.med_price || 0) * 1.5).toFixed(0)}`}
+                            href={`/search?q=${zipcode}`}
                             className="ml-auto text-[13px]" style={{ color: 'var(--pass-hi)' }}>
                             Browse the {agg.total_listings} listings in {zipcode} →
                         </Link>
                     </section>
+
+                    {/* ── Similar markets ──────────────────────────────────── */}
+                    {similarZips.length > 0 && (
+                        <section className="py-14" style={{ borderTop: '1px solid var(--line)' }}>
+                            <h2 className="prov mb-8 inline-block">areas like this</h2>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {similarZips.map((z: any) => (
+                                    <Link
+                                        key={z.zcta}
+                                        href={`/market/${z.zcta}`}
+                                        className="rounded-[var(--r-panel)] p-5 transition-colors hover:bg-ink-2"
+                                        style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}
+                                    >
+                                        <p className="figure text-sm" style={{ color: 'var(--text)' }}>{z.zcta}</p>
+                                        <div className="mt-3 space-y-1 text-[12px]" style={{ color: 'var(--haze)' }}>
+                                            <p>Median income: <span className="figure">{z.median_hh_income ? usd0.format(Number(z.median_hh_income)) : '—'}</span></p>
+                                            <p>Home value: <span className="figure">{z.median_home_value ? usd0.format(Number(z.median_home_value)) : '—'}</span></p>
+                                            <p>Gross rent: <span className="figure">{z.median_gross_rent ? usd0.format(Number(z.median_gross_rent)) : '—'}/mo</span></p>
+                                            {z.population && <p>Population: <span className="figure">{num.format(Number(z.population))}</span></p>}
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                 </div>
             </div>

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Header from '@/components/Header';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 
@@ -32,7 +31,6 @@ export default function SettingsPage() {
 
     return (
         <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
-            <Header />
             <div className="mx-auto max-w-3xl px-6 py-14">
                 <h1 style={{ font: '400 var(--display-2)/1.1 var(--font-display)' }}>
                     Account Settings

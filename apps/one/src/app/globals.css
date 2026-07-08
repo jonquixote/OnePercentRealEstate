@@ -6,14 +6,15 @@
 /*
  * one.octavo.press — "Private Bank for Property" design system.
  *
- * Deep ink canvas (warm near-black); the rule threshold is the brand's one
- * memorable image, drawn literally (hero tape, market pulse, per-deal gauge).
- * Emerald = clears, brass = below/caution. Fraunces serif for display;
- * Geist sans for UI; JetBrains Mono for aligned figures.
+ * Warm eggshell canvas (wine-menu restraint); the rule threshold is the
+ * brand's one memorable image, drawn literally (hero tape, market pulse,
+ * per-deal gauge). Emerald = clears, brass = below/caution. Fraunces serif
+ * for display; Geist sans for UI; JetBrains Mono for aligned figures.
  *
- * Dark by default. shadcn semantic tokens (background/card/border/...) resolve
- * to the ink palette. Line tokens (pass/brass/ink/line/mat) are exposed to
- * Tailwind as utilities (bg-pass, text-brass, border-line, ...).
+ * Light / eggshell by default. shadcn semantic tokens (background/card/
+ * border/...) resolve to the eggshell palette. Line tokens (pass/brass/ink/
+ * line/mat) are exposed to Tailwind as utilities (bg-pass, text-brass,
+ * border-line, ...).
  */
 @theme inline {
   --color-background: var(--background);
@@ -77,26 +78,26 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ---- the line palette (raw) — "Private Bank" warm ink ---- */
+/* ---- the line palette (raw) — "Private Bank" eggshell / wine-menu ---- */
 :root {
-  --ink:        #0b0d10;   /* page — near-black, blue-warm       */
-  --ink-2:      #101318;   /* section alternation                */
-  --ink-panel:  #161a21;   /* interactive panels / inputs        */
-  --ink-mat:    #0e1014;   /* photo mats                         */
-  --line:       #232833;   /* 1px rules, borders                 */
-  --line-soft:  rgba(255, 255, 255, 0.045);
-  --line-hi:    #323a48;   /* hover/focus rules                  */
-  --text:       #e8e6e1;   /* warm off-white body                 */
-  --pass:       #0f9d6e;
-  --pass-hi:    #34d399;
-  --pass-dim:   rgba(15,157,110,.14);
-  --brass:      #c9a35c;   /* champagne brass                    */
-  --brass-hi:   #e3c184;
-  --brass-dim:  rgba(201,163,92,.13);
-  --haze:       #9aa1ad;   /* secondary text                     */
-  --mute:       #5c6470;   /* captions, provenance               */
-  --loss:       #e5484d;   /* negatives only                     */
-  --info:       #6ca0f6;   /* links, neutral-informational       */
+  --ink:        #faf7f2;   /* page — warm eggshell               */
+  --ink-2:      #f2ece3;   /* section alternation — warm paper   */
+  --ink-panel:  #fdfcf9;   /* interactive panels / inputs        */
+  --ink-mat:    #efe9df;   /* photo mats — warm mat              */
+  --line:       #e2dccf;   /* 1px rules, borders — warm gray     */
+  --line-soft:  rgba(42, 37, 32, 0.05);
+  --line-hi:    #cabfa9;   /* hover/focus rules                  */
+  --text:       #2a2520;   /* warm near-black body               */
+  --pass:       #0e7a52;   /* deep emerald                       */
+  --pass-hi:    #1f9d6e;
+  --pass-dim:   rgba(14,122,82,.12);
+  --brass:      #9c7a34;   /* muted champagne brass              */
+  --brass-hi:   #c9a35c;
+  --brass-dim:  rgba(156,122,52,.14);
+  --haze:       #8a7f6e;   /* secondary text — warm gray         */
+  --mute:       #a99e8c;   /* captions, provenance               */
+  --loss:       #c23b34;   /* muted brick red — negatives only   */
+  --info:       #3f6fa3;   /* muted slate blue — links           */
 
   /* --- Typography families --- */
   --font-display: var(--font-fraunces), "Fraunces", ui-serif, Georgia, serif;
@@ -115,7 +116,7 @@
   --r-panel:    14px;
   --r-chip:     999px;
   --r-mat:      10px;
-  --shadow-pop: 0 12px 40px rgba(0,0,0,.45);
+  --shadow-pop: 0 12px 40px rgba(42, 37, 32, 0.12);
 
   /* --- Motion --- */
   --ease:      cubic-bezier(.22,.8,.24,1);
@@ -123,70 +124,40 @@
   --t-slow:    320ms;
 }
 
-/* ---- semantic tokens: DARK by default (ink canvas) ---- */
+/* ---- semantic tokens: eggshell / wine-menu (light) by default ---- */
 :root {
   --radius: 0.75rem;
-  --background:     #0b0d10;
-  --foreground:     #e8e6e1;
-  --card:           #161a21;
-  --card-foreground:#e8e6e1;
-  --popover:        #101318;
-  --popover-foreground:#e8e6e1;
-  --primary:        #0f9d6e;
-  --primary-foreground:#04140d;
-  --secondary:      #1a1f28;
-  --secondary-foreground:#e8e6e1;
-  --muted:          #1a1f28;
-  --muted-foreground:#5c6470;
-  --accent:         #34d399;
-  --accent-foreground:#04140d;
-  --destructive:    #e5484d;
-  --border:         #232833;
-  --input:          #323a48;
-  --ring:           #34d399;
-  --chart-1:        #34d399;
-  --chart-2:        #e3c184;
-  --chart-3:        #6ca0f6;
-  --chart-4:        #c9a35c;
-  --chart-5:        #0f9d6e;
-  --sidebar:        #0e1014;
-  --sidebar-foreground:#e8e6e1;
-  --sidebar-primary:#0f9d6e;
-  --sidebar-primary-foreground:#04140d;
-  --sidebar-accent: #1a1f28;
-  --sidebar-accent-foreground:#e8e6e1;
-  --sidebar-border: #232833;
-  --sidebar-ring:   #34d399;
-}
-
-/* next-themes adds .dark; must mirror :root for dark: variants. */
-.dark {
-  --background:     #0b0d10;
-  --foreground:     #e8e6e1;
-  --card:           #161a21;
-  --card-foreground:#e8e6e1;
-  --popover:        #101318;
-  --popover-foreground:#e8e6e1;
-  --primary:        #0f9d6e;
-  --primary-foreground:#04140d;
-  --secondary:      #1a1f28;
-  --secondary-foreground:#e8e6e1;
-  --muted:          #1a1f28;
-  --muted-foreground:#5c6470;
-  --accent:         #34d399;
-  --accent-foreground:#04140d;
-  --destructive:    #e5484d;
-  --border:         #232833;
-  --input:          #323a48;
-  --ring:           #34d399;
-  --sidebar:        #0e1014;
-  --sidebar-foreground:#e8e6e1;
-  --sidebar-primary: #0f9d6e;
-  --sidebar-primary-foreground:#04140d;
-  --sidebar-accent:  #1a1f28;
-  --sidebar-accent-foreground:#e8e6e1;
-  --sidebar-border: #232833;
-  --sidebar-ring:   #34d399;
+  --background:     #faf7f2;
+  --foreground:     #2a2520;
+  --card:           #fdfcf9;
+  --card-foreground:#2a2520;
+  --popover:        #fdfcf9;
+  --popover-foreground:#2a2520;
+  --primary:        #0e7a52;
+  --primary-foreground:#fbfaf7;
+  --secondary:      #f2ece3;
+  --secondary-foreground:#2a2520;
+  --muted:          #f2ece3;
+  --muted-foreground:#8a7f6e;
+  --accent:         #efe7da;
+  --accent-foreground:#2a2520;
+  --destructive:    #c23b34;
+  --border:         #e2dccf;
+  --input:          #ddd5c5;
+  --ring:           #0e7a52;
+  --chart-1:        #1f9d6e;
+  --chart-2:        #c9a35c;
+  --chart-3:        #3f6fa3;
+  --chart-4:        #9c7a34;
+  --chart-5:        #0e7a52;
+  --sidebar:        #f2ece3;
+  --sidebar-foreground:#2a2520;
+  --sidebar-primary:#0e7a52;
+  --sidebar-primary-foreground:#fbfaf7;
+  --sidebar-accent: #efe7da;
+  --sidebar-accent-foreground:#2a2520;
+  --sidebar-border: #e2dccf;
+  --sidebar-ring:   #0e7a52;
 }
 
 @layer base {
@@ -208,7 +179,7 @@
   }
   ::selection {
     background: var(--pass);
-    color: #fff;
+    color: #fbfaf7;
   }
   /* tabular numerals everywhere mono is used — the "tape" feel */
   .font-mono {
@@ -222,7 +193,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px 12px;
-  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 12px 30px -12px rgba(42, 37, 32, 0.18);
 }
 .op-map-popup .maplibregl-popup-tip {
   border-top-color: var(--ink-panel) !important;
@@ -238,7 +209,7 @@
 .rule-line {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--pass) 18%, var(--pass) 82%, transparent);
-  box-shadow: 0 0 14px 0 rgba(15,157,110,.35);
+  box-shadow: 0 0 14px 0 rgba(14,122,82,.30);
 }
 
 /* Confidence band — every model number carries its p10–p90 range */
@@ -255,9 +226,9 @@
   color: var(--mute);
   padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--r-chip);
 }
-.prov--real  { color: var(--pass-hi);  border-color: rgba(15,157,110,.35); }
+.prov--real  { color: var(--pass-hi);  border-color: rgba(14,122,82,.35); }
 .prov--est   { color: var(--haze); }
-.prov--brass { color: var(--brass-hi); border-color: rgba(201,163,92,.35); }
+.prov--brass { color: var(--brass-hi); border-color: rgba(156,122,52,.35); }
 
 /* Photo mat */
 .mat {

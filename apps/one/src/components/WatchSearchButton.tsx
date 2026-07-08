@@ -60,7 +60,7 @@ export function WatchSearchButton({ filters }: { filters: FilterState }) {
             className={`inline-flex items-center gap-2 px-3 h-9 rounded-full text-sm font-medium transition-colors ${
                 state === 'saved'
                     ? 'bg-pass text-white'
-                    : 'bg-white/[0.05] text-haze hover:bg-white/[0.1] border border-line'
+                    : 'bg-ink-2/80 text-haze hover:bg-ink-2 border border-line'
             }`}
             title="Get alerted when new listings (and price cuts) match these filters"
         >

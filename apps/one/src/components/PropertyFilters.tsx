@@ -188,7 +188,7 @@ export function PropertyFilters() {
                                     type="checkbox"
                                     checked={filters.showSold}
                                     onChange={(e) => setQs({ sold: e.target.checked })}
-                                    className="rounded border-line bg-white/10 accent-[#0e9f6e]"
+                                    className="rounded border-line bg-ink-2 accent-[#0e7a52]"
                                 />
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -197,7 +197,7 @@ export function PropertyFilters() {
                                     type="checkbox"
                                     checked={filters.onlyOnePercentRule}
                                     onChange={(e) => setQs({ op: e.target.checked })}
-                                    className="rounded border-line bg-white/10 accent-[#0e9f6e]"
+                                    className="rounded border-line bg-ink-2 accent-[#0e7a52]"
                                 />
                             </label>
                         </div>
@@ -231,7 +231,7 @@ export function PropertyFilters() {
                                         onClick={() => setQs({ beds: num })}
                                         className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${filters.minBeds === num
                                             ? 'bg-pass text-white'
-                                            : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                            : 'bg-ink-2/80 text-foreground hover:bg-ink-2'
                                             }`}
                                     >
                                         {num}+
@@ -250,7 +250,7 @@ export function PropertyFilters() {
                                         onClick={() => setQs({ baths: num })}
                                         className={`px-2 h-8 rounded-full text-sm font-medium transition-colors ${filters.minBaths === num
                                             ? 'bg-pass text-white'
-                                            : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                            : 'bg-ink-2/80 text-foreground hover:bg-ink-2'
                                             }`}
                                     >
                                         {num}+
@@ -297,8 +297,8 @@ export function PropertyFilters() {
                                             filters.propertyType === opt.value
                                                 ? 'bg-pass text-white'
                                                 : opt.isRentable
-                                                    ? 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
-                                                    : 'bg-white/[0.02] text-muted-foreground hover:bg-white/[0.06]'
+                                                    ? 'bg-ink-2/80 text-foreground hover:bg-ink-2'
+                                                    : 'bg-ink-2/60 text-muted-foreground hover:bg-ink-2/80'
                                         }`}
                                     >
                                         {opt.label}
@@ -323,7 +323,7 @@ export function PropertyFilters() {
                                         className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
                                             filters.strategy === opt.value
                                                 ? 'bg-pass text-white'
-                                                : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                                : 'bg-ink-2/80 text-foreground hover:bg-ink-2'
                                         }`}
                                     >
                                         {opt.label}
@@ -350,7 +350,7 @@ export function PropertyFilters() {
                                         className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
                                             filters.saleType === opt.value
                                                 ? 'bg-amber-600 text-white'
-                                                : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                                : 'bg-ink-2/80 text-foreground hover:bg-ink-2'
                                         }`}
                                     >
                                         {opt.label}
@@ -368,7 +368,7 @@ export function PropertyFilters() {
                                     className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
                                         filters.hasPriceCut
                                             ? 'bg-brass text-zinc-950'
-                                            : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                            : 'bg-ink-2/80 text-foreground hover:bg-ink-2'
                                     }`}
                                     aria-pressed={filters.hasPriceCut}
                                 >
@@ -385,7 +385,7 @@ export function PropertyFilters() {
                                         className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
                                             filters.domMin === opt.value
                                                 ? 'bg-brass text-zinc-950'
-                                                : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                                : 'bg-ink-2/80 text-foreground hover:bg-ink-2'
                                         }`}
                                         aria-pressed={filters.domMin === opt.value}
                                     >
@@ -402,7 +402,7 @@ export function PropertyFilters() {
                                         className={`px-3 h-8 rounded-full text-sm font-medium transition-colors ${
                                             filters.hoaMax === opt.value
                                                 ? 'bg-pass text-white'
-                                                : 'bg-white/[0.05] text-haze hover:bg-white/[0.1]'
+                                                : 'bg-ink-2/80 text-foreground hover:bg-ink-2'
                                         }`}
                                         aria-pressed={filters.hoaMax === opt.value}
                                     >
@@ -419,7 +419,7 @@ export function PropertyFilters() {
                                     type="checkbox"
                                     checked={filters.showSold}
                                     onChange={(e) => setQs({ sold: e.target.checked })}
-                                    className="rounded border-line bg-white/10 accent-[#0e9f6e]"
+                                    className="rounded border-line bg-ink-2 accent-[#0e7a52]"
                                 />
                                 <span className="text-haze">Show Sold Listings</span>
                             </label>
@@ -428,7 +428,7 @@ export function PropertyFilters() {
                                     type="checkbox"
                                     checked={filters.onlyOnePercentRule}
                                     onChange={(e) => setQs({ op: e.target.checked })}
-                                    className="rounded border-line bg-white/10 accent-[#0e9f6e]"
+                                    className="rounded border-line bg-ink-2 accent-[#0e7a52]"
                                 />
                                 <span className="font-medium text-pass-hi">1% Rule Deals Only</span>
                             </label>

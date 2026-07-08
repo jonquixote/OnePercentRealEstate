@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Header from '@/components/Header';
 import Link from 'next/link';
 
 interface SavedSearch {
@@ -61,7 +60,6 @@ export default function AccountPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-ink">
-        <Header />
         <div className="mx-auto max-w-4xl px-6 py-16">
           <p style={{ color: 'var(--haze)' }}>Loading…</p>
         </div>
@@ -72,7 +70,6 @@ export default function AccountPage() {
   if (!user) {
     return (
       <div className="min-h-screen bg-ink">
-        <Header />
         <div className="mx-auto max-w-4xl px-6 py-16 text-center">
           <h1 className="text-2xl font-semibold" style={{ color: 'var(--text)' }}>Sign in to view your account</h1>
           <p className="mt-2" style={{ color: 'var(--haze)' }}>
@@ -85,7 +82,6 @@ export default function AccountPage() {
 
   return (
     <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
-      <Header />
       <div className="mx-auto max-w-4xl px-6 py-16">
         {/* Profile header */}
         <header className="flex items-baseline justify-between pb-8" style={{ borderBottom: '1px solid var(--line)' }}>

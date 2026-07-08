@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useStats } from '@oper/api-client';
 import { PropertyCard } from '@/components/ui/card';
-import Header from '@/components/Header';
 import { Loader2, Search, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
 import Link from 'next/link';
 import { PropertyMap } from '@/components/PropertyMap';
@@ -132,7 +131,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-ink font-sans text-foreground">
-      <Header />
       <HomeHero
         stats={stats ?? null}
         priceCuts={priceCuts}

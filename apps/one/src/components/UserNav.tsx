@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ThemeToggle } from '@oper/primitives';
 
 interface Me { id: string; email: string; tier: 'free' | 'pro' }
 
@@ -30,7 +29,6 @@ export default function UserNav() {
 
     return (
         <div className="flex items-center gap-3">
-            <ThemeToggle />
             {!loaded ? null : user ? (
                 <div className="flex items-center gap-3">
                     <span className="hidden sm:inline text-sm text-haze" title={user.email}>
@@ -39,7 +37,7 @@ export default function UserNav() {
                     </span>
                     <button
                         onClick={logout}
-                        className="text-sm font-semibold leading-6 text-white hover:text-emerald-400 transition-colors"
+                        className="text-sm font-semibold leading-6 text-haze hover:text-foreground transition-colors"
                     >
                         Log out
                     </button>
@@ -47,7 +45,7 @@ export default function UserNav() {
             ) : (
                 <Link
                     href="/login"
-                    className="text-sm font-semibold leading-6 text-white hover:text-emerald-400 transition-colors flex items-center"
+                    className="text-sm font-semibold leading-6 text-haze hover:text-foreground transition-colors flex items-center"
                 >
                     Log in <span aria-hidden="true" className="ml-1">&rarr;</span>
                 </Link>

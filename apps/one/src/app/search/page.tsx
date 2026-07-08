@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useQueryStates } from 'nuqs';
 import { Loader2 } from 'lucide-react';
-import Header from '@/components/Header';
 import { PropertyMap } from '@/components/PropertyMap';
 import { SearchCard } from '@/components/search/SearchCard';
 import { WatchSearchButton } from '@/components/WatchSearchButton';
@@ -154,7 +153,6 @@ export default function SearchPage() {
 
   return (
     <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
-      <Header />
 
       {/* sticky pill toolbar */}
       <div

@@ -1,7 +1,6 @@
 import pool from '@/lib/db';
 import { getMarketTrends } from '@/lib/fred';
 import MarketTrends from '@/components/MarketTrends';
-import Header from '@/components/Header';
 import PortfolioCharts from '@/components/PortfolioCharts';
 import { TrendingUp, DollarSign, Home, PieChart as PieChartIcon } from 'lucide-react';
 
@@ -56,7 +55,6 @@ export default async function AnalyticsPage() {
 
     return (
         <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
-            <Header />
             <div className="mx-auto max-w-7xl px-6 py-10">
                 <header className="mb-8 flex items-center justify-between">
                     <div>
