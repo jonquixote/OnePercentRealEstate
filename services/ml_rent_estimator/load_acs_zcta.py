@@ -85,6 +85,94 @@ def fetch(year: int, api_key: str) -> list[dict[str, Any]]:
     return rows
 
 
+# State FIPS codes (50 states + DC). Tract queries require an `in=state:`
+# scope — the API rejects a nationwide `for=tract:*`.
+STATE_FIPS = [f"{i:02d}" for i in range(1, 57)]
+# 03, 07, 14, 43, 52 are unassigned FIPS — the API 204s/errors, we skip.
+
+TRACT_VARIABLES = [
+    "B19013_001E",  # median household income
+    "B25064_001E",  # median gross rent
+    "B25077_001E",  # median home value
+    "B01003_001E",  # population
+]
+
+
+def fetch_tracts(year: int, api_key: str) -> list[dict[str, Any]]:
+    """Fetch ACS 5-year tract data for every state. geoid = state+county+tract.
+    Returns dicts: geoid, acs_year, income, rent, value, population."""
+    rows: list[dict[str, Any]] = []
+    for fips in STATE_FIPS:
+        params = "?get=" + ",".join(TRACT_VARIABLES) + f"&for=tract:*&in=state:{fips}"
+        if api_key:
+            params += f"&key={api_key}"
+        url = f"https://api.census.gov/data/{year}/acs/acs5{params}"
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                if resp.status == 204:
+                    continue
+                body = resp.read().decode()
+            if not body.strip() or body.lstrip().startswith("<"):
+                continue
+            raw = json.loads(body)
+        except Exception as exc:  # unassigned FIPS / transient — skip, keep going
+            print(f"  state {fips} {year}: {str(exc)[:80]}", file=sys.stderr)
+            continue
+        header = raw[0]
+        si, ci, ti = (header.index(k) for k in ("state", "county", "tract"))
+        for row in raw[1:]:
+            geoid = f"{row[si]}{row[ci]}{row[ti]}"
+            if len(geoid) != 11:
+                continue
+            entry: dict[str, Any] = {"geoid": geoid, "acs_year": year}
+            for i, var in enumerate(TRACT_VARIABLES):
+                entry[var] = _null_sentinels(row[i])
+            rows.append(entry)
+    print(f"  fetched {len(rows)} tract rows for {year}", file=sys.stderr)
+    return rows
+
+
+def _upsert_tracts(rows: list[dict[str, Any]]) -> None:
+    import psycopg2
+    from psycopg2.extras import execute_values
+
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    try:
+        with conn.cursor() as cur:
+            execute_values(
+                cur,
+                """INSERT INTO tract_demographics
+                       (geoid, acs_year, median_hh_income, median_gross_rent,
+                        median_home_value, population)
+                   VALUES %s
+                   ON CONFLICT (geoid, acs_year) DO UPDATE SET
+                       median_hh_income  = COALESCE(EXCLUDED.median_hh_income, tract_demographics.median_hh_income),
+                       median_gross_rent = COALESCE(EXCLUDED.median_gross_rent, tract_demographics.median_gross_rent),
+                       median_home_value = COALESCE(EXCLUDED.median_home_value, tract_demographics.median_home_value),
+                       population        = COALESCE(EXCLUDED.population, tract_demographics.population)""",
+                [
+                    (r["geoid"], r["acs_year"], r["B19013_001E"], r["B25064_001E"],
+                     r["B25077_001E"], r["B01003_001E"])
+                    for r in rows
+                ],
+                page_size=5000,
+            )
+        conn.commit()
+        print(f"upserted {len(rows)} tract rows", file=sys.stderr)
+    finally:
+        conn.close()
+
+
+def _arg_year(default_years: tuple[int, ...]) -> tuple[int, ...]:
+    """--year YYYY overrides the default year list (P3 loads 2019)."""
+    if "--year" in sys.argv:
+        i = sys.argv.index("--year")
+        if i + 1 < len(sys.argv):
+            return (int(sys.argv[i + 1]),)
+    return default_years
+
+
 def fetch_fallback_csv() -> list[dict[str, Any]]:
     """Fetch ACS data from the MichaelMinn pre-processed CSV (no key needed)."""
     url = "https://michaelminn.net/tutorials/data/2019-2023-acs-zcta.csv"
@@ -128,9 +216,23 @@ def main() -> None:
     api_key = os.environ.get("CENSUS_API_KEY")
     rows: list[dict[str, Any]] = []
 
+    # Tract mode (rent v2 P1/P3): per-state ACS tract load → tract_demographics.
+    if "--geo" in sys.argv and "tract" in sys.argv:
+        years = _arg_year((2023,))
+        trows: list[dict[str, Any]] = []
+        for year in years:
+            trows = fetch_tracts(year, api_key or "")
+            if trows:
+                _upsert_tracts(trows)
+        if not trows:
+            print("ERROR: no tract rows fetched", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    zcta_years = _arg_year((2024, 2023))
     # Tier 1: Try API with key (if available)
     if api_key:
-        for year in (2024, 2023):
+        for year in zcta_years:
             try:
                 rows = fetch(year, api_key)
                 if rows:
@@ -140,7 +242,7 @@ def main() -> None:
 
     # Tier 2: Try API without key (Census free tier: 500 req/day/IP)
     if not rows:
-        for year in (2024, 2023):
+        for year in zcta_years:
             try:
                 rows = fetch(year, "")
                 if rows:

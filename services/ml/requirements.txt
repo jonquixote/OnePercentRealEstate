@@ -13,3 +13,6 @@ numpy==1.26.4
 # Wave 2: rent model v1 (training + quantile inference). Needs libgomp1 at
 # runtime — provided transitively by build-essential in the Dockerfile.
 lightgbm==4.5.0
+# rent model v2 (P1): H3 hexes for the hyperlocal market-stats surface +
+# hex TE cascade. Pure wheel, ~1 MB, no Postgres extension required.
+h3==4.1.0

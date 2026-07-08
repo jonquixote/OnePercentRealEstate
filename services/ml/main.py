@@ -363,6 +363,16 @@ async def run_eval() -> OpResponse:
     return OpResponse(ok=ok, lines=lines, exit_code=exit_code, alert=alert)
 
 
+@app.post("/ops/refresh-market-stats", response_model=OpResponse)
+async def refresh_market_stats() -> OpResponse:
+    """Rebuild the H3 market-stats surface + address rent memory (rent v2 P1/P2).
+    Triggered nightly by the ml-scheduler."""
+    ok, lines, code = await _run_subprocess(
+        ["python", "-m", "ml_rent_estimator.market_stats"], timeout_s=600.0
+    )
+    return OpResponse(ok=ok, lines=lines, exit_code=code, alert=not ok)
+
+
 @app.post("/ops/run-train", response_model=OpResponse)
 async def run_train() -> OpResponse:
     """Wave 2 nightly retrain: train into a staging dir, run the eval gate
