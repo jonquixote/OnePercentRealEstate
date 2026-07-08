@@ -98,14 +98,13 @@ export default function Header() {
           </Link>
         </div>
 
-        {/* User nav */}
-        <div className="hidden lg:flex items-center">
+        {/* User nav — single instance, hoisted so responsive blocks don't duplicate */}
+        <div className="flex items-center">
           <UserNav />
         </div>
 
         {/* Mobile toggle */}
         <div className="flex lg:hidden ml-auto items-center gap-3">
-          <UserNav />
           <button
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}

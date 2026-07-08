@@ -407,7 +407,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 3G
+          # 4G (was 3G): the nightly retrain spawns train_v1 as a subprocess
+          # sharing this cgroup with 3 uvicorn workers that each cache the
+          # model — 3G OOM-killed the retrain on 2026-07-08. Host has ~7G
+          # available headroom.
+          memory: 4G
           cpus: '2'
     logging:
       driver: "json-file"

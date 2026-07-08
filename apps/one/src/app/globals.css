@@ -203,6 +203,26 @@
 /* the dashed rule line + glow, reusable */
 
 
+/* Display headings — the Fraunces frontispiece, as a utility so pages
+   don't each re-inline `font: 400 var(--display-1)/… var(--font-display)`.
+   These classes were referenced by playbook/calculator/portfolio/comps
+   before they existed, so those H1s silently rendered browser-default
+   (found 2026-07-08). */
+.display-1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--display-1);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+}
+.display-2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--display-2);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+}
+
 /* ---- Signature pieces ("Private Bank for Property") ---- */
 
 /* The Rule Line — engraved hairline with emerald glow */

@@ -19,8 +19,9 @@ describe('classifyMlError', () => {
     expect(classifyMlError('ml 400: latitude and longitude required')).toBe('permanent');
   });
 
-  it('classifies ml 500 (estimator raised on THIS row) as permanent', () => {
-    expect(classifyMlError('ml 500: estimator error: bad sqft')).toBe('permanent');
+  it('classifies ml 500 as transient — a broken deploy 500s on EVERY row (2026-07-08: 25K rows condemned with the breaker never tripping)', () => {
+    expect(classifyMlError('ml 500: Internal Server Error')).toBe('transient');
+    expect(classifyMlError('ml 500: estimator error: bad sqft')).toBe('transient');
   });
 
   it('classifies response-contract violations as permanent', () => {

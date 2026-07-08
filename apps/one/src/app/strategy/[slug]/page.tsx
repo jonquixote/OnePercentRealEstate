@@ -118,6 +118,12 @@ const STRATEGIES: Record<string, {
   },
 };
 
+// Content is fully static — prerender all four at build time instead of
+// rendering on demand. Unknown slugs still 404 via notFound() below.
+export function generateStaticParams() {
+  return Object.keys(STRATEGIES).map((slug) => ({ slug }));
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const s = STRATEGIES[slug];

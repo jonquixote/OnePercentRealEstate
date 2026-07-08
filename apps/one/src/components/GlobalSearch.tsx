@@ -51,14 +51,20 @@ export default function GlobalSearch({ variant = 'header', placeholder, classNam
   }
 
   return (
-    <form onSubmit={onSubmit} className={`flex items-center gap-2 rounded-full border border-line bg-card/80 px-3 py-1.5 focus-within:border-pass transition ${className}`}>
-      <Search className="h-4 w-4 text-haze" />
+    <form onSubmit={onSubmit} className={`flex items-center gap-2 rounded-full border border-line bg-card/80 px-4 py-2.5 focus-within:border-pass focus-within:ring-2 focus-within:ring-pass/20 transition ${className}`}>
+      <Search className="h-4 w-4 text-haze shrink-0" />
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={placeholder ?? 'City or ZIP'}
-        className="w-40 bg-transparent text-sm text-foreground placeholder:text-haze outline-none lg:w-56"
+        className="w-36 bg-transparent text-sm text-foreground placeholder:text-haze outline-none lg:w-52"
       />
+      <button
+        type="submit"
+        className="shrink-0 rounded-full bg-pass px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-pass-hi transition-colors"
+      >
+        Search
+      </button>
     </form>
   );
 }

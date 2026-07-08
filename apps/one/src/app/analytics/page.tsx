@@ -12,21 +12,23 @@ export default async function AnalyticsPage() {
     let properties: any[] = [];
 
     try {
-        const client = await pool.connect();
-        const propResult = await client.query(`
+        // Only the columns PortfolioCharts consumes — selecting raw_data
+        // (full JSONB) for 500 rows was serialized into client props for
+        // nothing. pool.query() checks a connection out and back in on its
+        // own, so there is no client to leak on throw.
+        const propResult = await pool.query(`
             SELECT
                 id,
                 address,
                 COALESCE(price, (raw_data->>'list_price')::numeric) as listing_price,
                 COALESCE(estimated_rent, (raw_data->>'estimated_rent')::numeric) as estimated_rent,
-                raw_data
+                listing_status
             FROM listings
             WHERE listing_type = 'for_sale' AND sale_type = 'standard'
             ORDER BY created_at DESC
             LIMIT 500
         `);
         properties = propResult.rows;
-        client.release();
     } catch (error) {
         console.error('Database error:', error);
     }

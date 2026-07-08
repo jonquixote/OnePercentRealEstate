@@ -24,11 +24,12 @@ export default function CompsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!query.trim()) {
-      setComps([]);
-      return;
-    }
+    let cancelled = false;
     const timer = setTimeout(async () => {
+      if (!query.trim()) {
+        if (!cancelled) setComps([]);
+        return;
+      }
       setLoading(true);
       setError('');
       try {
@@ -55,22 +56,24 @@ export default function CompsPage() {
             });
             if (!fallbackRes.ok) throw new Error('Query failed');
             const fbData = await fallbackRes.json();
-            setComps(fbData?.items ?? []);
+            if (!cancelled) setComps(fbData?.items ?? []);
           } else {
             throw new Error('No results');
           }
           return;
         }
         const data = await res.json();
-        setComps(data?.items ?? []);
-        if (!data?.items?.length) setError('No matching listings found.');
+        if (!cancelled) {
+          setComps(data?.items ?? []);
+          if (!data?.items?.length) setError('No matching listings found.');
+        }
       } catch {
-        setError('No matching listings found for that query.');
+        if (!cancelled) setError('No matching listings found for that query.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }, 400);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [query]);
 
   const stats = useMemo(() => {

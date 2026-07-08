@@ -27,7 +27,7 @@ export default function PortfolioCharts({ properties, stats }: PortfolioChartsPr
     }, []).sort((a: any, b: any) => a.sortKey - b.sortKey);
 
     const statusDistribution = data.reduce((acc: any[], p: any) => {
-        const status = p.status || 'Unknown';
+        const status = p.listing_status || p.status || 'Unknown';
         const existing = acc.find(i => i.name === status);
         if (existing) existing.value++;
         else acc.push({ name: status, value: 1 });
@@ -172,7 +172,6 @@ export default function PortfolioCharts({ properties, stats }: PortfolioChartsPr
                                 <Tooltip />
                                 <Legend />
                                 <Bar dataKey="Avg Rent" fill="#8884d8" />
-                                <Bar dataKey="HUD FMR (3BR)" fill="#82ca9d" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>

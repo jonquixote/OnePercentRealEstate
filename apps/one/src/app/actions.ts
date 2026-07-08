@@ -55,6 +55,7 @@ export async function getProperties(
         domMin?: number;
         hasPriceCut?: boolean;
         minRentConfidence?: number; // 0..1; 1 - band_spread/rent, clamped
+        q?: string;                 // free-text / ZIP search
     },
     cursor: string | null = null
 ) {
@@ -174,6 +175,10 @@ export async function getProperties(
             // a band are excluded by definition when the user asks for confidence.
             whereClauses.push(`(1 - LEAST((rent_high - rent_low) / NULLIF(estimated_rent, 0), 1)) >= $${paramIndex++}`);
             params.push(Math.min(filters.minRentConfidence, 1));
+        }
+        if (filters?.q && /^\d{5}$/.test(filters.q)) {
+            whereClauses.push(`zip_code = $${paramIndex++}`);
+            params.push(filters.q);
         }
 
         if (useCursor) {
@@ -484,7 +489,7 @@ export async function getDemographics(zipCode: string) {
                     SELECT t.nri_overall_rating
                     FROM census_tracts t
                     JOIN listings l ON l.census_tract = t.geoid
-                    WHERE l.raw_data->>'zip_code' = $1
+                    WHERE l.zip_code = $1
                       AND l.census_tract IS NOT NULL
                       AND t.nri_overall_score IS NOT NULL
                     ORDER BY t.nri_overall_score DESC
@@ -495,9 +500,9 @@ export async function getDemographics(zipCode: string) {
             const floodRow = floodRes.rows[0] || null;
             if (!acs && !floodRow) return null;
             return {
-                median_hh_income: acs?.median_hh_income ? Number(acs.median_hh_income) : null,
-                median_gross_rent: acs?.median_gross_rent ? Number(acs.median_gross_rent) : null,
-                median_home_value: acs?.median_home_value ? Number(acs.median_home_value) : null,
+                median_hh_income: acs?.median_hh_income != null ? Number(acs.median_hh_income) : null,
+                median_gross_rent: acs?.median_gross_rent != null ? Number(acs.median_gross_rent) : null,
+                median_home_value: acs?.median_home_value != null ? Number(acs.median_home_value) : null,
                 nri_rating: floodRow?.nri_overall_rating || null,
             };
         } finally {

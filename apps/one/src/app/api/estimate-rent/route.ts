@@ -61,9 +61,9 @@ export async function POST(req: Request) {
 
         // Resolve listing to get zip if only listing_id given
         if (!targetZip && listingId) {
-            const idRes = await pool.query(`SELECT raw_data->>'zip_code' AS zip FROM listings WHERE id = $1`, [listingId]);
+            const idRes = await pool.query(`SELECT zip_code FROM listings WHERE id = $1`, [listingId]);
             if (idRes.rows.length > 0) {
-                targetZip = idRes.rows[0].zip || zip_code;
+                targetZip = idRes.rows[0].zip_code || zip_code;
             }
         }
 
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
                 ? runQuery(`SELECT safmr FROM hud_safmr WHERE zip_code = $1 AND bedrooms = $2 ORDER BY fy DESC LIMIT 1`, [targetZip, (beds || 3)])
                 : emptyRows,
             targetZip
-                ? runQuery(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent) AS comps_median FROM listings WHERE raw_data->>'zip_code' = $1 AND estimated_rent IS NOT NULL AND estimated_rent > 0 AND (id::text != $2 OR $2 IS NULL)`, [targetZip, listingId || ''])
+                ? runQuery(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent) AS comps_median FROM listings WHERE zip_code = $1 AND estimated_rent IS NOT NULL AND estimated_rent > 0 AND (id::text != $2 OR $2 IS NULL)`, [targetZip, listingId || ''])
                 : emptyRows,
         ]);
 
@@ -87,11 +87,11 @@ export async function POST(req: Request) {
         const hRow = hudRows[0] || {};
         const cRow = compsRows[0] || {};
 
-        const estimate = lRow.estimated_rent ? Number(lRow.estimated_rent) : null;
-        const rentLow = lRow.rent_low ? Number(lRow.rent_low) : null;
-        const rentHigh = lRow.rent_high ? Number(lRow.rent_high) : null;
-        const hudFmr = hRow.safmr ? Number(hRow.safmr) : null;
-        const compsMedian = cRow.comps_median ? Number(cRow.comps_median) : null;
+        const estimate = lRow.estimated_rent != null ? Number(lRow.estimated_rent) : null;
+        const rentLow = lRow.rent_low != null ? Number(lRow.rent_low) : null;
+        const rentHigh = lRow.rent_high != null ? Number(lRow.rent_high) : null;
+        const hudFmr = hRow.safmr != null ? Number(hRow.safmr) : null;
+        const compsMedian = cRow.comps_median != null ? Number(cRow.comps_median) : null;
 
         const confidenceScore = estimate && rentLow != null && rentHigh != null
             ? Math.max(0, Math.min(1, 1 - (rentHigh - rentLow) / estimate))

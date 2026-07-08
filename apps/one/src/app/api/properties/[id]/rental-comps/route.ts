@@ -23,12 +23,12 @@ export async function GET(
     }
 
     const listing = listingRes.rows[0];
-    const lat = listing.latitude ? Number(listing.latitude) : null;
-    const lng = listing.longitude ? Number(listing.longitude) : null;
-    const beds = listing.bedrooms ? Number(listing.bedrooms) : null;
+    const lat = listing.latitude != null ? Number(listing.latitude) : null;
+    const lng = listing.longitude != null ? Number(listing.longitude) : null;
+    const beds = listing.bedrooms != null ? Number(listing.bedrooms) : null;
     const zip = listing.zip_code;
 
-    if (!lat || !lng) {
+    if (lat == null || lng == null) {
       return NextResponse.json({ error: 'Property has no coordinates' }, { status: 400 });
     }
 
@@ -61,22 +61,24 @@ export async function GET(
       address: r.address,
       city: r.city,
       zip_code: r.zip_code,
-      price: r.price ? Number(r.price) : null,
-      bedrooms: r.bedrooms ? Number(r.bedrooms) : null,
-      bathrooms: r.bathrooms ? Number(r.bathrooms) : null,
-      sqft: r.sqft ? Number(r.sqft) : null,
-      year_built: r.year_built ? Number(r.year_built) : null,
-      hoa_fee: r.hoa_fee ? Number(r.hoa_fee) : null,
-      days_on_market: r.days_on_market ? Number(r.days_on_market) : null,
+      price: r.price != null ? Number(r.price) : null,
+      bedrooms: r.bedrooms != null ? Number(r.bedrooms) : null,
+      bathrooms: r.bathrooms != null ? Number(r.bathrooms) : null,
+      sqft: r.sqft != null ? Number(r.sqft) : null,
+      year_built: r.year_built != null ? Number(r.year_built) : null,
+      hoa_fee: r.hoa_fee != null ? Number(r.hoa_fee) : null,
+      days_on_market: r.days_on_market != null ? Number(r.days_on_market) : null,
       source: r.source,
       listing_date: r.listing_date,
-      distance_meters: r.distance_meters ? Number(r.distance_meters) : null,
+      distance_meters: r.distance_meters != null ? Number(r.distance_meters) : null,
     }));
 
     const prices = comps.map((c: any) => c.price).filter(Boolean);
     const sortedPrices = [...prices].sort((a: number, b: number) => a - b);
     const medianRent = sortedPrices.length > 0
-      ? sortedPrices[Math.floor(sortedPrices.length / 2)]
+      ? sortedPrices.length % 2 === 0
+        ? (sortedPrices[sortedPrices.length / 2 - 1] + sortedPrices[sortedPrices.length / 2]) / 2
+        : sortedPrices[Math.floor(sortedPrices.length / 2)]
       : null;
     const ppsfList = comps
       .filter((c: any) => c.price && c.sqft)

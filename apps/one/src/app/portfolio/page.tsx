@@ -32,6 +32,11 @@ export default function PortfolioPage() {
           fetch('/api/watchlists'),
           fetch('/api/saved-searches'),
         ]);
+        if (wRes.status === 401 || sRes.status === 401) {
+          // Not authenticated — show sign-in prompt
+          setLoading(false);
+          return;
+        }
         if (wRes.ok) {
           const wData = await wRes.json();
           setWatchlists(Array.isArray(wData) ? wData : []);
@@ -41,7 +46,7 @@ export default function PortfolioPage() {
           setSavedSearches(Array.isArray(sData) ? sData : []);
         }
       } catch {
-        // not authenticated — show empty state
+        // Network error — show generic error, not sign-in prompt
       } finally {
         setLoading(false);
       }

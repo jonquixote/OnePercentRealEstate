@@ -6,6 +6,7 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import Json
 import os
+import datetime as dt
 import urllib.parse
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -263,6 +264,12 @@ def scrape_listings(req: ScrapeRequest):
                     sold_price = _num(row.get('sold_price'))
                     sold_date = _date(row.get('last_sold_date'))
                     list_price = _num(row.get('list_price'))
+                    # Source feeds placeholder/typo dates: a 2099-01-01
+                    # "pending" sentinel and outright future typos. A sale
+                    # cannot be in the future — reject so they never pollute
+                    # comps/ARV/market stats.
+                    if sold_date and sold_date > dt.date.today():
+                        sold_date = None
                     if not sold_price or sold_price <= 0 or not sold_date:
                         skipped += 1
                         continue

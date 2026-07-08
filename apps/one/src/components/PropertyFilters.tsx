@@ -28,6 +28,7 @@ export interface FilterState {
     hoaMax: number;      // 0 = off
     domMin: number;      // 0 = off
     hasPriceCut: boolean;
+    query: string;
 }
 
 /**
@@ -55,6 +56,7 @@ export const propertyFilterParsers = {
     hoamax: parseAsInteger.withDefault(0),
     dom: parseAsInteger.withDefault(0),
     cut: parseAsBoolean.withDefault(false),
+    q: parseAsString.withDefault(''),
 };
 
 /**
@@ -76,6 +78,7 @@ export function toFilterState(qs: {
     hoamax: number;
     dom: number;
     cut: boolean;
+    q: string;
 }): FilterState {
     return {
         showSold: qs.sold,
@@ -92,6 +95,7 @@ export function toFilterState(qs: {
         hoaMax: qs.hoamax,
         domMin: qs.dom,
         hasPriceCut: qs.cut,
+        query: qs.q,
     };
 }
 

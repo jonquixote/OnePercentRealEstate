@@ -25,13 +25,13 @@ export async function GET(
     }
 
     const listing = listingRes.rows[0];
-    const lat = listing.latitude ? Number(listing.latitude) : null;
-    const lng = listing.longitude ? Number(listing.longitude) : null;
-    const beds = listing.bedrooms ? Number(listing.bedrooms) : null;
+    const lat = listing.latitude != null ? Number(listing.latitude) : null;
+    const lng = listing.longitude != null ? Number(listing.longitude) : null;
+    const beds = listing.bedrooms != null ? Number(listing.bedrooms) : null;
     const city = listing.city;
     const state = listing.state;
 
-    if (!lat || !lng) {
+    if (lat == null || lng == null) {
       return NextResponse.json({ error: 'Property has no coordinates' }, { status: 400 });
     }
 
@@ -53,6 +53,9 @@ export async function GET(
         AND longitude BETWEEN $1::float - 0.5 AND $1::float + 0.5
         AND sold_price IS NOT NULL AND sold_price > 0
         AND sold_date IS NOT NULL
+        -- source feeds placeholder/typo future dates (2099-01-01 pending
+        -- sentinel, etc.) — they must not anchor ARV.
+        AND sold_date <= now()
       ORDER BY
         CASE WHEN city = $3 THEN 0 ELSE 1 END,
         ABS(bedrooms - COALESCE($4::numeric, bedrooms)) ASC,

@@ -19,7 +19,7 @@ import VerdictRailClient from '@/components/property/sections/VerdictRailClient'
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
 
-function buildSchemaData(property: any, id: string): RealEstateListingData | null {
+function buildSchemaData(property: Record<string, any>, id: string): RealEstateListingData | null {
     if (!property) return null;
     const raw = property.raw_data || {};
     const site = process.env.NEXT_PUBLIC_SITE_URL || 'https://one.octavo.press';
@@ -100,7 +100,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     );
 
     const hudRow = hudData && Array.isArray(hudData)
-        ? hudData.find((h: any) => Number(h.bedrooms) === (beds ?? 3))
+        ? hudData.find((h: { bedrooms: string; safmr: string }) => Number(h.bedrooms) === (beds ?? 3))
         : null;
     const hudFmr = hudRow ? Number(hudRow.safmr) : null;
 
@@ -273,7 +273,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                         <>
                                             <p className="mb-3 text-[13px] font-medium">Schools</p>
                                             <ul className="space-y-2 text-[14px]" style={{ color: 'var(--haze)' }}>
-                                                {schools.map((s: any, i: number) => (
+                                                {schools.map((s: { name?: string; distance?: string; rating?: string }, i: number) => (
                                                     <li key={i}>{s.name}{s.distance ? ` \u00b7 ${s.distance}` : ''}{s.rating ? ` \u00b7 rated ${s.rating}` : ''}</li>
                                                 ))}
                                             </ul>

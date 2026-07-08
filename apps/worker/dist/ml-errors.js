@@ -4,13 +4,21 @@
 // restart converted the in-flight batch into rows that no one ever
 // retried (171K of them by 2026-07-05). The taxonomy is deliberately
 // simple: an error is 'permanent' only when the evidence says THIS ROW
-// can never succeed (4xx = bad payload, 500 = estimator raised on this
-// input, contract violations). Everything else — connection refused,
-// timeouts, 502/503, DB blips — is 'transient': the row stays 'pending'
-// and the circuit breaker pauses the drain while the dependency heals.
+// can never succeed (4xx = bad payload, contract violations). Everything
+// else — connection refused, timeouts, 5xx, DB blips — is 'transient':
+// the row stays 'pending' and the circuit breaker pauses the drain while
+// the dependency heals.
+//
+// 500 is NOT permanent. It reads like "estimator raised on this input",
+// but a broken deploy makes the service 500 on EVERY input — and because
+// permanent failures bypass the breaker, that condemned 25K rows on
+// 2026-07-08 (dataset.py IndentationError) with the breaker never
+// tripping. A row that deterministically 500s just stays pending and
+// costs one retry per drain pass behind an open breaker — cheap; a
+// systemic outage marked permanent costs a manual requeue — not.
 export function classifyMlError(message) {
     const m = message.toLowerCase();
-    if (m.startsWith('ml 4') || m.startsWith('ml 500') || m.includes('ml returned')) {
+    if (m.startsWith('ml 4') || m.includes('ml returned')) {
         return 'permanent';
     }
     return 'transient';

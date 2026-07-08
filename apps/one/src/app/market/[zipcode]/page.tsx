@@ -2,7 +2,9 @@ import pool from '@/lib/db';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 
-export const dynamic = 'force-dynamic';
+// ISR: market stats move on scrape cadence, not per-request. force-dynamic
+// would silently disable revalidate — do not add it back alongside this.
+export const revalidate = 3600;
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -18,44 +20,96 @@ export async function generateMetadata({ params }: { params: Promise<{ zipcode: 
 export default async function MarketPage({ params }: { params: Promise<{ zipcode: string }> }) {
     const { zipcode } = await params;
 
-    const client = await pool.connect();
     try {
-        // Fetch hud_safmr — all bedroom sizes for this zip
-        const hudRes = await client.query(`
-            SELECT bedrooms, safmr FROM hud_safmr
-            WHERE zip_code = $1 AND fy = (SELECT MAX(fy) FROM hud_safmr WHERE zip_code = $1)
-            ORDER BY bedrooms
-        `, [zipcode]);
+        // Independent queries run through the pool (one connection each) —
+        // Promise.all over a single checked-out client only queues them
+        // serially inside node-postgres.
+        const [hudRes, modelRes, acsResult, soldRes, aggRes, floodRes, placeRes] = await Promise.all([
+            pool.query(`
+                SELECT bedrooms, safmr FROM hud_safmr
+                WHERE zip_code = $1 AND fy = (SELECT MAX(fy) FROM hud_safmr WHERE zip_code = $1)
+                ORDER BY bedrooms
+            `, [zipcode]),
+            pool.query(`
+                SELECT bedrooms,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent)::numeric(10,2) AS model_median
+                FROM listings
+                WHERE zip_code = $1
+                  AND estimated_rent IS NOT NULL AND estimated_rent > 0
+                  AND listing_type = 'for_sale'
+                GROUP BY bedrooms
+                ORDER BY bedrooms
+            `, [zipcode]),
+            pool.query(`
+                SELECT median_hh_income, median_gross_rent, median_home_value, population, vacant_units, total_units
+                FROM zcta_demographics
+                WHERE zcta = $1
+                ORDER BY acs_year DESC
+                LIMIT 1
+            `, [zipcode]),
+            pool.query(`
+                SELECT count(*)::int AS count,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY sold_price / NULLIF(sqft, 0))::numeric(10,2) AS med_ppsf
+                FROM sold_listings
+                WHERE zip_code = $1
+                  AND sold_date >= now() - interval '90 days'
+                  -- source feeds placeholder/typo dates (2099-01-01 pending
+                  -- sentinel, future typos); never let them count as "sold".
+                  AND sold_date <= now()
+            `, [zipcode]),
+            pool.query(`
+                SELECT
+                    count(*)::int AS total_listings,
+                    count(*) FILTER (WHERE estimated_rent IS NOT NULL AND estimated_rent > 0
+                        AND (estimated_rent / NULLIF(price, 0)) >= COALESCE(
+                            (SELECT target_ratio FROM resolve_rule(property_type, sale_type, 'buy_hold')), 0.01
+                        ))::int AS clearing,
+                    count(*) FILTER (WHERE price_cut_pct > 0)::int AS cuts,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY price)::numeric(10,2) AS med_price
+                FROM listings
+                WHERE zip_code = $1
+                  AND listing_type = 'for_sale' AND sale_type = 'standard'
+                  AND price > 10000
+            `, [zipcode]),
+            pool.query(`
+                SELECT t.nri_overall_rating, t.nri_overall_score
+                FROM listings l
+                JOIN census_tracts t ON t.geoid = l.census_tract
+                WHERE l.zip_code = $1
+                  AND l.census_tract IS NOT NULL
+                  AND t.nri_overall_score IS NOT NULL
+                ORDER BY t.nri_overall_score DESC
+                LIMIT 1
+            `, [zipcode]),
+            pool.query(`
+                SELECT raw_data->>'city' AS city, raw_data->>'state' AS state
+                FROM listings
+                WHERE zip_code = $1
+                LIMIT 1
+            `, [zipcode]),
+        ]);
+
         const hudRows = hudRes.rows;
-
-        // Fetch model median rents per bedroom from listings
-        const modelRes = await client.query(`
-            SELECT bedrooms,
-                   percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent)::numeric(10,2) AS model_median
-            FROM listings
-            WHERE raw_data->>'zip_code' = $1
-              AND estimated_rent IS NOT NULL AND estimated_rent > 0
-              AND listing_type = 'for_sale'
-            GROUP BY bedrooms
-            ORDER BY bedrooms
-        `, [zipcode]);
         const modelRows = modelRes.rows;
-
-        // Fetch ACS ZCTA demographics
-        const acsResult = await client.query(`
-            SELECT median_hh_income, median_gross_rent, median_home_value, population, vacant_units, total_units
-            FROM zcta_demographics
-            WHERE zcta = $1
-            ORDER BY acs_year DESC
-            LIMIT 1
-        `, [zipcode]);
         const acs = acsResult.rows[0] || null;
+        const soldStats = soldRes.rows[0] || { count: 0, med_ppsf: null };
+        const agg = aggRes.rows[0] || { total_listings: 0, clearing: 0, cuts: 0, med_price: null };
+        const floodRow = floodRes.rows[0] || null;
+        const floodRiskLabel = floodRow?.nri_overall_rating || null;
+        const placeRow = placeRes.rows[0] || null;
 
-        // Fetch similar ZCTAs by median household income
-        let similarZips: any[] = [];
+        // Query 4: Fetch similar ZCTAs by median household income (depends on acs)
+        interface SimilarZcta {
+            zcta: string;
+            median_hh_income: string | null;
+            median_home_value: string | null;
+            median_gross_rent: string | null;
+            population: string | null;
+        }
+        let similarZips: SimilarZcta[] = [];
         if (acs?.median_hh_income) {
             const income = Number(acs.median_hh_income);
-            const simRes = await client.query(`
+            const simRes = await pool.query(`
                 SELECT zcta, median_hh_income, median_home_value, median_gross_rent, population
                 FROM zcta_demographics
                 WHERE zcta != $1
@@ -67,55 +121,6 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
             `, [zipcode, income * 0.8, income * 1.2, income]);
             similarZips = simRes.rows;
         }
-
-        // Fetch sold listings stats (90 days)
-        const soldRes = await client.query(`
-            SELECT count(*)::int AS count,
-                   percentile_cont(0.5) WITHIN GROUP (ORDER BY sold_price / NULLIF(sqft, 0))::numeric(10,2) AS med_ppsf
-            FROM sold_listings
-            WHERE zip_code = $1 AND sold_date >= now() - interval '90 days'
-        `, [zipcode]);
-        const soldStats = soldRes.rows[0] || { count: 0, med_ppsf: null };
-
-        // Fetch aggregate counts from listings
-        const aggRes = await client.query(`
-            SELECT
-                count(*)::int AS total_listings,
-                count(*) FILTER (WHERE estimated_rent IS NOT NULL AND estimated_rent > 0
-                    AND (estimated_rent / NULLIF(price, 0)) >= COALESCE(
-                        (SELECT target_ratio FROM resolve_rule(property_type, sale_type, 'buy_hold')), 0.01
-                    ))::int AS clearing,
-                count(*) FILTER (WHERE price_cut_pct > 0)::int AS cuts,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY price)::numeric(10,2) AS med_price
-            FROM listings
-            WHERE raw_data->>'zip_code' = $1
-              AND listing_type = 'for_sale' AND sale_type = 'standard'
-              AND price > 10000
-        `, [zipcode]);
-        const agg = aggRes.rows[0] || { total_listings: 0, clearing: 0, cuts: 0, med_price: null };
-
-        // Fetch flood risk from census_tracts (worst NRI score in ZIP)
-        const floodRes = await client.query(`
-            SELECT t.nri_overall_rating, t.nri_overall_score
-            FROM listings l
-            JOIN census_tracts t ON t.geoid = l.census_tract
-            WHERE l.raw_data->>'zip_code' = $1
-              AND l.census_tract IS NOT NULL
-              AND t.nri_overall_score IS NOT NULL
-            ORDER BY t.nri_overall_score DESC
-            LIMIT 1
-        `, [zipcode]);
-        const floodRow = floodRes.rows[0] || null;
-        const floodRiskLabel = floodRow?.nri_overall_rating || null;
-
-        // Get place name
-        const placeRes = await client.query(`
-            SELECT raw_data->>'city' AS city, raw_data->>'state' AS state
-            FROM listings
-            WHERE raw_data->>'zip_code' = $1
-            LIMIT 1
-        `, [zipcode]);
-        const placeRow = placeRes.rows[0] || null;
         const placeName = placeRow
             ? `${placeRow.city || ''}${placeRow.city && placeRow.state ? ', ' : ''}${placeRow.state || ''}`
             : zipcode;
@@ -127,16 +132,16 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
 
         // Build FMR vs Model data
         const bedLabels: Record<number, string> = { 0: 'Studio', 1: '1 BR', 2: '2 BR', 3: '3 BR', 4: '4 BR', 5: '5 BR' };
-        const fmrVsModel = hudRows.map((h: any) => {
+        const fmrVsModel = hudRows.map((h: { bedrooms: string; safmr: string }) => {
             const br = Number(h.bedrooms);
-            const modelRow = modelRows.find((m: any) => Number(m.bedrooms) === br);
+            const modelRow = modelRows.find((m: { bedrooms: string; model_median: string }) => Number(m.bedrooms) === br);
             return {
                 br: bedLabels[br] || `${br} BR`,
                 fmr: Number(h.safmr),
                 model: modelRow ? Number(modelRow.model_median) : null,
             };
         });
-        const maxRent = Math.max(1, ...fmrVsModel.map((r: any) => Math.max(r.fmr, r.model ?? 0)));
+        const maxRent = Math.max(1, ...fmrVsModel.map((r: { br: string; fmr: number; model: number | null }) => Math.max(r.fmr, r.model ?? 0)));
 
         // Vacancy rate
         const vacancyPct = acs?.total_units && Number(acs.total_units) > 0
@@ -164,7 +169,7 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                         <section className="py-14" style={{ borderBottom: '1px solid var(--line)' }}>
                             <h2 className="prov mb-8 inline-block">modeled rent vs HUD fair market rent</h2>
                             <div className="space-y-6">
-                                {fmrVsModel.map((r: any) => (
+                                {fmrVsModel.map((r: { br: string; fmr: number; model: number | null }) => (
                                     <div key={r.br} className="grid grid-cols-[64px_1fr] items-center gap-4">
                                         <span className="text-[13px]" style={{ color: 'var(--haze)' }}>{r.br}</span>
                                         <div className="relative h-8">
@@ -245,7 +250,7 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                         <section className="py-14" style={{ borderTop: '1px solid var(--line)' }}>
                             <h2 className="prov mb-8 inline-block">areas like this</h2>
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                {similarZips.map((z: any) => (
+                                {similarZips.map((z: SimilarZcta) => (
                                     <Link
                                         key={z.zcta}
                                         href={`/market/${z.zcta}`}
@@ -269,6 +274,12 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
             </div>
         );
     } catch (error) {
+        // notFound() (and redirects) signal by throwing — pass them through
+        // to Next instead of rendering the DB-failure fallback.
+        if (typeof (error as { digest?: string })?.digest === 'string'
+            && (error as { digest: string }).digest.startsWith('NEXT_')) {
+            throw error;
+        }
         console.error('Database error:', error);
         return (
             <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
@@ -281,7 +292,5 @@ export default async function MarketPage({ params }: { params: Promise<{ zipcode
                 </div>
             </div>
         );
-    } finally {
-        client.release();
     }
 }

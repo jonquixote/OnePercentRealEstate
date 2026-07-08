@@ -63,7 +63,7 @@ export default function SearchPage() {
     debounceRef.current = setTimeout(() => loadProperties(1), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, qs.sold, qs.pmin, qs.pmax, qs.beds, qs.baths, qs.op, qs.cap, qs.coc, qs.type, qs.sale, qs.strat, qs.hoamax, qs.dom, qs.cut]);
+  }, [sortBy, qs.sold, qs.pmin, qs.pmax, qs.beds, qs.baths, qs.op, qs.cap, qs.coc, qs.type, qs.sale, qs.strat, qs.hoamax, qs.dom, qs.cut, qs.q]);
 
   async function loadProperties(pageNum: number) {
     try {
@@ -83,6 +83,7 @@ export default function SearchPage() {
         hoaMax: filters.hoaMax > 0 ? filters.hoaMax : undefined,
         domMin: filters.domMin > 0 ? filters.domMin : undefined,
         hasPriceCut: filters.hasPriceCut || undefined,
+        q: qs.q || undefined,
       });
       const items = data?.items ?? [];
       setHasMore(items.length >= 100);

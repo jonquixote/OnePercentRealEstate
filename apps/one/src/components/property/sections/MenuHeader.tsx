@@ -21,7 +21,7 @@ export default function MenuHeader({ id, address, price, propertyUrl }: Props) {
     fetch('/api/watchlists')
       .then(r => r.ok ? r.json() : [])
       .then((list) => {
-        if (Array.isArray(list) && list.some((w: any) => w.name === `Property: ${address}`)) setWatched(true);
+        if (Array.isArray(list) && list.some((w: { name: string }) => w.name === `Property: ${address}`)) setWatched(true);
       })
       .catch(() => {});
   }, [address]);
