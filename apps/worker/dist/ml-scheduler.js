@@ -143,6 +143,15 @@ async function runTrain() {
     const traceId = newTraceId();
     const traceLog = withTrace(log, traceId, { job: 'train' });
     traceLog.info('nightly retrain starting');
+    // First, refresh market stats
+    traceLog.info('refreshing market stats before train');
+    const statsResponse = await runOps('/ops/refresh-market-stats', 10 * 60_000);
+    if (!statsResponse.ok) {
+        traceLog.error({ lines: statsResponse.lines, exit_code: statsResponse.exit_code }, 'market stats refresh failed before train — proceeding anyway');
+    }
+    else {
+        traceLog.info('market stats refresh completed');
+    }
     // Train (~7 min) + eval gate (~2 min) + swap. Generous ceiling.
     const response = await runOps('/ops/run-train', 45 * 60_000);
     if (response.ok) {

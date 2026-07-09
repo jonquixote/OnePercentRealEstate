@@ -13,6 +13,7 @@
 // moving the schedule to PostgreSQL with a cron extension or moving to an
 // external cron runner (n8n, etc.).
 
+import { Pool } from 'pg';
 import { loadEnv } from './env.js';
 import { getLogger, newTraceId, withTrace } from './logger.js';
 
@@ -183,6 +184,18 @@ async function runTrain(): Promise<void> {
 
   traceLog.info('nightly retrain starting');
 
+  // First, refresh market stats
+  traceLog.info('refreshing market stats before train');
+  const statsResponse = await runOps('/ops/refresh-market-stats', 10 * 60_000);
+  if (!statsResponse.ok) {
+    traceLog.error(
+      { lines: statsResponse.lines, exit_code: statsResponse.exit_code },
+      'market stats refresh failed before train — proceeding anyway'
+    );
+  } else {
+    traceLog.info('market stats refresh completed');
+  }
+
   // Train (~7 min) + eval gate (~2 min) + swap. Generous ceiling.
   const response = await runOps('/ops/run-train', 45 * 60_000);
 
@@ -219,6 +232,31 @@ async function runEval(): Promise<void> {
 
   if (response.alert) {
     await sendAlert('eval', response);
+  }
+}
+
+async function runCensusTractIncrement(): Promise<void> {
+  const traceId = newTraceId();
+  const traceLog = withTrace(log, traceId, { job: 'census-tract-increment' });
+
+  traceLog.info('nightly census tract increment starting');
+
+  const pool = new Pool({ connectionString: env.DATABASE_URL });
+  try {
+    const result = await pool.query(`
+      UPDATE public.rental_listings r
+      SET census_tract = t.geoid
+      FROM public.census_tracts t
+      WHERE r.census_tract IS NULL
+        AND r.location IS NOT NULL
+        AND ST_Contains(t.geom, r.location::geometry)
+        AND r.created_at >= NOW() - INTERVAL '2 days'
+    `);
+    traceLog.info({ updated_rows: result.rowCount }, 'nightly census tract increment completed');
+  } catch (err) {
+    traceLog.error({ err: String(err) }, 'nightly census tract increment failed');
+  } finally {
+    await pool.end();
   }
 }
 
@@ -282,6 +320,9 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   try {
     log.info({ ml_url: env.ML_URL }, 'ml-scheduler starting');
 
+    // Schedule nightly census tract increment: 00:30 UTC (before train at 01:00 UTC)
+    scheduleNext('census-tract-increment', runCensusTractIncrement, () => msUntilNextTime(0, 30));
+
     // Schedule nightly retrain: 01:00 UTC (before drift at 02:00 so the
     // drift monitor sees the freshly-promoted model's predictions).
     scheduleNext('train', runTrain, () => msUntilNextTime(1, 0));
@@ -292,7 +333,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
     // Schedule eval job: Sunday at 03:00 UTC
     scheduleNext('eval', runEval, () => msUntilNextSunday(3, 0));
 
-    log.info('ml-scheduler ready (train 01:00, drift 02:00, eval Sun 03:00 UTC)');
+    log.info('ml-scheduler ready (census-tract-increment 00:30, train 01:00, drift 02:00, eval Sun 03:00 UTC)');
   } catch (err) {
     log.error({ err: String(err) }, 'startup failed');
     process.exit(1);
