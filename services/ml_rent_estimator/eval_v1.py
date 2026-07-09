@@ -267,7 +267,33 @@ def main() -> None:
             flush=True,
         )
 
-    gate_pass = gate_ratio <= 0.85 and wins >= 10 and highvar_ok
+    # P1 improvement gate: highvar_zip_mae must improve >=5% vs incumbent,
+    # and within_zip_spearman must improve. These are hard requirements
+    # starting at Task 1.6 — the P0 baseline was trained WITH P1 features
+    # (the P1 commit preceded the baseline freeze), so this comparison is
+    # effectively apples-to-apples and may show near-zero improvement.
+    inc_spearman = ((incumbent or {}).get("highvar") or {}).get("within_zip_spearman")
+    cand_spearman = highvar.get("within_zip_spearman")
+    spearman_improved = True
+    spearman_note = None
+    if inc_spearman is not None and cand_spearman is not None:
+        spearman_improved = cand_spearman > inc_spearman
+        spearman_note = f"cand={cand_spearman:.4f} vs incumbent={inc_spearman:.4f}"
+
+    highvar_improved_5pct = True
+    highvar_improvement_pct = None
+    if inc_hv is not None and cand_hv is not None and inc_hv > 0:
+        highvar_improvement_pct = (inc_hv - cand_hv) / inc_hv * 100
+        highvar_improved_5pct = highvar_improvement_pct >= 5.0
+
+    gate_pass = (
+        gate_ratio <= 0.85
+        and wins >= 10
+        and highvar_ok
+        and highvar_improved_5pct
+        and spearman_improved
+    )
+
     metrics = {
         "overall": overall,
         "highvar": highvar,
@@ -279,6 +305,10 @@ def main() -> None:
             "wins": wins,
             "highvar_ok": highvar_ok,
             "highvar_note": highvar_note,
+            "highvar_improvement_pct": highvar_improvement_pct,
+            "highvar_improved_5pct": highvar_improved_5pct,
+            "spearman_improved": spearman_improved,
+            "spearman_note": spearman_note,
             "band_coverage_ok": band_ok,
             "pass": gate_pass,
         },
