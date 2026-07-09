@@ -5,6 +5,8 @@
 # Reads TELEGRAM_BOT_TOKEN and ALERTMANAGER_TELEGRAM_CHAT_ID from .env
 # (or the environment). Writes the runtime config that Docker mounts.
 set -euo pipefail
+# The runtime config embeds the Telegram bot token — never world-readable.
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -83,5 +85,11 @@ inhibit_rules:
       - severity = "warn"
     equal: ["host"]
 YAML
+
+# Token must not be world-readable, but the alertmanager container runs as
+# nobody (uid 65534) and reads this via bind mount — so 0600 + that owner.
+# (umask alone leaves root:root, which crashloops alertmanager on restart.)
+chmod 0600 "$RUNTIME_PATH"
+chown 65534:65534 "$RUNTIME_PATH" 2>/dev/null || true
 
 echo "Alertmanager runtime config written to $RUNTIME_PATH"
