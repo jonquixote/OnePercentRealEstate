@@ -51,6 +51,10 @@ fi
 echo "--- Regenerating /etc/oper.env ---"
 bash "$(dirname "$0")/gen-env.sh"
 
+# Regenerate alertmanager runtime config from .env
+echo "--- Regenerating alertmanager config ---"
+bash "$(dirname "$0")/gen-alertmanager.sh"
+
 # Build steps
 build_node() {
   echo "--- Building Node.js (pnpm) ---"
