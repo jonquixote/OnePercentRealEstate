@@ -178,23 +178,33 @@ async function runDrift(): Promise<void> {
   }
 }
 
+async function runMarketStatsRefresh(): Promise<void> {
+  const traceId = newTraceId();
+  const traceLog = withTrace(log, traceId, { job: 'market-stats' });
+
+  traceLog.info('market stats refresh starting');
+
+  const response = await runOps('/ops/refresh-market-stats', 10 * 60_000);
+
+  if (response.ok) {
+    traceLog.info({ lines: response.lines }, 'market stats refresh completed');
+  } else {
+    traceLog.error(
+      { lines: response.lines, exit_code: response.exit_code },
+      'market stats refresh failed'
+    );
+  }
+
+  if (response.alert) {
+    await sendAlert('market-stats', response);
+  }
+}
+
 async function runTrain(): Promise<void> {
   const traceId = newTraceId();
   const traceLog = withTrace(log, traceId, { job: 'train' });
 
   traceLog.info('nightly retrain starting');
-
-  // First, refresh market stats
-  traceLog.info('refreshing market stats before train');
-  const statsResponse = await runOps('/ops/refresh-market-stats', 10 * 60_000);
-  if (!statsResponse.ok) {
-    traceLog.error(
-      { lines: statsResponse.lines, exit_code: statsResponse.exit_code },
-      'market stats refresh failed before train — proceeding anyway'
-    );
-  } else {
-    traceLog.info('market stats refresh completed');
-  }
 
   // Train (~7 min) + eval gate (~2 min) + swap. Generous ceiling.
   const response = await runOps('/ops/run-train', 45 * 60_000);
@@ -320,8 +330,12 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   try {
     log.info({ ml_url: env.ML_URL }, 'ml-scheduler starting');
 
-    // Schedule nightly census tract increment: 00:30 UTC (before train at 01:00 UTC)
-    scheduleNext('census-tract-increment', runCensusTractIncrement, () => msUntilNextTime(0, 30));
+    // Schedule nightly market stats refresh: 00:30 UTC (H3 rent/sold $/sqft
+    // surface — must finish before train at 01:00 UTC).
+    scheduleNext('market-stats', runMarketStatsRefresh, () => msUntilNextTime(0, 30));
+
+    // Schedule nightly census tract increment: 00:40 UTC (before train at 01:00 UTC)
+    scheduleNext('census-tract-increment', runCensusTractIncrement, () => msUntilNextTime(0, 40));
 
     // Schedule nightly retrain: 01:00 UTC (before drift at 02:00 so the
     // drift monitor sees the freshly-promoted model's predictions).
@@ -333,7 +347,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
     // Schedule eval job: Sunday at 03:00 UTC
     scheduleNext('eval', runEval, () => msUntilNextSunday(3, 0));
 
-    log.info('ml-scheduler ready (census-tract-increment 00:30, train 01:00, drift 02:00, eval Sun 03:00 UTC)');
+    log.info('ml-scheduler ready (market-stats 00:30, census-tract 00:40, train 01:00, drift 02:00, eval Sun 03:00 UTC)');
   } catch (err) {
     log.error({ err: String(err) }, 'startup failed');
     process.exit(1);

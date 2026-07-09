@@ -141,7 +141,10 @@ async function loadListing(listingId, parentLog) {
             property_type,
             public.is_rentable(property_type) AS is_rentable,
             hoa_fee,
-            lot_size_acres
+            lot_size_acres,
+            census_tract,
+            last_sold_price,
+            last_sold_date::text AS last_sold_date
        FROM listings
       WHERE id = $1`, [listingId]);
     if (res.rowCount === 0) {
@@ -165,6 +168,9 @@ async function loadListing(listingId, parentLog) {
         is_rentable: r.is_rentable,
         hoa_fee: r.hoa_fee != null ? Number(r.hoa_fee) : null,
         lot_sqft: r.lot_size_acres != null ? Number(r.lot_size_acres) * 43_560 : null,
+        census_tract: r.census_tract,
+        last_sold_price: r.last_sold_price != null ? Number(r.last_sold_price) : null,
+        last_sold_date: r.last_sold_date,
     };
 }
 async function callMlService(payload, parentLog) {
@@ -375,7 +381,8 @@ async function drainBatch(parentLog) {
     // 2. Pull a scoreable page with features.
     const page = await pool.query(`SELECT id::text AS id, address, city, state,
             zip_code, bedrooms, bathrooms, sqft, year_built,
-            latitude, longitude, property_type, hoa_fee, lot_size_acres
+            latitude, longitude, property_type, hoa_fee, lot_size_acres,
+            census_tract, last_sold_price, last_sold_date::text AS last_sold_date
        FROM listings
       WHERE rent_calc_status = 'pending'
         AND public.is_rentable(property_type)
@@ -401,6 +408,9 @@ async function drainBatch(parentLog) {
         property_type: r.property_type,
         hoa_fee: r.hoa_fee != null ? Number(r.hoa_fee) : null,
         lot_sqft: r.lot_size_acres != null ? Number(r.lot_size_acres) * 43_560 : null,
+        census_tract: r.census_tract,
+        last_sold_price: r.last_sold_price != null ? Number(r.last_sold_price) : null,
+        last_sold_date: r.last_sold_date,
     }));
     // 3. One HTTP call for the page.
     let results;

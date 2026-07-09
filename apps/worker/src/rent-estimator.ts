@@ -94,6 +94,9 @@ interface ListingPayload {
   readonly is_rentable: boolean | null;
   readonly hoa_fee: number | null;
   readonly lot_sqft: number | null;
+  readonly census_tract?: string | null;
+  readonly last_sold_price?: number | null;
+  readonly last_sold_date?: string | null;
 }
 
 interface PredictResponse {
@@ -202,6 +205,9 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     is_rentable: boolean | null;
     hoa_fee: string | null;
     lot_size_acres: string | null;
+    census_tract: string | null;
+    last_sold_price: string | null;
+    last_sold_date: string | null;
   }>(
     `SELECT id,
             address,
@@ -218,7 +224,10 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
             property_type,
             public.is_rentable(property_type) AS is_rentable,
             hoa_fee,
-            lot_size_acres
+            lot_size_acres,
+            census_tract,
+            last_sold_price,
+            last_sold_date::text AS last_sold_date
        FROM listings
       WHERE id = $1`,
     [listingId],
@@ -246,6 +255,9 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     is_rentable: r.is_rentable,
     hoa_fee: r.hoa_fee != null ? Number(r.hoa_fee) : null,
     lot_sqft: r.lot_size_acres != null ? Number(r.lot_size_acres) * 43_560 : null,
+    census_tract: r.census_tract,
+    last_sold_price: r.last_sold_price != null ? Number(r.last_sold_price) : null,
+    last_sold_date: r.last_sold_date,
   };
 }
 
@@ -501,6 +513,9 @@ interface BatchRow {
   readonly property_type: string | null;
   readonly hoa_fee: string | null;
   readonly lot_size_acres: string | null;
+  readonly census_tract: string | null;
+  readonly last_sold_price: string | null;
+  readonly last_sold_date: string | null;
 }
 
 async function drainBatch(parentLog: WorkerLogger): Promise<number> {
@@ -538,7 +553,8 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
   const page = await pool.query<BatchRow>(
     `SELECT id::text AS id, address, city, state,
             zip_code, bedrooms, bathrooms, sqft, year_built,
-            latitude, longitude, property_type, hoa_fee, lot_size_acres
+            latitude, longitude, property_type, hoa_fee, lot_size_acres,
+            census_tract, last_sold_price, last_sold_date::text AS last_sold_date
        FROM listings
       WHERE rent_calc_status = 'pending'
         AND public.is_rentable(property_type)
@@ -567,6 +583,9 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
     property_type: r.property_type,
     hoa_fee: r.hoa_fee != null ? Number(r.hoa_fee) : null,
     lot_sqft: r.lot_size_acres != null ? Number(r.lot_size_acres) * 43_560 : null,
+    census_tract: r.census_tract,
+    last_sold_price: r.last_sold_price != null ? Number(r.last_sold_price) : null,
+    last_sold_date: r.last_sold_date,
   }));
 
   // 3. One HTTP call for the page.
