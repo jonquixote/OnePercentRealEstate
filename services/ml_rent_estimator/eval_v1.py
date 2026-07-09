@@ -189,6 +189,29 @@ def main() -> None:
     # Split-ZIP benchmark — the metric this whole model effort is judged on.
     highvar = highvar_slice(hold, pred["p50"], actual)
 
+    # P2 repeat-address metrics: properties that appear more than once in the
+    # holdout (re-listings or rent adjustments at the same address). These
+    # measure whether prior-rent memory helps known addresses.
+    hold = hold.assign(_v1=pred["p50"], _actual=actual)
+    _addr_norm = hold["address"].str.lower().str.strip().str.replace(r"\s+", " ", regex=True)
+    _addr_counts = _addr_norm.value_counts()
+    _repeat_addrs = set(_addr_counts[_addr_counts >= 2].index)
+    _is_repeat = _addr_norm.isin(_repeat_addrs)
+    repeat_mae = None
+    repeat_age_median_days = None
+    if _is_repeat.sum() >= 10:
+        repeat_mae = float(mae(
+            hold.loc[_is_repeat, "_v1"].to_numpy(),
+            hold.loc[_is_repeat, "_actual"].to_numpy(),
+        ))
+        # Median days between first and last listing per repeat address
+        _repeat_df = hold.loc[_is_repeat].copy()
+        _repeat_df["_addr"] = _addr_norm[_is_repeat]
+        _age = _repeat_df.groupby("_addr")["listing_date"].agg(
+            lambda s: (s.max() - s.min()).days
+        )
+        repeat_age_median_days = float(_age.median()) if len(_age) > 0 else None
+
     # Top-20 gain importances (debugging priors + density features).
     gains = boosters["p50"].feature_importance(importance_type="gain")
     importances = sorted(
@@ -297,6 +320,11 @@ def main() -> None:
     metrics = {
         "overall": overall,
         "highvar": highvar,
+        "repeat_address": {
+            "mae": repeat_mae,
+            "age_median_days": repeat_age_median_days,
+            "relist_heavy": repeat_age_median_days is not None and repeat_age_median_days < 60,
+        },
         "importances_top20": importances,
         "per_state": per_state,
         "state_wins_vs_hud": wins,

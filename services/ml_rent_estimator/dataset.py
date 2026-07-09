@@ -53,6 +53,11 @@ FEATURE_NAMES = [
     "zcta_rent_growth_5yr",      # 5-year fractional growth in ZCTA median rent, sentinel 0.0
 ]
 
+# Minimum observation count at h3_9 before we trust its TE estimate.
+# Below this threshold, the shrinkage prior (10) is too weak to suppress
+# low-n noise, so we skip h3_9 entirely and fall back to h3_8.
+MIN_H3_9_OBS = 15
+
 # Missing-value floor for the local psf surface (log(0.1)); not a plausible
 # real $/sqft, so LightGBM can split "no surface" cleanly.
 _SENTINEL_PSF = 0.1
@@ -372,7 +377,7 @@ def _te_cascade(zip_te: float, tract_key: str, h3_8: Optional[str], h3_9: Option
     h8_te = _shrink(e_n, e_ls, tract_te, 15.0) if e_n else tract_te
 
     f_n, f_ls = f_stats.get(h3_9, (0.0, 0.0)) if h3_9 else (0.0, 0.0)
-    h9_te = _shrink(f_n, f_ls, h8_te, 10.0) if f_n else h8_te
+    h9_te = _shrink(f_n, f_ls, h8_te, 10.0) if f_n >= MIN_H3_9_OBS else h8_te
 
     return {
         "tract_te": tract_te,

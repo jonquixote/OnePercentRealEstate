@@ -347,6 +347,27 @@ async def _run_subprocess(cmd: list[str], timeout_s: float = 120.0) -> tuple[boo
         return False, [f"subprocess error: {exc}"], 1
 
 
+@app.post("/ops/refresh-market-stats", response_model=OpResponse)
+async def refresh_market_stats() -> OpResponse:
+    """Refresh H3 market stats + address rent history. Synchronous — the
+    scheduler's 10-minute timeout covers both surfaces."""
+    import psycopg2
+    from ml_rent_estimator.market_stats import refresh
+
+    conn = None
+    try:
+        conn = psycopg2.connect(_DATABASE_URL)
+        result = refresh(conn)
+        lines = [f"{k}: {v}" for k, v in result.items()]
+        alert = any("error" in k for k in result)
+        return OpResponse(ok=True, lines=lines, exit_code=0, alert=alert)
+    except Exception as exc:
+        return OpResponse(ok=False, lines=[str(exc)], exit_code=1, alert=True)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 @app.post("/ops/run-drift", response_model=OpResponse)
 async def run_drift() -> OpResponse:
     """Trigger the drift monitor. Captures stdout and returns JSON."""
