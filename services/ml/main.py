@@ -80,6 +80,10 @@ class PredictRequest(BaseModel):
     census_tract: Optional[str] = None
     last_sold_price: Optional[float] = None
     last_sold_date: Optional[str] = None
+    # ext: tax assessed value
+    tax_assessed_value: Optional[float] = None
+    # ext: list price for ratio computation (worker supplies from listings.price)
+    price: Optional[float] = None
 
 
 class PredictResponse(BaseModel):

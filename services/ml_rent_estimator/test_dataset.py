@@ -148,7 +148,7 @@ def test_full_vector_length_with_p1_features():
         global_rent_psf=2.0, global_sold_psf=250.0,
     )
     v = vector_from_features(compute_features(ROW, meta), meta)
-    assert len(v) == len(FEATURE_NAMES) == 30
+    assert len(v) == len(FEATURE_NAMES) == 33
 
 
 # --- P2 property history ---
@@ -346,3 +346,56 @@ def test_p3_metro_aware_decay_weights():
     assert w[1] == pytest.approx(w[2])
     # Weight for 180 days with 365 decay: exp(-180/365) ≈ 0.61
     assert w[1] == pytest.approx(np.exp(-180.0 / 365.0))
+
+
+# --- ext: tax assessed value features ---
+
+
+def test_ext_tax_assessed_sentinel_when_missing():
+    """No tax assessed value → all ext features at sentinel values."""
+    feats = compute_features(ROW, BASE_META)
+    assert feats["tax_assessed_log"] == 0.0
+    assert feats["list_to_assessed_ratio"] == 1.0
+    assert feats["assessed_ratio_present"] == 0.0
+
+
+def test_ext_tax_assessed_populates_features():
+    """With valid tax assessed value, features should be computed."""
+    row = dict(ROW, tax_assessed_value=500000, rent=2000)
+    feats = compute_features(row, BASE_META, asof=date(2026, 7, 1))
+    assert feats["tax_assessed_log"] == pytest.approx(math.log(500000))
+    assert feats["list_to_assessed_ratio"] == pytest.approx(2000 / 500000)
+    assert feats["assessed_ratio_present"] == 1.0
+
+
+def test_ext_tax_assessed_low_value_uses_floor():
+    """Tax assessed value below 10000 → log uses 10000 floor."""
+    row = dict(ROW, tax_assessed_value=5000, rent=2000)
+    feats = compute_features(row, BASE_META, asof=date(2026, 7, 1))
+    assert feats["tax_assessed_log"] == pytest.approx(math.log(10000))
+    assert feats["list_to_assessed_ratio"] == pytest.approx(2000 / 5000)
+    assert feats["assessed_ratio_present"] == 1.0
+
+
+def test_ext_tax_assessed_no_list_price():
+    """Tax assessed value present but no list price → ratio stays sentinel."""
+    row = dict(ROW, tax_assessed_value=500000)
+    feats = compute_features(row, BASE_META, asof=date(2026, 7, 1))
+    assert feats["tax_assessed_log"] == pytest.approx(math.log(500000))
+    assert feats["list_to_assessed_ratio"] == 1.0
+    assert feats["assessed_ratio_present"] == 0.0
+
+
+def test_ext_assessed_ratio_present_flips():
+    """assessed_ratio_present is 1.0 only when both values are real."""
+    # Both present → present = 1.0
+    row = dict(ROW, tax_assessed_value=400000, rent=1800)
+    feats = compute_features(row, BASE_META)
+    assert feats["assessed_ratio_present"] == 1.0
+    assert feats["list_to_assessed_ratio"] != 1.0
+
+    # Only assessed, no rent → present = 0.0
+    row_no_rent = dict(ROW, tax_assessed_value=400000)
+    feats_no = compute_features(row_no_rent, BASE_META)
+    assert feats_no["assessed_ratio_present"] == 0.0
+    assert feats_no["list_to_assessed_ratio"] == 1.0

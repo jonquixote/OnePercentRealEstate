@@ -208,6 +208,8 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     census_tract: string | null;
     last_sold_price: string | null;
     last_sold_date: string | null;
+    tax_assessed_value: string | null;
+    price: string | null;
   }>(
     `SELECT id,
             address,
@@ -227,7 +229,9 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
             lot_size_acres,
             census_tract,
             last_sold_price,
-            last_sold_date::text AS last_sold_date
+            last_sold_date::text AS last_sold_date,
+            (raw_data->>'tax_assessed_value')::text AS tax_assessed_value,
+            price::text AS price
        FROM listings
       WHERE id = $1`,
     [listingId],
@@ -258,6 +262,8 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     census_tract: r.census_tract,
     last_sold_price: r.last_sold_price != null ? Number(r.last_sold_price) : null,
     last_sold_date: r.last_sold_date,
+    tax_assessed_value: r.tax_assessed_value != null ? Number(r.tax_assessed_value) : null,
+    price: r.price != null ? Number(r.price) : null,
   };
 }
 
@@ -516,6 +522,8 @@ interface BatchRow {
   readonly census_tract: string | null;
   readonly last_sold_price: string | null;
   readonly last_sold_date: string | null;
+  readonly tax_assessed_value: string | null;
+  readonly price: string | null;
 }
 
 async function drainBatch(parentLog: WorkerLogger): Promise<number> {
@@ -554,7 +562,9 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
     `SELECT id::text AS id, address, city, state,
             zip_code, bedrooms, bathrooms, sqft, year_built,
             latitude, longitude, property_type, hoa_fee, lot_size_acres,
-            census_tract, last_sold_price, last_sold_date::text AS last_sold_date
+            census_tract, last_sold_price, last_sold_date::text AS last_sold_date,
+            (raw_data->>'tax_assessed_value')::text AS tax_assessed_value,
+            price::text AS price
        FROM listings
       WHERE rent_calc_status = 'pending'
         AND public.is_rentable(property_type)

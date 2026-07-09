@@ -51,6 +51,10 @@ FEATURE_NAMES = [
     "fmr_cagr_3yr",              # 3-year CAGR of HUD SAFMR for this (zip, beds), sentinel 0.0
     "zcta_income_growth_5yr",    # 5-year fractional growth in ZCTA median income, sentinel 0.0
     "zcta_rent_growth_5yr",      # 5-year fractional growth in ZCTA median rent, sentinel 0.0
+    # --- rent model v2 ext: tax assessed value (append-only) ---
+    "tax_assessed_log",          # log(max(tax_assessed_value, 10000)), sentinel 0.0 when missing
+    "list_to_assessed_ratio",    # list_price / tax_assessed_value, sentinel 1.0 when missing
+    "assessed_ratio_present",    # 1.0 when ratio is from real data, 0.0 when sentinel
 ]
 
 # Minimum observation count at h3_9 before we trust its TE estimate.
@@ -95,7 +99,12 @@ WITH base AS (
               AND regexp_replace(r.raw_data->>'last_sold_price', '[^0-9.]', '', 'g') ~ '^[0-9]+(\\.[0-9]+)?$'
               THEN regexp_replace(r.raw_data->>'last_sold_price', '[^0-9.]', '', 'g')::float
          END AS last_sold_price,
-         (r.raw_data->>'last_sold_date')::date AS last_sold_date
+         (r.raw_data->>'last_sold_date')::date AS last_sold_date,
+         -- ext: tax assessed value from raw_data
+         CASE WHEN (r.raw_data->>'tax_assessed_value') IS NOT NULL
+              AND regexp_replace(r.raw_data->>'tax_assessed_value', '[^0-9.]', '', 'g') ~ '^[0-9]+(\\.[0-9]+)?$'
+              THEN regexp_replace(r.raw_data->>'tax_assessed_value', '[^0-9.]', '', 'g')::float
+         END AS tax_assessed_value
   FROM rental_listings r
   -- P3: listing-time-correct HUD join (fiscal year matching listing year).
   -- HUD FY runs Oct→Sep, so a listing in Jan 2026 is FY2026; listing in
@@ -533,6 +542,20 @@ def compute_features(row: dict[str, Any], meta: dict, asof: Any = None) -> dict[
             if delta_days >= 0:
                 months_since_prior_rent_val = delta_days / 30.44
 
+    # --- ext: tax assessed value ---
+    tax_assessed_log = 0.0         # sentinel: missing
+    list_to_assessed_ratio = 1.0   # sentinel: neutral ratio
+    assessed_ratio_present = 0.0   # binary: 0 = sentinel ratio
+
+    tax_assessed_val = num(row.get("tax_assessed_value"), None)
+    list_price = num(row.get("rent"), None)  # in training, rent is the list price
+
+    if tax_assessed_val is not None and tax_assessed_val > 0:
+        tax_assessed_log = math.log(max(tax_assessed_val, 10000.0))
+        if list_price is not None and list_price > 0:
+            list_to_assessed_ratio = list_price / max(tax_assessed_val, 1.0)
+            assessed_ratio_present = 1.0
+
     return {
         "beds": beds,
         "baths": baths,
@@ -576,6 +599,10 @@ def compute_features(row: dict[str, Any], meta: dict, asof: Any = None) -> dict[
             zcta_rent,
             num(row.get("zcta_med_rent_5yr_ago"), None),
         ),
+        # --- ext: tax assessed value ---
+        "tax_assessed_log": tax_assessed_log,
+        "list_to_assessed_ratio": list_to_assessed_ratio,
+        "assessed_ratio_present": assessed_ratio_present,
     }
 
 

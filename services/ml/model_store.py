@@ -225,6 +225,10 @@ def _row_from_request(req: Any) -> dict:
     last_sold_price = getattr(req, "last_sold_price", None)
     last_sold_date = getattr(req, "last_sold_date", None)
 
+    # ext: tax assessed value
+    tax_assessed_value = getattr(req, "tax_assessed_value", None)
+    price = getattr(req, "price", None)
+
     # P2: prior rent from memory cache
     prior_rent = None
     prior_rent_date = None
@@ -265,6 +269,9 @@ def _row_from_request(req: Any) -> dict:
         "hud_safmr_3yr_ago": _hud_3yr_ago.get((zip_code, int(min(max(beds or 0, 0), 4)))),
         "zcta_med_income_5yr_ago": _zcta_old.get(zip_code, (None, None))[0],
         "zcta_med_rent_5yr_ago": _zcta_old.get(zip_code, (None, None))[1],
+        # ext: tax assessed value
+        "tax_assessed_value": tax_assessed_value,
+        "rent": price,  # list price for list_to_assessed_ratio (serving path)
     }
 
 

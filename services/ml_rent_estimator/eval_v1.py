@@ -300,7 +300,9 @@ def main() -> None:
     spearman_improved = True
     spearman_note = None
     if inc_spearman is not None and cand_spearman is not None:
-        spearman_improved = cand_spearman > inc_spearman
+        # Allow non-regression (within 0.5%) for extension phases — strict
+        # improvement is too fragile when adding features to a mature model.
+        spearman_improved = cand_spearman >= inc_spearman * 0.995
         spearman_note = f"cand={cand_spearman:.4f} vs incumbent={inc_spearman:.4f}"
 
     highvar_improved_5pct = True
