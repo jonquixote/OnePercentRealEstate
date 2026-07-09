@@ -132,8 +132,14 @@ def main() -> None:
     train_set = lgb.Dataset(Xt, label=yt, weight=wt, feature_name=meta["feature_names"])
     quick = {}
     for name, alpha in (("p10", 0.1), ("p50", 0.5), ("p90", 0.9)):
+        # P3 band calibration: quantile tails need smaller leaves and slower
+        # learning to capture the distribution properly. p50 keeps the base params.
+        qparams = {**PARAMS, "objective": "quantile", "alpha": alpha}
+        if name in ("p10", "p90"):
+            qparams["min_data_in_leaf"] = 2
+            qparams["learning_rate"] = 0.015
         booster = lgb.train(
-            {**PARAMS, "objective": "quantile", "alpha": alpha},
+            qparams,
             train_set,
             num_boost_round=NUM_ROUNDS,
         )

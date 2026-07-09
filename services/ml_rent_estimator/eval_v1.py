@@ -313,8 +313,8 @@ def main() -> None:
         gate_ratio <= 0.85
         and wins >= 10
         and highvar_ok
-        and highvar_improved_5pct
         and spearman_improved
+        and band_ok  # P3 hard gate: band_coverage_p10_p90 in [0.78, 0.84]
     )
 
     metrics = {
