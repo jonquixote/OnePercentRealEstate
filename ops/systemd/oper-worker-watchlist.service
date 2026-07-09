@@ -1,0 +1,17 @@
+[Unit]
+Description=OnePercent Watchlist Alerts Worker
+After=oper-postgres.service
+Requires=oper-postgres.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/usr/bin/node apps/worker/dist/watchlist-alerts.js
+Restart=on-failure
+RestartSec=5
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

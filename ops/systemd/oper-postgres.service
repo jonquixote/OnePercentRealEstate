@@ -1,0 +1,20 @@
+[Unit]
+Description=OnePercent PostgreSQL 16 with PostGIS
+After=network.target
+
+[Service]
+Type=notify
+User=postgres
+Group=postgres
+Environment=PGDATA=/var/lib/postgresql/16/main
+ExecStart=/usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/16/main -c config_file=/etc/postgresql/16/main/postgresql.conf
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+LimitNOFILE=65536
+OOMScoreAdjust=-900
+MemoryMax=6G
+
+[Install]
+WantedBy=multi-user.target

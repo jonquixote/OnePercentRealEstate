@@ -1,0 +1,18 @@
+[Unit]
+Description=OnePercent Next.js Frontend (two, port 3002)
+After=oper-postgres.service oper-redis.service
+Requires=oper-postgres.service oper-redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent/apps/two/.next/standalone
+EnvironmentFile=/etc/oper.env
+Environment=PORT=3002
+ExecStart=/usr/bin/node apps/two/server.js
+Restart=on-failure
+RestartSec=5
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

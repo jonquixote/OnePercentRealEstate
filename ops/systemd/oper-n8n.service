@@ -1,0 +1,18 @@
+[Unit]
+Description=OnePercent n8n Automation
+After=oper-postgres.service
+Requires=oper-postgres.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+Environment="NODE_OPTIONS=--max-old-space-size=1024"
+ExecStart=/usr/bin/n8n start
+Restart=on-failure
+RestartSec=5
+MemoryMax=1.5G
+
+[Install]
+WantedBy=multi-user.target

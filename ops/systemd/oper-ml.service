@@ -1,0 +1,24 @@
+[Unit]
+Description=OnePercent ML Rent Estimator (uvicorn)
+After=oper-postgres.service oper-redis.service
+Requires=oper-postgres.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/opt/onepercent/services/ml/.venv/bin/uvicorn \
+    services.ml.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 3
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=60
+OOMScoreAdjust=-500
+# P4: reclaimed budget — 8G ceiling (was 4G under Docker)
+MemoryMax=8G
+
+[Install]
+WantedBy=multi-user.target

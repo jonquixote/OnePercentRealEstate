@@ -1,0 +1,21 @@
+[Unit]
+Description=OnePercent Scraper Service (FastAPI geocoding)
+After=oper-postgres.service
+Requires=oper-postgres.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+Environment="PYTHONPATH=/opt/onepercent/services/scraper_service:/opt/onepercent/services"
+ExecStart=/opt/onepercent/services/ml/.venv/bin/uvicorn \
+    services.scraper_service.main:app \
+    --host 127.0.0.1 \
+    --port 8001
+Restart=on-failure
+RestartSec=5
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

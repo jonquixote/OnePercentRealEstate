@@ -1,0 +1,17 @@
+[Unit]
+Description=OnePercent Rent Estimation Worker
+After=oper-postgres.service oper-redis.service oper-ml.service
+Requires=oper-postgres.service oper-redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/usr/bin/node apps/worker/dist/rent-estimator.js
+Restart=on-failure
+RestartSec=5
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=OnePercent pg_tileserv (MVT vector tiles)
+After=oper-postgres.service
+Requires=oper-postgres.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/oper.env
+WorkingDirectory=/usr/local/share/pg_tileserv
+ExecStart=/usr/local/bin/pg_tileserv
+Restart=on-failure
+RestartSec=5
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

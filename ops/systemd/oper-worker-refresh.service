@@ -1,0 +1,17 @@
+[Unit]
+Description=OnePercent Cluster Refresh Worker
+After=oper-postgres.service oper-redis.service
+Requires=oper-postgres.service oper-redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/usr/bin/node apps/worker/dist/refresh-clusters.js
+Restart=on-failure
+RestartSec=5
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

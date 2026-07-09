@@ -1,0 +1,17 @@
+[Unit]
+Description=OnePercent ML Scheduler (nightly retrain + drift)
+After=oper-ml.service
+Requires=oper-ml.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/usr/bin/node apps/worker/dist/ml-scheduler.js
+Restart=on-failure
+RestartSec=5
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

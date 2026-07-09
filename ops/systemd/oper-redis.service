@@ -1,0 +1,19 @@
+[Unit]
+Description=OnePercent Redis
+After=network.target
+
+[Service]
+# Redis default is Type=simple; Type=notify requires supervised=systemd in redis.conf
+Type=simple
+User=redis
+Group=redis
+# Password is configured in /etc/redis/redis.conf (set by install.sh),
+# NOT via command-line arg (systemd doesn't expand env vars in ExecStart).
+ExecStart=/usr/bin/redis-server /etc/redis/redis.conf
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target
