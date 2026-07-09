@@ -283,11 +283,14 @@ def run_scraper(args):
             print(f"Scraping {args.location} (type={l_type}, past={args.past_days})...", file=sys.stderr)
 
             try:
-                properties = scrape_property(
+                scrape_kwargs = dict(
                     location=args.location,
                     listing_type=l_type,
-                    past_days=args.past_days
+                    past_days=args.past_days,
                 )
+                if l_type == "for_rent":
+                    scrape_kwargs["extra_property_data"] = True
+                properties = scrape_property(**scrape_kwargs)
             except Exception as scrape_err:
                  print(f"HomeHarvest Error: {scrape_err}", file=sys.stderr)
                  continue
