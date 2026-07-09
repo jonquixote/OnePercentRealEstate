@@ -56,6 +56,17 @@ build_node() {
   echo "--- Building Node.js (pnpm) ---"
   pnpm install --frozen-lockfile
   pnpm build
+
+  # Copy static assets into standalone directories (required for Next.js standalone mode)
+  for app in one two; do
+    src="apps/$app/.next/static"
+    dst="apps/$app/.next/standalone/apps/$app/.next/static"
+    if [[ -d "$src" ]]; then
+      echo "  Copying static assets: $src -> $dst"
+      mkdir -p "$dst"
+      cp -r "$src"/* "$dst"/
+    fi
+  done
 }
 
 build_ml() {
