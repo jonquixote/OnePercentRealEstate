@@ -515,8 +515,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     restart: always
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
@@ -526,10 +525,6 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
       - "--web.enable-lifecycle"
-    ports:
-      - "127.0.0.1:9090:9090"
-    networks:
-      - backend
     logging:
       driver: "json-file"
       options:
@@ -539,16 +534,10 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.27.0
     restart: always
+    network_mode: host
     volumes:
-      # Wave 8: the RUNTIME config is server-only (real Telegram secrets;
-      # created from the repo template — see the template header). rsync
-      # never touches it because the path doesn't exist in the repo.
       - ./monitoring/alertmanager/alertmanager.runtime.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
-    ports:
-      - "127.0.0.1:9093:9093"
-    networks:
-      - backend
     logging:
       driver: "json-file"
       options:
@@ -567,10 +556,7 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
-    ports:
-      - "127.0.0.1:8080:8080"
-    networks:
-      - backend
+    network_mode: host
     logging:
       driver: "json-file"
       options:
@@ -580,16 +566,12 @@ services:
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
     restart: always
+    network_mode: host
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres?sslmode=disable"
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
     volumes:
       - ./monitoring/postgres-exporter/queries.yml:/etc/postgres-exporter/queries.yml:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - backend
     logging:
       driver: "json-file"
       options:
@@ -599,14 +581,10 @@ services:
   redis-exporter:
     image: oliver006/redis_exporter:v1.62.0
     restart: always
+    network_mode: host
     environment:
-      REDIS_ADDR: "redis://redis:6379"
+      REDIS_ADDR: "redis://127.0.0.1:6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - backend
     logging:
       driver: "json-file"
       options:

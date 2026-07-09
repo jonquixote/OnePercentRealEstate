@@ -45,12 +45,4 @@ listings_total:
         usage: "GAUGE"
         description: "Total rows in the listings table"
 
-mv_cluster_tiles_age_seconds:
-  query: |
-    SELECT EXTRACT(EPOCH FROM (now() - MAX(refreshed_at)))::float AS age_seconds
-    FROM mv_cluster_tiles_meta
-  master: true
-  metrics:
-    - age_seconds:
-        usage: "GAUGE"
-        description: "Seconds since mv_cluster_tiles last refresh"
+
