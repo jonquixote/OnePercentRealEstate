@@ -228,6 +228,7 @@ def _row_from_request(req: Any) -> dict:
     # ext: tax assessed value
     tax_assessed_value = getattr(req, "tax_assessed_value", None)
     price = getattr(req, "price", None)
+    days_on_mls = getattr(req, "days_on_mls", None)
 
     # P2: prior rent from memory cache
     prior_rent = None
@@ -272,6 +273,8 @@ def _row_from_request(req: Any) -> dict:
         # ext: tax assessed value
         "tax_assessed_value": tax_assessed_value,
         "rent": price,  # list price for list_to_assessed_ratio (serving path)
+        # ext: market velocity
+        "days_on_mls": days_on_mls,
     }
 
 

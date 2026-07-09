@@ -210,6 +210,7 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     last_sold_date: string | null;
     tax_assessed_value: string | null;
     price: string | null;
+    days_on_mls: string | null;
   }>(
     `SELECT id,
             address,
@@ -231,7 +232,8 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
             last_sold_price,
             last_sold_date::text AS last_sold_date,
             (raw_data->>'tax_assessed_value')::text AS tax_assessed_value,
-            price::text AS price
+            price::text AS price,
+            (raw_data->>'days_on_mls')::text AS days_on_mls
        FROM listings
       WHERE id = $1`,
     [listingId],
@@ -264,6 +266,7 @@ async function loadListing(listingId: string, parentLog: WorkerLogger): Promise<
     last_sold_date: r.last_sold_date,
     tax_assessed_value: r.tax_assessed_value != null ? Number(r.tax_assessed_value) : null,
     price: r.price != null ? Number(r.price) : null,
+    days_on_mls: r.days_on_mls != null ? Number(r.days_on_mls) : null,
   };
 }
 
@@ -524,6 +527,7 @@ interface BatchRow {
   readonly last_sold_date: string | null;
   readonly tax_assessed_value: string | null;
   readonly price: string | null;
+  readonly days_on_mls: string | null;
 }
 
 async function drainBatch(parentLog: WorkerLogger): Promise<number> {
@@ -564,7 +568,8 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
             latitude, longitude, property_type, hoa_fee, lot_size_acres,
             census_tract, last_sold_price, last_sold_date::text AS last_sold_date,
             (raw_data->>'tax_assessed_value')::text AS tax_assessed_value,
-            price::text AS price
+            price::text AS price,
+            (raw_data->>'days_on_mls')::text AS days_on_mls
        FROM listings
       WHERE rent_calc_status = 'pending'
         AND public.is_rentable(property_type)

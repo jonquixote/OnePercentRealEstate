@@ -84,6 +84,8 @@ class PredictRequest(BaseModel):
     tax_assessed_value: Optional[float] = None
     # ext: list price for ratio computation (worker supplies from listings.price)
     price: Optional[float] = None
+    # ext: days on MLS (market velocity)
+    days_on_mls: Optional[float] = None
 
 
 class PredictResponse(BaseModel):
