@@ -525,6 +525,9 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
       - "--web.enable-lifecycle"
+      # host networking: bind loopback only — ufw is the outer layer, this is
+      # the inner one (security review 2026-07-09)
+      - "--web.listen-address=127.0.0.1:9090"
     logging:
       driver: "json-file"
       options:
@@ -538,6 +541,11 @@ services:
     volumes:
       - ./monitoring/alertmanager/alertmanager.runtime.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
+    command:
+      # defaults repeated because overriding command replaces them all
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.listen-address=127.0.0.1:9093"
     logging:
       driver: "json-file"
       options:
@@ -557,6 +565,9 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
     network_mode: host
+    command:
+      - "-listen_ip=127.0.0.1"
+      - "-port=8080"
     logging:
       driver: "json-file"
       options:
@@ -570,6 +581,8 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres?sslmode=disable"
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
+    command:
+      - "--web.listen-address=127.0.0.1:9187"
     volumes:
       - ./monitoring/postgres-exporter/queries.yml:/etc/postgres-exporter/queries.yml:ro
     logging:
@@ -582,6 +595,8 @@ services:
     image: oliver006/redis_exporter:v1.62.0
     restart: always
     network_mode: host
+    command:
+      - "--web.listen-address=127.0.0.1:9121"
     environment:
       REDIS_ADDR: "redis://127.0.0.1:6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -591,24 +606,45 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Host-level CPU / memory / disk / network. Essential post-systemd-cutover:
+  # the app services are host processes now, so cadvisor no longer sees them —
+  # node-exporter is what covers ML/postgres/worker resource usage.
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.8.2
+    restart: always
+    network_mode: host
+    pid: host
+    command:
+      - "--path.rootfs=/host"
+      - "--web.listen-address=127.0.0.1:9100"
+    volumes:
+      - /:/host:ro,rslave
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Host network like the rest of the monitoring stack — grafana on the old
+  # bridge could not reach loopback-bound prometheus (datasource went dark
+  # after the systemd cutover). Loopback:3003, fronted by the 443 proxy.
   grafana:
     image: grafana/grafana:11.2.0
     restart: always
+    network_mode: host
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: "https://grafana.octavo.press"
+      GF_SERVER_HTTP_ADDR: "127.0.0.1"
+      GF_SERVER_HTTP_PORT: "3003"
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
-    ports:
-      - "127.0.0.1:3003:3000"
     depends_on:
       - prometheus
-    networks:
-      - backend
     logging:
       driver: "json-file"
       options:

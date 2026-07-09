@@ -3,13 +3,12 @@
 # This file is consumed by the `prometheus` container once monitoring
 # is wired into infrastructure/docker-compose.yml. See ../README.md.
 #
-# Conventions:
-#   * Host-side exporters (node, cadvisor) reach the host via
-#     host.docker.internal — works on Linux 24.04 with Docker 24+
-#     when the prometheus container is started with
-#     `--add-host=host.docker.internal:host-gateway`.
-#   * Container-side exporters (postgres, redis) are reached by their
-#     compose service names on the `backend` network.
+# Conventions (post-systemd cutover, 2026-07-09):
+#   * Every monitoring container runs with network_mode: host and binds
+#     127.0.0.1 only, so all scrape targets are plain loopback ports.
+#   * App services (ML, workers, apps, postgres, redis) are systemd host
+#     processes — node-exporter is what covers their resource usage;
+#     cadvisor only sees the monitoring containers themselves.
 
 global:
   scrape_interval: 30s
@@ -34,8 +33,17 @@ scrape_configs:
       - targets:
           - 127.0.0.1:9090
 
+  - job_name: node
+    # Host-level CPU / memory / disk / network — the primary resource view
+    # now that app services are systemd host processes.
+    static_configs:
+      - targets:
+          - 127.0.0.1:9100
+        labels:
+          host: onepercent-prod
+
   - job_name: cadvisor
-    # Per-container CPU / memory / network / disk
+    # Per-container CPU / memory / network / disk (monitoring stack only)
     static_configs:
       - targets:
           - 127.0.0.1:8080

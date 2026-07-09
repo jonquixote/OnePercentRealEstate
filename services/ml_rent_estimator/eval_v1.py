@@ -47,6 +47,10 @@ HIGHVAR_REGRESSION_MAX = 1.02
 # Empirical p10-p90 coverage band. Warning-only until P3, hard gate after.
 BAND_COVERAGE_MIN = 0.78
 BAND_COVERAGE_MAX = 0.84
+# P3 hard gate: fmr_cagr_3yr must be non-sentinel for at least this fraction
+# of holdout rows — the phase must not promote on a feature that is sentinel
+# for the majority of rows (spec §3.3). Measured 0.975 on 2026-07-09.
+FMR_CAGR_NONZERO_MIN = 0.50
 
 
 def mae(pred: np.ndarray, actual: np.ndarray) -> float:
@@ -290,6 +294,23 @@ def main() -> None:
             flush=True,
         )
 
+    # P3 hard gate: the FMR-trajectory feature must actually be populated —
+    # otherwise the temporal phase "passes" entirely on sentinels. Skipped
+    # (True) when the artifact predates the feature, so older models still
+    # evaluate.
+    fmr_cagr_nonzero_pct = None
+    fmr_cagr_ok = True
+    if "fmr_cagr_3yr" in meta["feature_names"]:
+        _cagr_col = X[:, meta["feature_names"].index("fmr_cagr_3yr")]
+        fmr_cagr_nonzero_pct = float(np.mean(_cagr_col != 0.0))
+        fmr_cagr_ok = fmr_cagr_nonzero_pct >= FMR_CAGR_NONZERO_MIN
+        if not fmr_cagr_ok:
+            print(
+                f"GATE FAIL fmr_cagr_nonzero_pct {fmr_cagr_nonzero_pct:.3f} < "
+                f"{FMR_CAGR_NONZERO_MIN} — inspect hud_safmr fy coverage by state",
+                flush=True,
+            )
+
     # P1 improvement gate: highvar_zip_mae must improve >=5% vs incumbent,
     # and within_zip_spearman must improve. These are hard requirements
     # starting at Task 1.6 — the P0 baseline was trained WITH P1 features
@@ -317,6 +338,7 @@ def main() -> None:
         and highvar_ok
         and spearman_improved
         and band_ok  # P3 hard gate: band_coverage_p10_p90 in [0.78, 0.84]
+        and fmr_cagr_ok  # P3 hard gate: fmr_cagr_3yr non-sentinel >= 50%
     )
 
     metrics = {
@@ -340,6 +362,8 @@ def main() -> None:
             "spearman_improved": spearman_improved,
             "spearman_note": spearman_note,
             "band_coverage_ok": band_ok,
+            "fmr_cagr_nonzero_pct": fmr_cagr_nonzero_pct,
+            "fmr_cagr_ok": fmr_cagr_ok,
             "pass": gate_pass,
         },
         "v0_sample": v0_metrics,
