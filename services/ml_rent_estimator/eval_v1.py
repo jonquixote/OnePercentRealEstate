@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ml_rent_estimator.dataset import TRAINING_SQL, frame_to_matrix
+from ml_rent_estimator.dataset import TRAINING_SQL, add_h3_columns, frame_to_matrix
 
 MODEL_DIR = os.environ.get("MODEL_DIR", "/models")
 # Optional argv[1] = subdirectory to evaluate (nightly retrain evaluates
@@ -162,6 +162,7 @@ def main() -> None:
         conn.close()
 
     hold = df[(df["split_bucket"].abs() % 10) == 0].reset_index(drop=True)
+    hold = add_h3_columns(hold)  # P1 features need the h3 columns
     X, y, _ = frame_to_matrix(hold, meta)
     actual = np.exp(np.asarray(y, dtype=float))
 

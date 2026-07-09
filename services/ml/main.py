@@ -75,6 +75,11 @@ class PredictRequest(BaseModel):
     # Wave 2 (optional — the batch path supplies them, the LISTEN path may not)
     lot_sqft: Optional[float] = None
     hoa_fee: Optional[float] = None
+    # rent v2 P1/P2: hyperlocal tract key + property history (worker supplies
+    # them; older callers omit them and the model uses fallbacks).
+    census_tract: Optional[str] = None
+    last_sold_price: Optional[float] = None
+    last_sold_date: Optional[str] = None
 
 
 class PredictResponse(BaseModel):
@@ -197,6 +202,7 @@ def healthz() -> dict:
         # otherwise; observable so a bad deploy is caught before the backlog.
         "model_feature_match": model_store.feature_match_ok(),
         "model_loaded_version": model_store.loaded_version(),
+        "rent_memory_ready": model_store.rent_memory_ready(),
     }
 
 
@@ -391,14 +397,14 @@ async def run_train() -> OpResponse:
     lines: list[str] = []
 
     ok, out, code = await _run_subprocess(
-        ["python", "-m", "ml_rent_estimator.train_v1", "rent_v1_staging"], timeout_s=1800.0
+        [sys.executable, "-m", "ml_rent_estimator.train_v1", "rent_v1_staging"], timeout_s=1800.0
     )
     lines += out[-8:]
     if not ok:
         return OpResponse(ok=False, lines=["TRAIN FAILED"] + lines, exit_code=code, alert=True)
 
     gate_ok, out, code = await _run_subprocess(
-        ["python", "-m", "ml_rent_estimator.eval_v1", "rent_v1_staging"], timeout_s=900.0
+        [sys.executable, "-m", "ml_rent_estimator.eval_v1", "rent_v1_staging"], timeout_s=900.0
     )
     lines += out[-12:]
     if not gate_ok:
@@ -414,6 +420,15 @@ async def run_train() -> OpResponse:
         if os.path.isdir(live):
             os.rename(live, backup)
         os.rename(staging, live)
+
+        # Initialize the canary state file for the newly promoted model
+        try:
+            canary_path = os.path.join(model_dir, "canary_state.json")
+            with open(canary_path, "w") as f:
+                json.dump({"remaining": 200, "deviations": []}, f)
+            log.info("initialized canary shadow window with 200 predictions")
+        except Exception as exc:
+            log.warning("failed to initialize canary state file: %s", exc)
     except OSError as exc:
         return OpResponse(
             ok=False, lines=[f"PROMOTE SWAP FAILED: {exc}"] + lines, exit_code=1, alert=True

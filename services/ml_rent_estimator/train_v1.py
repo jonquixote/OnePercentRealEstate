@@ -25,7 +25,41 @@ import pandas as pd
 import psycopg2
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ml_rent_estimator.dataset import TRAINING_SQL, fit_encoders, frame_to_matrix
+from ml_rent_estimator.dataset import (
+    TRAINING_SQL,
+    add_h3_columns,
+    fit_encoders,
+    frame_to_matrix,
+)
+
+
+def load_market_stats(conn) -> dict:
+    """{h3_8: [rent_psf, sold_psf, n_rent, n_sold]} — each hex's latest
+    complete month (rent model v2 P1 local surface, baked into the artifact)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT DISTINCT ON (h3_8) h3_8, med_rent_psf, med_sold_psf, n_rent, n_sold
+               FROM h3_market_stats ORDER BY h3_8, stat_month DESC"""
+        )
+        return {
+            r[0]: [
+                float(r[1]) if r[1] is not None else None,
+                float(r[2]) if r[2] is not None else None,
+                int(r[3]), int(r[4]),
+            ]
+            for r in cur.fetchall()
+        }
+
+
+def load_tract_income(conn) -> dict:
+    """{geoid: median_hh_income} — latest ACS vintage per tract."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT DISTINCT ON (geoid) geoid, median_hh_income
+               FROM tract_demographics WHERE median_hh_income IS NOT NULL
+               ORDER BY geoid, acs_year DESC"""
+        )
+        return {r[0]: float(r[1]) for r in cur.fetchall()}
 
 MODEL_DIR = os.environ.get("MODEL_DIR", "/models")
 # Optional argv[1] = subdirectory (the nightly retrain trains into
@@ -66,9 +100,19 @@ def main() -> None:
     conn = psycopg2.connect(dsn)
     try:
         df = pd.read_sql(TRAINING_SQL, conn, parse_dates=["listing_date"])
+        market_stats = load_market_stats(conn)
+        tract_income = load_tract_income(conn)
     finally:
         conn.close()
-    print(f"loaded {len(df)} rows in {time.time()-t0:.0f}s", flush=True)
+    print(
+        f"loaded {len(df)} rows, {len(market_stats)} hex stats, "
+        f"{len(tract_income)} tract incomes in {time.time()-t0:.0f}s",
+        flush=True,
+    )
+
+    # Compute H3 cells once for the whole frame (reused by the encoders and
+    # both feature-matrix builds).
+    df = add_h3_columns(df)
 
     # Address-hash split (deterministic 90/10), NOT time-based: rental
     # collection only started ~2026-06-05, so "last 30 days" would hold out
@@ -80,7 +124,7 @@ def main() -> None:
     hold_df = df[bucket == 0]
     print(f"train={len(train_df)} holdout={len(hold_df)} (address-hash 90/10)", flush=True)
 
-    meta = fit_encoders(train_df)
+    meta = fit_encoders(train_df, market_stats=market_stats, tract_income=tract_income)
     Xt, yt, wt = frame_to_matrix(train_df, meta)
     Xh, yh, _ = frame_to_matrix(hold_df, meta)
 
