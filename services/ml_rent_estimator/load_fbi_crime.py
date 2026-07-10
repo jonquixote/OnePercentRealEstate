@@ -112,7 +112,7 @@ def fetch_agencies(state_abbr: str, api_key: str) -> list[dict[str, Any]]:
         return []
 
 
-def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str) -> int:
+def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str, max_retries: int = 3) -> int:
     """Fetch total offense count for an agency and crime type in a given year."""
     url = f"{FBI_BASE}/summarized/agency/{ori}/{crime_type}"
     params = {
@@ -120,25 +120,34 @@ def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str) -> i
         "to": f"12-{year}",
         FBI_KEY_PARAM: api_key,
     }
-    try:
-        resp = requests.get(url, params=params, timeout=TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
-        # Response structure: {offenses: {actuals: {"<Agency> Offenses": {"MM-YYYY": count, ...}}}}
-        offenses = data.get("offenses", {})
-        actuals = offenses.get("actuals", {})
-        total = 0
-        for key, monthly in actuals.items():
-            if "Offense" in key and isinstance(monthly, dict):
-                for val in monthly.values():
-                    try:
-                        total += int(val)
-                    except (TypeError, ValueError):
-                        pass
-        return total
-    except Exception as exc:
-        print(f"  crime {ori}/{crime_type}: {exc}", file=sys.stderr)
-        return 0
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(url, params=params, timeout=TIMEOUT)
+            if resp.status_code == 403:
+                wait = 2 ** attempt  # exponential backoff: 1, 2, 4 seconds
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            # Response structure: {offenses: {actuals: {"<Agency> Offenses": {"MM-YYYY": count, ...}}}}
+            offenses = data.get("offenses", {})
+            actuals = offenses.get("actuals", {})
+            total = 0
+            for key, monthly in actuals.items():
+                if "Offense" in key and isinstance(monthly, dict):
+                    for val in monthly.values():
+                        try:
+                            total += int(val)
+                        except (TypeError, ValueError):
+                            pass
+            return total
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                time.sleep(1)
+                continue
+            print(f"  crime {ori}/{crime_type}: {exc}", file=sys.stderr)
+            return 0
+    return 0
 
 
 def build_county_fips_lookup(_state_fips_codes: list[str], _api_key: str) -> dict[tuple[str, str], str]:
@@ -293,9 +302,9 @@ def main() -> None:
         property_crime = fetch_crime_summary(ori, "property-crime", year, api_key)
         return fips, violent, property_crime
 
-    # Use 5 workers to avoid rate-limiting
+    # Use 3 workers to avoid rate-limiting
     done_count = 0
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {executor.submit(fetch_one, a): a for a in all_agencies}
         for future in as_completed(futures):
             done_count += 1
