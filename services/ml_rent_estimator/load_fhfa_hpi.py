@@ -59,7 +59,9 @@ def parse_xlsx(data: bytes) -> list[tuple[str, int, float | None, float | None]]
     ws = wb.active
     assert ws is not None, "workbook has no active sheet"
     rows = ws.iter_rows(values_only=True)
-    header = next(rows)
+    # Skip title rows — header is on row 5 (0-indexed)
+    for _ in range(5):
+        header = next(rows)
     assert header is not None, "empty worksheet"
 
     cols = {str(h).strip(): i for i, h in enumerate(header) if h}
