@@ -665,7 +665,6 @@ def _geocode_zip_to_bbox(zip_code: str, conn) -> Optional[tuple[float, float, fl
 def _check_dupe_address(address: str, conn) -> bool:
     """Check if address exists in rental_listings from any source in the last 14 days."""
     cur = conn.cursor()
-    normalized = f"%{ADDRESS_NORM_SQL}%".replace(ADDRESS_NORM_SQL, "")
     cur.execute(f"""
         SELECT 1 FROM rental_listings 
         WHERE {ADDRESS_NORM_SQL} = lower(regexp_replace(trim(%s), '\\s+', ' ', 'g'))
