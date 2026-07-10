@@ -5,17 +5,17 @@ import { useEffect, useState } from 'react';
 interface School {
   name: string;
   level?: string;
-  distance?: string;
-  distance_miles?: number;
+  dist_km?: number;
 }
 
 interface NeighborhoodData {
-  walkability?: { score?: number | null; description?: string | null } | null;
-  walk_score?: { score?: number | null; description?: string | null } | null;
-  transit?: { stop_count?: number | null; nearest_rail?: string | null; rail_distance_mi?: number | null } | null;
-  schools?: School[] | null;
-  nearby_schools?: unknown;
-  crime?: { summary?: string | null; coverage?: string | null; incidents?: Record<string, number> | null } | null;
+  walkability_index?: number | null;
+  walkscore?: { walk: number; transit: number; bike: number; link: string } | null;
+  transit_stops_800m?: number;
+  nearest_rail_km?: number | null;
+  schools_1600m?: School[];
+  hh_nearby_schools?: unknown;
+  crime?: { violent_per_100k: number | null; property_per_100k: number | null; coverage_note: string } | null;
 }
 
 function walkDialColor(score: number): string {
@@ -65,12 +65,12 @@ export function NeighborhoodPanel({ propertyId }: { propertyId: string | number 
   if (loading) return <Skeleton />;
   if (!data) return null;
 
-  const walkScore = data.walkability?.score ?? data.walk_score?.score ?? null;
-  const walkDesc = data.walkability?.description ?? data.walk_score?.description ?? null;
-  const hasSchools = data.schools && data.schools.length > 0;
-  const hasNearbySchools = data.nearby_schools != null;
-  const hasCrime = data.crime?.summary || data.crime?.coverage;
-  const hasTransit = data.transit?.stop_count != null || data.transit?.nearest_rail;
+  const walkScore = data.walkability_index ?? null;
+  const walkDesc = data.walkscore?.link ?? null;
+  const hasSchools = data.schools_1600m && data.schools_1600m.length > 0;
+  const hasNearbySchools = data.hh_nearby_schools != null;
+  const hasCrime = data.crime?.violent_per_100k != null || data.crime?.property_per_100k != null;
+  const hasTransit = (data.transit_stops_800m ?? 0) > 0 || data.nearest_rail_km != null;
   const hasAny = walkScore != null || hasSchools || hasCrime || hasTransit || hasNearbySchools;
   if (!hasAny) return null;
 
@@ -117,17 +117,14 @@ export function NeighborhoodPanel({ propertyId }: { propertyId: string | number 
       )}
 
       {/* Transit summary */}
-      {hasTransit && data.transit && (
+      {hasTransit && (
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">Transit</span>
           <span className="text-xs text-haze">
-            {data.transit.stop_count != null && `${data.transit.stop_count} stops`}
-            {data.transit.stop_count != null && data.transit.nearest_rail && ' · '}
-            {data.transit.nearest_rail && (
-              <>
-                {data.transit.nearest_rail}
-                {data.transit.rail_distance_mi != null && ` (${data.transit.rail_distance_mi.toFixed(1)} mi)`}
-              </>
+            {data.transit_stops_800m != null && data.transit_stops_800m > 0 && `${data.transit_stops_800m} stops`}
+            {data.transit_stops_800m != null && data.transit_stops_800m > 0 && data.nearest_rail_km != null && ' · '}
+            {data.nearest_rail_km != null && (
+              <>{data.nearest_rail_km.toFixed(1)} km to rail</>
             )}
           </span>
         </div>
@@ -138,14 +135,14 @@ export function NeighborhoodPanel({ propertyId }: { propertyId: string | number 
         <div className="space-y-1.5">
           <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Schools</p>
           <ul className="space-y-1">
-            {data.schools!.map((s, i) => (
+            {data.schools_1600m!.map((s, i) => (
               <li key={i} className="flex items-baseline justify-between text-xs text-haze">
                 <span className="truncate">
                   {s.name}
                   {s.level && <span className="ml-1 text-muted-foreground">{s.level}</span>}
                 </span>
                 <span className="ml-2 shrink-0 text-muted-foreground">
-                  {s.distance || (s.distance_miles != null ? `${s.distance_miles.toFixed(1)} mi` : '')}
+                  {s.dist_km != null ? `${s.dist_km.toFixed(1)} km` : ''}
                 </span>
               </li>
             ))}
@@ -157,11 +154,15 @@ export function NeighborhoodPanel({ propertyId }: { propertyId: string | number 
       {hasCrime && data.crime && (
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">Crime</span>
-          <span className="text-xs text-haze">{data.crime.summary || '—'}</span>
+          <span className="text-xs text-haze">
+            {data.crime.violent_per_100k != null && `Violent: ${data.crime.violent_per_100k.toFixed(0)}/100k`}
+            {data.crime.violent_per_100k != null && data.crime.property_per_100k != null && ' · '}
+            {data.crime.property_per_100k != null && `Property: ${data.crime.property_per_100k.toFixed(0)}/100k`}
+          </span>
         </div>
       )}
-      {data.crime?.coverage && (
-        <p className="text-xs text-muted-foreground" style={{ color: 'var(--mute)' }}>{data.crime.coverage}</p>
+      {data.crime?.coverage_note && (
+        <p className="text-xs text-muted-foreground" style={{ color: 'var(--mute)' }}>{data.crime.coverage_note}</p>
       )}
 
       {/* HomeHarvest nearby_schools (raw JSONB) */}
@@ -171,9 +172,9 @@ export function NeighborhoodPanel({ propertyId }: { propertyId: string | number 
             Nearby Schools (raw)
           </summary>
           <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-ink-2 p-3 text-xs text-haze" style={{ font: '12px/1.5 var(--font-num)' }}>
-            {typeof data.nearby_schools === 'string'
-              ? data.nearby_schools
-              : JSON.stringify(data.nearby_schools, null, 2)}
+            {typeof data.hh_nearby_schools === 'string'
+              ? data.hh_nearby_schools
+              : JSON.stringify(data.hh_nearby_schools, null, 2)}
           </pre>
         </details>
       )}

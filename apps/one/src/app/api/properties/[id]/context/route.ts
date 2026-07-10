@@ -328,7 +328,7 @@ export async function GET(
       transit_stops_800m: neighborhoodTransit?.stopsCount ?? 0,
       nearest_rail_km: neighborhoodTransit?.nearestRailKm ?? null,
       schools_1600m: neighborhoodSchools ?? [],
-      hh_nearby_schools: null,
+      hh_nearby_schools: listing.nearby_schools ?? null,
       crime: neighborhoodCrime ?? null,
     },
     market: {

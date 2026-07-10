@@ -129,15 +129,20 @@ def _download() -> str:
 
 
 def upsert(rows: list[tuple], conn) -> None:
+    from psycopg2.extras import execute_values
+
     with conn.cursor() as cur:
-        cur.executemany(
+        execute_values(
+            cur,
             """INSERT INTO schools (ncessch, name, level, geom)
-               VALUES (%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+               VALUES %s
                ON CONFLICT (ncessch) DO UPDATE SET
                    name  = EXCLUDED.name,
                    level = EXCLUDED.level,
                    geom  = EXCLUDED.geom""",
             [(r[0], r[1], r[2], r[4], r[3]) for r in rows],
+            template="(%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))",
+            page_size=5000,
         )
     conn.commit()
 

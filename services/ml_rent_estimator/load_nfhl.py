@@ -209,11 +209,11 @@ def _load_state(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
         try:
             with conn.cursor() as cur:
                 # Check what columns exist in staging
-                cur.execute(f"""
+                cur.execute("""
                     SELECT column_name FROM information_schema.columns
-                    WHERE table_name = '{staging_table}'
+                    WHERE table_name = %s
                     ORDER BY ordinal_position
-                """)
+                """, (staging_table,))
                 cols = {row[0] for row in cur.fetchall()}
                 print(f"  staging columns: {sorted(cols)}", file=sys.stderr)
 
@@ -275,23 +275,27 @@ def _load_state(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
                     _drop_staging(pg_dsn, staging_table)
                     return
 
-                # Build the state_fips value — use the FIPS code if column exists, else hardcode
-                if state_col:
-                    state_val_expr = f"'{state_fips}'"
-                else:
-                    state_val_expr = f"'{state_fips}'"
+                from psycopg2 import sql as pg_sql
 
-                cur.execute(f"""
+                # Build the INSERT using proper identifier quoting
+                insert_query = pg_sql.SQL("""
                     INSERT INTO flood_zones (state_fips, fld_zone, sfha, geom)
                     SELECT
-                        {state_val_expr}::text,
-                        {fld_col}::text,
-                        ({sfha_col} = 'T'),
-                        ST_Multi(ST_Transform({geom_col}, 4326))
-                    FROM {staging_table}
-                    WHERE {sfha_col} = 'T'
-                       OR {fld_col} IN ('AE', 'VE', 'A', 'AO', 'AH')
-                """)
+                        %s::text,
+                        {fld}::text,
+                        ({sfha} = 'T'),
+                        ST_Multi(ST_Transform({geom}, 4326))
+                    FROM {staging}
+                    WHERE {sfha} = 'T'
+                       OR {fld} IN ('AE', 'VE', 'A', 'AO', 'AH')
+                """).format(
+                    fld=pg_sql.Identifier(fld_col),
+                    sfha=pg_sql.Identifier(sfha_col),
+                    geom=pg_sql.Identifier(geom_col),
+                    staging=pg_sql.Identifier(staging_table),
+                )
+
+                cur.execute(insert_query, (state_fips,))
                 inserted = cur.rowcount
             conn.commit()
         finally:
@@ -309,11 +313,12 @@ def _load_state(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
 def _drop_staging(pg_dsn: str, table: str) -> None:
     """Drop staging table if it exists."""
     import psycopg2
+    from psycopg2 import sql as pg_sql
 
     try:
         conn = psycopg2.connect(pg_dsn)
         with conn.cursor() as cur:
-            cur.execute(f"DROP TABLE IF EXISTS {table}")
+            cur.execute(pg_sql.SQL("DROP TABLE IF EXISTS {}").format(pg_sql.Identifier(table)))
         conn.commit()
         conn.close()
     except Exception:
