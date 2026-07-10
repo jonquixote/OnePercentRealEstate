@@ -84,6 +84,15 @@ def fetch_agencies(state_abbr: str, api_key: str) -> list[dict[str, Any]]:
         resp.raise_for_status()
         data = resp.json()
         agencies = data if isinstance(data, list) else data.get("results", data.get("data", []))
+        # FBI API may return a dict keyed by county name → flatten to list
+        if isinstance(agencies, dict):
+            flat = []
+            for county_key, agency_list in agencies.items():
+                if isinstance(agency_list, list):
+                    for a in agency_list:
+                        a["county_name"] = county_key
+                    flat.extend(agency_list)
+            agencies = flat
         result = []
         for a in agencies:
             county = (a.get("county_name") or a.get("agency_county_name") or "").strip()
