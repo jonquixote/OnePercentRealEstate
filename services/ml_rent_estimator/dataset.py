@@ -55,6 +55,14 @@ FEATURE_NAMES = [
     "tax_assessed_log",          # log(max(tax_assessed_value, 10000)), sentinel 0.0 when missing
     "list_to_assessed_ratio",    # list_price / tax_assessed_value, sentinel 1.0 when missing
     "assessed_ratio_present",    # 1.0 when ratio is from real data, 0.0 when sentinel
+    # --- rent model v3: data expansion signals (append-only) ---
+    "zip_hpi_cagr_5yr",        # 5-year CAGR of FHFA ZIP HPI, sentinel 0.0
+    "walkability_index",        # EPA National Walkability Index (1-20), sentinel 0.0
+    "county_unemployment",      # BLS county unemployment rate, sentinel 0.0
+    "disaster_decl_10yr",       # count of FEMA disaster declarations in county last 10yr, sentinel 0.0
+    "flood_sfha",               # 1.0 if property is in SFHA flood zone, 0.0 otherwise
+    "transit_stops_1km",        # count of transit stops within 1km, sentinel 0.0
+    "county_crime_rate",        # violent crime rate per 100k, sentinel 0.0
 ]
 
 # Minimum observation count at h3_9 before we trust its TE estimate.
@@ -104,7 +112,11 @@ WITH base AS (
          CASE WHEN (r.raw_data->>'tax_assessed_value') IS NOT NULL
               AND regexp_replace(r.raw_data->>'tax_assessed_value', '[^0-9.]', '', 'g') ~ '^[0-9]+(\\.[0-9]+)?$'
               THEN regexp_replace(r.raw_data->>'tax_assessed_value', '[^0-9.]', '', 'g')::float
-         END AS tax_assessed_value
+          END AS tax_assessed_value,
+          -- v3 data expansion signals
+          COALESCE(r.flood_sfha, 0) AS flood_sfha,
+          COALESCE(r.transit_stops_1km, 0) AS transit_stops_1km,
+          r.fips_code
   FROM rental_listings r
   -- P3: listing-time-correct HUD join (fiscal year matching listing year).
   -- HUD FY runs Oct→Sep, so a listing in Jan 2026 is FY2026; listing in
@@ -196,12 +208,13 @@ def _te_raw_stats(train_df, key_col: str) -> dict:
 
 
 def fit_encoders(train_df, market_stats: Optional[dict] = None,
-                 tract_income: Optional[dict] = None) -> dict:
+                 tract_income: Optional[dict] = None, conn=None) -> dict:
     """Fit all encoders on the TRAIN frame only. Returns the metadata dict
     that predict-time feature building consumes.
 
     market_stats: {h3_8: [rent_psf, sold_psf, n_rent, n_sold]} (collapsed
       across months by the caller). tract_income: {geoid: median_hh_income}.
+    conn: optional psycopg2 connection for v3 data-expansion lookups.
     Both are baked into meta so serving reconstructs identical features.
     """
     import numpy as np
@@ -268,6 +281,56 @@ def fit_encoders(train_df, market_stats: Optional[dict] = None,
     global_rent_psf = float(np.median(rent_vals)) if rent_vals else 2.0
     global_sold_psf = float(np.median(sold_vals)) if sold_vals else 250.0
 
+    # --- v3: data expansion lookups (require DB connection) ---
+    hpi_cagr = {}
+    tract_walk = {}
+    county_unemp = {}
+    county_disasters = {}
+    county_crime = {}
+
+    if conn is not None:
+        with conn.cursor() as cur:
+            # hpi_cagr: {zip5: float} from fhfa_zip_hpi
+            cur.execute("""
+                SELECT DISTINCT ON (zip5) zip5,
+                       CASE WHEN hpi > 0 AND lag_hpi > 0 THEN (hpi / lag_hpi) ^ (1.0/5.0) - 1.0 ELSE 0.0 END AS cagr
+                FROM (
+                    SELECT zip5, hpi,
+                           LAG(hpi, 5) OVER (PARTITION BY zip5 ORDER BY year) AS lag_hpi
+                    FROM fhfa_zip_hpi
+                ) sub
+                WHERE lag_hpi IS NOT NULL AND lag_hpi > 0
+            """)
+            hpi_cagr = {r[0]: float(r[1]) for r in cur.fetchall()}
+
+            # tract_walk: {geoid: float} from tract_walkability view
+            cur.execute("SELECT geoid, natwalkind FROM tract_walkability WHERE natwalkind IS NOT NULL")
+            tract_walk = {r[0]: float(r[1]) for r in cur.fetchall()}
+
+            # county_unemp: {fips: float} from bls_county_laus (latest per county)
+            cur.execute("""
+                SELECT DISTINCT ON (fips) fips, unemployment_rate
+                FROM bls_county_laus WHERE unemployment_rate IS NOT NULL
+                ORDER BY fips, period DESC
+            """)
+            county_unemp = {r[0]: float(r[1]) for r in cur.fetchall()}
+
+            # county_disasters: {fips: float} from fema_disasters (last 10yr count)
+            cur.execute("""
+                SELECT fips, SUM(declarations)::float
+                FROM fema_disasters WHERE fy >= EXTRACT(YEAR FROM now()) - 10
+                GROUP BY fips
+            """)
+            county_disasters = {r[0]: float(r[1]) for r in cur.fetchall()}
+
+            # county_crime: {fips: float} from crime_county (latest year)
+            cur.execute("""
+                SELECT DISTINCT ON (fips) fips, violent_per_100k
+                FROM crime_county WHERE violent_per_100k IS NOT NULL AND agencies_reporting >= 2
+                ORDER BY fips, year DESC
+            """)
+            county_crime = {r[0]: float(r[1]) for r in cur.fetchall()}
+
     return {
         "feature_names": FEATURE_NAMES,
         "global_mean_log": global_mean_log,
@@ -283,6 +346,12 @@ def fit_encoders(train_df, market_stats: Optional[dict] = None,
         "tract_income": tract_income or {},
         "global_rent_psf": global_rent_psf,
         "global_sold_psf": global_sold_psf,
+        # v3 data expansion lookups:
+        "hpi_cagr": hpi_cagr,
+        "tract_walk": tract_walk,
+        "county_unemp": county_unemp,
+        "county_disasters": county_disasters,
+        "county_crime": county_crime,
     }
 
 
@@ -484,6 +553,10 @@ def compute_features(row: dict[str, Any], meta: dict, asof: Any = None) -> dict[
         h3_8, h3_9 = _h3_cells(lat, lng)
     tract_key = str(row.get("census_tract") or "")
 
+    # v3: lookup keys for data expansion features
+    zip5 = str(row.get("zip") or "")[:5]
+    county_fips = str(row.get("fips_code") or tract_key[:5] or "")
+
     cas = _te_cascade(zip_te, tract_key, h3_8, h3_9, meta.get("te_stats", {}), meta["global_mean_log"])
     rent_psf, sold_psf = _local_surface(h3_8, meta.get("local_by_hex", {}), meta)
 
@@ -603,6 +676,14 @@ def compute_features(row: dict[str, Any], meta: dict, asof: Any = None) -> dict[
         "tax_assessed_log": tax_assessed_log,
         "list_to_assessed_ratio": list_to_assessed_ratio,
         "assessed_ratio_present": assessed_ratio_present,
+        # --- v3: data expansion signals ---
+        "zip_hpi_cagr_5yr": meta.get("hpi_cagr", {}).get(zip5, 0.0),
+        "walkability_index": meta.get("tract_walk", {}).get(tract_key, 0.0),
+        "county_unemployment": meta.get("county_unemp", {}).get(county_fips, 0.0),
+        "disaster_decl_10yr": meta.get("county_disasters", {}).get(county_fips, 0.0),
+        "flood_sfha": num(row.get("flood_sfha"), 0.0),
+        "transit_stops_1km": num(row.get("transit_stops_1km"), 0.0),
+        "county_crime_rate": meta.get("county_crime", {}).get(county_fips, 0.0),
     }
 
 

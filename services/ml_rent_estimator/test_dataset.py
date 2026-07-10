@@ -148,7 +148,7 @@ def test_full_vector_length_with_p1_features():
         global_rent_psf=2.0, global_sold_psf=250.0,
     )
     v = vector_from_features(compute_features(ROW, meta), meta)
-    assert len(v) == len(FEATURE_NAMES) == 33
+    assert len(v) == len(FEATURE_NAMES) == 40
 
 
 # --- P2 property history ---
@@ -399,3 +399,87 @@ def test_ext_assessed_ratio_present_flips():
     feats_no = compute_features(row_no_rent, BASE_META)
     assert feats_no["assessed_ratio_present"] == 0.0
     assert feats_no["list_to_assessed_ratio"] == 1.0
+
+
+# --- v3: data expansion signals ---
+
+
+def test_v3_hpi_cagr_from_meta():
+    """Meta lookup returns HPI CAGR for a known zip."""
+    meta = dict(BASE_META, hpi_cagr={"90004": 0.035})
+    feats = compute_features(ROW, meta)
+    assert feats["zip_hpi_cagr_5yr"] == 0.035
+
+
+def test_v3_hpi_cagr_sentinel_when_missing():
+    """Missing zip → 0.0 sentinel."""
+    meta = dict(BASE_META, hpi_cagr={"00000": 0.05})
+    feats = compute_features(ROW, meta)
+    assert feats["zip_hpi_cagr_5yr"] == 0.0
+
+
+def test_v3_walkability_from_meta():
+    """Tract lookup returns walkability index."""
+    meta = dict(BASE_META, tract_walk={"06037211500": 12.5})
+    row = dict(ROW, census_tract="06037211500")
+    feats = compute_features(row, meta)
+    assert feats["walkability_index"] == 12.5
+
+
+def test_v3_walkability_sentinel_when_missing():
+    """Missing tract → 0.0 sentinel."""
+    meta = dict(BASE_META, tract_walk={"9999999999": 15.0})
+    feats = compute_features(ROW, meta)
+    assert feats["walkability_index"] == 0.0
+
+
+def test_v3_county_unemployment_from_meta():
+    """County FIPS lookup returns unemployment rate."""
+    meta = dict(BASE_META, county_unemp={"06037": 5.2})
+    row = dict(ROW, fips_code="06037")
+    feats = compute_features(row, meta)
+    assert feats["county_unemployment"] == 5.2
+
+
+def test_v3_disaster_count_from_meta():
+    """County FIPS lookup returns disaster count."""
+    meta = dict(BASE_META, county_disasters={"06037": 3.0})
+    row = dict(ROW, fips_code="06037")
+    feats = compute_features(row, meta)
+    assert feats["disaster_decl_10yr"] == 3.0
+
+
+def test_v3_flood_sfha_from_row():
+    """Row value populates flood_sfha."""
+    row = dict(ROW, flood_sfha=1.0)
+    feats = compute_features(row, BASE_META)
+    assert feats["flood_sfha"] == 1.0
+
+
+def test_v3_transit_stops_from_row():
+    """Row value populates transit_stops_1km."""
+    row = dict(ROW, transit_stops_1km=5.0)
+    feats = compute_features(row, BASE_META)
+    assert feats["transit_stops_1km"] == 5.0
+
+
+def test_v3_crime_rate_from_meta():
+    """County FIPS lookup returns crime rate."""
+    meta = dict(BASE_META, county_crime={"06037": 750.0})
+    row = dict(ROW, fips_code="06037")
+    feats = compute_features(row, meta)
+    assert feats["county_crime_rate"] == 750.0
+
+
+def test_v3_all_sentinels_when_empty_meta():
+    """With empty v3 meta dicts, all v3 features use sentinels."""
+    meta = dict(BASE_META, hpi_cagr={}, tract_walk={}, county_unemp={},
+                county_disasters={}, county_crime={})
+    feats = compute_features(ROW, meta)
+    assert feats["zip_hpi_cagr_5yr"] == 0.0
+    assert feats["walkability_index"] == 0.0
+    assert feats["county_unemployment"] == 0.0
+    assert feats["disaster_decl_10yr"] == 0.0
+    assert feats["flood_sfha"] == 0.0
+    assert feats["transit_stops_1km"] == 0.0
+    assert feats["county_crime_rate"] == 0.0
