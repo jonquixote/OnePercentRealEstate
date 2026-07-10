@@ -117,6 +117,7 @@ def main() -> None:
     try:
         for chunk in pd.read_csv(csv_path, usecols=USE_COLS, dtype=str, chunksize=100_000):
             chunk.rename(columns=RENAME, inplace=True)
+            chunk.drop_duplicates(subset=["geoid_bg"], keep="first", inplace=True)
             rows = parse_rows(chunk)
             if rows:
                 upsert(rows, conn)
