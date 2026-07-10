@@ -68,9 +68,9 @@ def parse_xlsx(data: bytes) -> list[tuple[str, int, float | None, float | None]]
     assert header is not None, "could not find header row"
 
     cols = {str(h).strip(): i for i, h in enumerate(header) if h}
-    zip_col = cols.get("Five-Digit ZIP Code") or cols.get("Zip Code")
+    zip_col = cols.get("Five-Digit ZIP Code") if "Five-Digit ZIP Code" in cols else cols.get("Zip Code")
     yr_col = cols.get("Year")
-    chg_col = cols.get("Annual Change (%)") or cols.get("annual_change_pct")
+    chg_col = cols.get("Annual Change (%)") if "Annual Change (%)" in cols else cols.get("annual_change_pct")
     hpi_col = cols.get("HPI")
     if zip_col is None or yr_col is None or hpi_col is None:
         raise SystemExit(f"ERROR: unexpected columns {list(cols.keys())}")
