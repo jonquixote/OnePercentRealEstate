@@ -280,6 +280,8 @@ def run_scraper(args):
                     listing_type=l_type,
                     past_days=args.past_days,
                     extra_property_data=True,
+                    **({"date_from": args.date_from} if args.date_from else {}),
+                    **({"date_to": args.date_to} if args.date_to else {}),
                 )
                 properties = scrape_property(**scrape_kwargs)
             except Exception as scrape_err:
@@ -459,6 +461,8 @@ if __name__ == "__main__":
     parser.add_argument("--site_name", help="Ignored (HomeHarvest handles sources)")
     parser.add_argument("--listing_type", default="for_sale", help="for_sale, for_rent, sold")
     parser.add_argument("--past_days", type=int, default=30, help="Days of history")
+    parser.add_argument("--date_from", type=str, default=None, help="Start date (YYYY-MM-DD)")
+    parser.add_argument("--date_to", type=str, default=None, help="End date (YYYY-MM-DD)")
     
     args = parser.parse_args()
     run_scraper(args)

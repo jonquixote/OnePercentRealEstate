@@ -109,6 +109,8 @@ class ScrapeRequest(BaseModel):
     max_price: Optional[float] = None
     beds_min: Optional[int] = None
     baths_min: Optional[float] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
 
 @app.get("/health")
 def health_check():
@@ -119,7 +121,7 @@ def scrape_listings(req: ScrapeRequest):
     try:
         print(f"Scraping {req.location} ({req.listing_type})...")
         
-        df = scrape_property(
+        scrape_kwargs = dict(
             location=req.location,
             listing_type=req.listing_type,
             past_days=req.past_days,
@@ -128,6 +130,11 @@ def scrape_listings(req: ScrapeRequest):
             foreclosure=req.foreclosure,
             extra_property_data=True,
         )
+        if req.date_from:
+            scrape_kwargs["date_from"] = req.date_from
+        if req.date_to:
+            scrape_kwargs["date_to"] = req.date_to
+        df = scrape_property(**scrape_kwargs)
         
         is_rental = req.listing_type == 'for_rent'
         is_sold = req.listing_type == 'sold'
