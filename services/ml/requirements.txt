@@ -20,3 +20,4 @@ lightgbm==4.5.0
 # rent model v2 (P1): H3 hexes for the hyperlocal market-stats surface +
 # hex TE cascade. Pure wheel, ~1 MB, no Postgres extension required.
 h3==4.1.0
+requests>=2.31
