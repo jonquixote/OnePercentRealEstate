@@ -116,7 +116,7 @@ WITH base AS (
           -- v3 data expansion signals
           COALESCE(r.flood_sfha::int, 0) AS flood_sfha,
           COALESCE(r.transit_stops_1km, 0) AS transit_stops_1km,
-          r.fips_code
+          r.county_fips
   FROM rental_listings r
   -- P3: listing-time-correct HUD join (fiscal year matching listing year).
   -- HUD FY runs Oct→Sep, so a listing in Jan 2026 is FY2026; listing in
