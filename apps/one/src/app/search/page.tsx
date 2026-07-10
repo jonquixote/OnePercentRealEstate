@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useQueryStates } from 'nuqs';
-import { Loader2 } from 'lucide-react';
+import { Loader2, SlidersHorizontal, Map, List } from 'lucide-react';
 import { PropertyMap } from '@/components/PropertyMap';
 import { SearchCard } from '@/components/search/SearchCard';
 import { WatchSearchButton } from '@/components/WatchSearchButton';
@@ -97,198 +97,172 @@ export default function SearchPage() {
     }
   }
 
-  // Build active filter chips from nuqs state
   const activeChips = useMemo(() => {
     const chips: { key: string; label: string; onRemove: () => void }[] = [];
-    if (qs.pmin > 0) {
-      chips.push({
-        key: 'pmin',
-        label: `≥ $${num.format(qs.pmin)}`,
-        onRemove: () => setQs({ pmin: null }),
-      });
-    }
-    if (qs.pmax < 2000000) {
-      chips.push({
-        key: 'pmax',
-        label: `≤ $${num.format(qs.pmax)}`,
-        onRemove: () => setQs({ pmax: null }),
-      });
-    }
-    if (qs.beds > 0) {
-      chips.push({
-        key: 'beds',
-        label: `${qs.beds}+ bd`,
-        onRemove: () => setQs({ beds: null }),
-      });
-    }
-    if (qs.baths > 0) {
-      chips.push({
-        key: 'baths',
-        label: `${qs.baths}+ ba`,
-        onRemove: () => setQs({ baths: null }),
-      });
-    }
-    if (qs.op) {
-      chips.push({
-        key: 'op',
-        label: 'Clears the line',
-        onRemove: () => setQs({ op: null }),
-      });
-    }
-    if (qs.cut) {
-      chips.push({
-        key: 'cut',
-        label: 'Price reduced',
-        onRemove: () => setQs({ cut: null }),
-      });
-    }
-    if (qs.type) {
-      chips.push({
-        key: 'type',
-        label: qs.type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-        onRemove: () => setQs({ type: null }),
-      });
-    }
+    if (qs.pmin > 0) chips.push({ key: 'pmin', label: `≥ $${num.format(qs.pmin)}`, onRemove: () => setQs({ pmin: null }) });
+    if (qs.pmax < 2000000) chips.push({ key: 'pmax', label: `≤ $${num.format(qs.pmax)}`, onRemove: () => setQs({ pmax: null }) });
+    if (qs.beds > 0) chips.push({ key: 'beds', label: `${qs.beds}+ bd`, onRemove: () => setQs({ beds: null }) });
+    if (qs.baths > 0) chips.push({ key: 'baths', label: `${qs.baths}+ ba`, onRemove: () => setQs({ baths: null }) });
+    if (qs.op) chips.push({ key: 'op', label: 'Clears the line', onRemove: () => setQs({ op: null }) });
+    if (qs.cut) chips.push({ key: 'cut', label: 'Price reduced', onRemove: () => setQs({ cut: null }) });
+    if (qs.type) chips.push({ key: 'type', label: qs.type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()), onRemove: () => setQs({ type: null }) });
     return chips;
   }, [qs, setQs]);
 
   return (
-    <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
+    <div className="min-h-screen" style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
 
-      {/* sticky pill toolbar */}
+      {/* sticky toolbar */}
       <div
-        className="sticky top-0 z-20 border-b px-6 py-3 backdrop-blur"
-        style={{ background: 'rgba(11,13,16,.92)', borderColor: 'var(--line)' }}
+        className="sticky top-[57px] z-30 border-b backdrop-blur"
+        style={{ background: 'rgba(250,247,242,.95)', borderColor: 'var(--line)' }}
       >
-        <div className="mx-auto flex max-w-7xl items-center gap-3 overflow-x-auto">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="rounded-full border px-4 py-1.5 text-[13px] font-medium whitespace-nowrap"
-            style={{ borderColor: 'var(--line-hi)' }}
-          >
-            {showFilters ? 'Done' : 'Filters'}
-          </button>
-
-          {/* active filter chips */}
-          {activeChips.map((chip, i) => (
-            <span
-              key={chip.key}
-              className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] cursor-pointer"
-              style={{
-                background: chip.key === 'cut' ? 'var(--brass-dim)' : 'var(--pass-dim)',
-                color: chip.key === 'cut' ? 'var(--brass-hi)' : 'var(--pass-hi)',
-              }}
-              onClick={chip.onRemove}
-              role="button"
-              aria-label={`Remove filter: ${chip.label}`}
-            >
-              {chip.label} <span style={{ color: 'var(--mute)' }}>×</span>
-            </span>
-          ))}
-
-          {activeChips.length === 0 && !showFilters && (
-            <span className="text-[12.5px]" style={{ color: 'var(--mute)' }}>
-              {properties.length > 0
-                ? `${num.format(properties.length)} properties`
-                : loading ? 'Loading…' : 'No filters active'}
-            </span>
-          )}
-
-          <div className="ml-auto flex items-center gap-3">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="rounded-full border bg-transparent px-3 py-1.5 text-[13px]"
-              style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+        <div className="mx-auto max-w-7xl px-6 py-3 lg:px-8">
+          <div className="flex items-center gap-3">
+            {/* Filter toggle */}
             <button
-              onClick={() => {
-                navigator.clipboard.writeText(window.location.href);
-              }}
-              className="whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors"
-              style={{ border: '1px solid var(--line)', color: 'var(--haze)' }}
-              title="Copy search link"
-              aria-label="Copy search link to clipboard"
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors hover:border-line-hi"
+              style={{ borderColor: showFilters ? 'var(--pass)' : 'var(--line)', color: showFilters ? 'var(--pass)' : 'var(--text)' }}
             >
-              Copy link
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              {showFilters ? 'Done' : 'Filters'}
             </button>
-            <WatchSearchButton filters={filters} />
+
+            {/* Active filter chips */}
+            <div className="flex items-center gap-2 overflow-x-auto">
+              {activeChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  onClick={chip.onRemove}
+                  className="flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors hover:opacity-80"
+                  style={{
+                    background: chip.key === 'cut' ? 'var(--brass-dim)' : 'var(--pass-dim)',
+                    color: chip.key === 'cut' ? 'var(--brass-hi)' : 'var(--pass-hi)',
+                  }}
+                  aria-label={`Remove filter: ${chip.label}`}
+                >
+                  {chip.label} <span className="ml-0.5 opacity-60">×</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Count + sort + actions */}
+            <div className="ml-auto flex items-center gap-2">
+              {activeChips.length === 0 && !showFilters && (
+                <span className="hidden sm:inline text-[12px]" style={{ color: 'var(--mute)' }}>
+                  {loading ? 'Loading…' : `${num.format(properties.length)} properties`}
+                </span>
+              )}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="rounded-full border bg-transparent px-3 py-1.5 text-[12px] font-medium"
+                style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setShowMap(!showMap)}
+                className="hidden lg:flex items-center gap-1 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors hover:border-line-hi"
+                style={{ borderColor: 'var(--line)', color: 'var(--haze)' }}
+                title={showMap ? 'Hide map' : 'Show map'}
+              >
+                {showMap ? <List className="h-3.5 w-3.5" /> : <Map className="h-3.5 w-3.5" />}
+                {showMap ? 'List' : 'Map'}
+              </button>
+              <button
+                onClick={() => navigator.clipboard.writeText(window.location.href)}
+                className="hidden sm:flex whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors hover:border-line-hi"
+                style={{ border: '1px solid var(--line)', color: 'var(--haze)' }}
+                title="Copy search link"
+              >
+                Copy link
+              </button>
+              <WatchSearchButton filters={filters} />
+            </div>
           </div>
         </div>
 
-        {/* expandable filter panel */}
+        {/* Expandable filter panel */}
         {showFilters && (
-          <div className="mx-auto mt-3 max-w-7xl border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+          <div className="mx-auto max-w-7xl border-t px-6 py-4 lg:px-8" style={{ borderColor: 'var(--line)' }}>
             <PropertyFilters />
           </div>
         )}
       </div>
 
-      {/* gallery + map split */}
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-6 py-8 lg:grid-cols-2">
-        {/* gallery cards */}
-        <div>
-          {loading ? (
-            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="mat animate-pulse">
-                    <div className="aspect-[4/3] rounded-[6px] bg-ink-2" />
-                  <div className="mt-4 space-y-2">
-                    <div className="h-5 w-20 rounded bg-ink-2" />
-                    <div className="h-3 w-32 rounded bg-ink-2" />
+      {/* Content: cards + map */}
+      <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
+        <div className={`grid gap-6 ${showMap ? 'grid-cols-1 lg:grid-cols-[1fr_45%] lg:gap-8' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
+
+          {/* Cards */}
+          <div>
+            {loading ? (
+              <div className={`grid gap-6 ${showMap ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="overflow-hidden rounded-2xl border" style={{ borderColor: 'var(--line)', background: 'var(--ink-panel)' }}>
+                    <div className="aspect-[4/3] animate-pulse" style={{ background: 'var(--ink-2)' }} />
+                    <div className="space-y-3 p-4">
+                      <div className="h-5 w-24 rounded" style={{ background: 'var(--ink-2)' }} />
+                      <div className="h-3 w-32 rounded" style={{ background: 'var(--ink-2)' }} />
+                      <div className="h-3 w-20 rounded" style={{ background: 'var(--ink-2)' }} />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : properties.length === 0 ? (
-            <div
-              className="rounded-2xl border border-dashed p-12 text-center"
-              style={{ borderColor: 'var(--line)', background: 'rgba(255,255,255,.02)' }}
-            >
-              <p className="text-[15px] font-semibold" style={{ color: 'var(--text)' }}>No properties match your search</p>
-              <p className="mt-1 text-[14px]" style={{ color: 'var(--haze)' }}>Try adjusting your filters or criteria.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
-              {properties.map((p) => (
-                <SearchCard key={p.id} property={p} />
-              ))}
-            </div>
-          )}
-
-          {hasMore && !loading && (
-            <div className="mt-10 text-center">
-              <button
-                onClick={() => loadProperties(page + 1)}
-                disabled={loadingMore}
-                className="inline-flex items-center gap-2 rounded-full border px-6 py-2.5 text-[13px] font-medium disabled:opacity-50"
-                style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
+                ))}
+              </div>
+            ) : properties.length === 0 ? (
+              <div
+                className="rounded-2xl border border-dashed p-16 text-center"
+                style={{ borderColor: 'var(--line)', background: 'var(--ink-panel)' }}
               >
-                {loadingMore ? <><Loader2 className="h-4 w-4 animate-spin" />Loading…</> : 'Load more'}
-              </button>
+                <p className="text-[15px] font-semibold" style={{ color: 'var(--text)' }}>No properties match your search</p>
+                <p className="mt-1.5 text-[13px]" style={{ color: 'var(--haze)' }}>Try adjusting your filters or criteria.</p>
+              </div>
+            ) : (
+              <>
+                <div className={`grid gap-6 ${showMap ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
+                  {properties.map((p) => (
+                    <SearchCard key={p.id} property={p} />
+                  ))}
+                </div>
+
+                {hasMore && (
+                  <div className="mt-8 text-center">
+                    <button
+                      onClick={() => loadProperties(page + 1)}
+                      disabled={loadingMore}
+                      className="inline-flex items-center gap-2 rounded-full border px-6 py-2.5 text-[13px] font-medium transition-colors hover:border-line-hi disabled:opacity-50"
+                      style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
+                    >
+                      {loadingMore ? <><Loader2 className="h-4 w-4 animate-spin" />Loading…</> : 'Load more'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Map */}
+          {showMap && (
+            <div
+              className="relative overflow-hidden rounded-2xl border lg:sticky lg:top-[140px] lg:h-[calc(100vh-160px)]"
+              style={{ borderColor: 'var(--line)', background: 'var(--ink-2)' }}
+            >
+              <PropertyMap
+                filters={{
+                  minPrice: filters.minPrice,
+                  maxPrice: filters.maxPrice,
+                  minBeds: filters.minBeds,
+                  minBaths: filters.minBaths,
+                  status: filters.showSold ? 'sold' : 'for_sale',
+                  saleType: filters.saleType,
+                }}
+              />
             </div>
           )}
-        </div>
-
-        {/* map panel (desktop only) */}
-        <div
-          className={`relative overflow-hidden rounded-[var(--r-panel)] border lg:block ${showMap ? 'block h-[60vh]' : 'hidden'}`}
-          style={{ borderColor: 'var(--line)', background: 'var(--ink-2)', minHeight: 560 }}
-        >
-          <PropertyMap
-            filters={{
-              minPrice: filters.minPrice,
-              maxPrice: filters.maxPrice,
-              minBeds: filters.minBeds,
-              minBaths: filters.minBaths,
-              status: filters.showSold ? 'sold' : 'for_sale',
-              saleType: filters.saleType,
-            }}
-          />
         </div>
       </div>
     </div>

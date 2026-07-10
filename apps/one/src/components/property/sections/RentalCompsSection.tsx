@@ -47,13 +47,13 @@ export function RentalCompsSection({ id }: { id: string }) {
     <div className="space-y-3 mt-4">
       <p className="prov mb-3">rental comps (6mo)</p>
       {summary?.median_rent != null && (
-        <div className="mb-3 rounded-[var(--r-panel)] p-3" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
+        <div className="mb-3 rounded-[var(--r-panel)] p-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
           <div className="flex items-baseline justify-between">
-            <span style={{ color: 'var(--haze)' }}>Median rent (last 6mo)</span>
-            <span className="figure">{`${usd0.format(summary.median_rent)}/mo`}</span>
+            <span className="text-[13px] font-medium" style={{ color: 'var(--haze)' }}>Median rent (last 6mo)</span>
+            <span className="figure text-[20px]">{`${usd0.format(summary.median_rent)}/mo`}</span>
           </div>
-          <p className="mt-1 text-[12px]" style={{ color: 'var(--mute)' }}>
-            {summary.avg_price_per_sqft != null ? `$${summary.avg_price_per_sqft}/sqft avg \u00b7 ${comps.length} comps` : `${comps.length} comps`}
+          <p className="mt-1 text-[11px]" style={{ color: 'var(--mute)' }}>
+            {summary.avg_price_per_sqft != null ? `$${summary.avg_price_per_sqft}/sqft avg · ${comps.length} comps` : `${comps.length} comps`}
           </p>
         </div>
       )}

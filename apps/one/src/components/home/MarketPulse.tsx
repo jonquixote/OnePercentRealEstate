@@ -66,7 +66,7 @@ export function MarketPulse({ strategy, histogram, thresholdPct, clears, medianR
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-brass-hi">Market pulse</p>
           <h2
             id="pulse-headline"
-            className="mt-2 font-sans text-[clamp(26px,3vw,36px)] font-semibold leading-[1.1] tracking-[-0.02em] text-white"
+            className="mt-2 font-sans text-[clamp(26px,3vw,36px)] font-semibold leading-[1.1] tracking-[-0.02em] text-foreground"
           >
             Almost nothing clears.
             <br />

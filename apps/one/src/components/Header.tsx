@@ -31,7 +31,6 @@ export default function Header() {
           <Link href="/" className="-m-1.5 p-1.5 flex items-center">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-pass font-mono text-[13px] font-bold text-white">1%</span>
             <span className="ml-3 text-lg font-display font-semibold text-foreground tracking-tight">OnePercent</span>
-            <span className="ml-2 hidden md:inline text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">Private Bank</span>
           </Link>
         </div>
 
@@ -99,12 +98,13 @@ export default function Header() {
         </div>
 
         {/* User nav — single instance, hoisted so responsive blocks don't duplicate */}
-        <div className="flex items-center">
+        <div className="hidden lg:flex items-center">
           <UserNav />
         </div>
 
         {/* Mobile toggle */}
         <div className="flex lg:hidden ml-auto items-center gap-3">
+          <div className="lg:hidden"><UserNav /></div>
           <button
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}

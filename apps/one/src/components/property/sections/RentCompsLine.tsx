@@ -22,11 +22,13 @@ export function RentCompsLine({ id, zip }: { id: string; zip?: string | null }) 
   }, [id, zip]);
 
   return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-[14px]" style={{ color: 'var(--haze)' }}>Area comps median (last 90d)</span>
-      <span className="figure text-[18px]">
-        {compsMedian != null ? `${usd0.format(compsMedian)}/mo` : '\u2014'}
-      </span>
+    <div className="rounded-[var(--r-panel)] p-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
+      <div className="flex items-baseline justify-between">
+        <span className="text-[13px] font-medium" style={{ color: 'var(--haze)' }}>Area comps median (last 90d)</span>
+        <span className="figure text-[20px]">
+          {compsMedian != null ? `${usd0.format(compsMedian)}/mo` : '\u2014'}
+        </span>
+      </div>
     </div>
   );
 }

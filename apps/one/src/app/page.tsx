@@ -59,11 +59,11 @@ export default function Dashboard() {
   const stratMeta = STRATEGY_BY_ID[strategy];
   const { data: stats } = useStats(strategy);
   const [priceCuts, setPriceCuts] = useState<number | undefined>(undefined);
-  const [mortgageRate, setMortgageRate] = useState<number | null>(null);
+  const [medianRent, setMedianRent] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch('/api/mortgage-rates').then(r => r.json()).then(d => setMortgageRate(d.rate ?? null)).catch(() => {});
     fetch('/api/stats/cuts').then(r => r.ok ? r.json().then(d => setPriceCuts(d.count)) : null).catch(() => {});
+    fetch('/api/stats/median-rent').then(r => r.ok ? r.json().then(d => setMedianRent(d.medianRent ?? null)) : null).catch(() => {});
   }, []);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -134,7 +134,7 @@ export default function Dashboard() {
       <HomeHero
         stats={stats ?? null}
         priceCuts={priceCuts}
-        mortgageRate={mortgageRate}
+        medianRent={medianRent}
       />
       <FeaturedDeals strategy={strategy} rentCalcPending={stats?.rentCalcPending ?? 0} />
       <ReducedRail />
@@ -156,7 +156,7 @@ export default function Dashboard() {
               <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 The tool · {stratMeta.label}
               </p>
-              <h2 id="opp-headline" className="mt-1 flex items-baseline gap-3 font-sans text-2xl font-semibold tracking-[-0.02em] text-white sm:text-3xl">
+              <h2 id="opp-headline" className="mt-1 flex items-baseline gap-3 font-sans text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
                 Every deal on the map, ranked
                 <span className="rounded-full bg-pass/15 px-3 py-1 font-mono text-[11px] font-semibold tabular-nums text-pass-hi">
                   {filteredProperties.length} shown
