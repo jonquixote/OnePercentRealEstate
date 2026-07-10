@@ -59,13 +59,13 @@ def parse_xlsx(data: bytes) -> list[tuple[str, int, float | None, float | None]]
     ws = wb.active
     assert ws is not None, "workbook has no active sheet"
     rows = ws.iter_rows(values_only=True)
-    # Scan for header row containing 'Five-Digit ZIP Code'
+    # Scan for header row — first cell contains 'ZIP Code' and second is 'Year'
     header = None
     for row in rows:
-        if row and row[0] and 'Five-Digit ZIP Code' in str(row[0]):
+        if row and 'ZIP Code' in str(row[0]) and str(row[1]).strip() == 'Year':
             header = row
             break
-    assert header is not None, "could not find header row with 'Five-Digit ZIP Code'"
+    assert header is not None, "could not find header row"
 
     cols = {str(h).strip(): i for i, h in enumerate(header) if h}
     zip_col = cols.get("Five-Digit ZIP Code") or cols.get("Zip Code")
