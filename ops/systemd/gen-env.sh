@@ -75,8 +75,12 @@ DB_POSTGRESDB_PORT=5432
 DB_POSTGRESDB_USER=postgres
 DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
 
-# --- Pass through any other keys from .env ---
-$(grep -E '^(RESEND_API_KEY|OPS_WEBHOOK_URL|CENSUS_API_KEY|NEXT_PUBLIC_|OPENAI_)' "$SRC" 2>/dev/null || true)
+# --- Pass through every other key from .env ---
+# Deny-list, not allow-list: the original allow-list silently dropped
+# AUTH_SECRET, STRIPE_*, ADMIN_API_KEY, HUD/FRED/TELEGRAM tokens after the
+# systemd cutover (2026-07-10 incident: login + billing ran without
+# secrets). Anything not already rewritten above flows through verbatim.
+$(grep -E '^[A-Z][A-Z0-9_]*=' "$SRC" | grep -vE '^(DATABASE_URL|REDIS_URL|ML_URL|SCRAPER_URL|POSTGRES_PASSWORD|REDIS_PASSWORD|NODE_ENV|ML_PORT|PYTHONPATH|WORKER_CONCURRENCY|RENT_BACKFILL_BATCH|RENT_WORKER_CONCURRENCY|RENT_DRAIN_INTERVAL_MS|CLUSTER_REFRESH_INTERVAL_MS|MEDIA_HEALTH_CONCURRENCY|MEDIA_HEALTH_INTERVAL_MS|WATCHLIST_TICK_MS|WATCHLIST_FROM_EMAIL|LOG_LEVEL|N8N_|DB_TYPE|DB_POSTGRESDB_|WEBHOOK_URL|GENERIC_TIMEZONE)' || true)
 EOF
 
 chmod 600 "$DST"
