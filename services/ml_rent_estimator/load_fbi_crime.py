@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import requests
@@ -115,27 +116,21 @@ def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str) -> i
     """Fetch total offense count for an agency and crime type in a given year."""
     url = f"{FBI_BASE}/summarized/agency/{ori}/{crime_type}"
     params = {
-        "from": f"{year}-01-01",
-        "to": f"{year}-12-31",
+        "from": f"01-{year}",
+        "to": f"12-{year}",
         FBI_KEY_PARAM: api_key,
     }
     try:
         resp = requests.get(url, params=params, timeout=TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
-        # response may be a list of yearly summaries or nested
-        if isinstance(data, list):
-            items = data
-        elif isinstance(data, dict):
-            items = data.get("results", data.get("data", [data]))
-        else:
-            return 0
+        # Response structure: {offenses: {actuals: {"<Agency> Offenses": {"MM-YYYY": count, ...}}}}
+        offenses = data.get("offenses", {})
+        actuals = offenses.get("actuals", {})
         total = 0
-        for item in items:
-            # look for total offense count in various field names
-            for key in ("total_offenses", "offenses", "count", "actual", "actual_count"):
-                val = item.get(key)
-                if val is not None:
+        for key, monthly in actuals.items():
+            if "Offense" in key and isinstance(monthly, dict):
+                for val in monthly.values():
                     try:
                         total += int(val)
                     except (TypeError, ValueError):
@@ -271,41 +266,52 @@ def main() -> None:
     county_pops = get_county_populations()
     print(f"  {len(county_pops)} counties with population data", file=sys.stderr)
 
-    # Step 4: Fetch agencies and crime data per state
+    # Step 4: Fetch agencies and crime data per state (concurrent)
     # county_key -> {violent: int, property: int, agencies: int}
     county_data: dict[str, dict[str, Any]] = {}
 
+    # First, collect all agencies across all states with their county FIPS
+    all_agencies: list[dict[str, Any]] = []
     for state in states:
-        print(f"Processing {state}...", file=sys.stderr)
+        print(f"Fetching agencies for {state}...", file=sys.stderr)
         agencies = fetch_agencies(state, api_key)
         print(f"  {len(agencies)} agencies in {state}", file=sys.stderr)
-
         for agency in agencies:
-            ori = agency["ori"]
             county_name = normalize_county_name(agency["county_name"])
-
             fips = county_lookup.get((state, county_name))
             if not fips:
-                # try fuzzy: sometimes FBI uses slightly different names
-                # just skip if we can't match
-                print(f"  SKIP: no FIPS for {state}/{agency['county_name']}", file=sys.stderr)
                 continue
+            all_agencies.append({"ori": agency["ori"], "fips": fips})
 
-            if fips not in county_data:
-                county_data[fips] = {"violent": 0, "property": 0, "agencies": set()}
+    print(f"Total agencies to query: {len(all_agencies)}", file=sys.stderr)
 
-            # fetch violent crime
-            violent = fetch_crime_summary(ori, "violent-crime", year, api_key)
-            county_data[fips]["violent"] += violent
-            county_data[fips]["agencies"].add(ori)
+    def fetch_one(agency: dict[str, Any]) -> tuple[str, int, int]:
+        """Fetch violent + property crime for one agency. Returns (fips, violent, property)."""
+        ori = agency["ori"]
+        fips = agency["fips"]
+        violent = fetch_crime_summary(ori, "violent-crime", year, api_key)
+        property_crime = fetch_crime_summary(ori, "property-crime", year, api_key)
+        return fips, violent, property_crime
 
-            time.sleep(DELAY)
+    # Use 5 workers to avoid rate-limiting
+    done_count = 0
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(fetch_one, a): a for a in all_agencies}
+        for future in as_completed(futures):
+            done_count += 1
+            if done_count % 100 == 0:
+                print(f"  {done_count}/{len(all_agencies)} agencies queried...", file=sys.stderr)
+            try:
+                fips, violent, property_crime = future.result()
+                if fips not in county_data:
+                    county_data[fips] = {"violent": 0, "property": 0, "agencies": set()}
+                county_data[fips]["violent"] += violent
+                county_data[fips]["property"] += property_crime
+                county_data[fips]["agencies"].add(futures[future]["ori"])
+            except Exception as exc:
+                print(f"  agency query failed: {exc}", file=sys.stderr)
 
-            # fetch property crime
-            property_crime = fetch_crime_summary(ori, "property-crime", year, api_key)
-            county_data[fips]["property"] += property_crime
-
-            time.sleep(DELAY)
+    print(f"  {len(county_data)} counties with crime data", file=sys.stderr)
 
     # Step 5: Compute rates and build rows
     rows: list[tuple[str, int, float, float, int]] = []
