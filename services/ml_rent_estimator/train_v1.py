@@ -61,6 +61,58 @@ def load_tract_income(conn) -> dict:
         )
         return {r[0]: float(r[1]) for r in cur.fetchall()}
 
+
+def load_hpi_cagr(conn) -> dict:
+    """{zip5: cagr} — 5-year CAGR of FHFA ZIP HPI."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (zip5) zip5, year,
+                   CASE WHEN hpi > 0 AND lag_hpi > 0 THEN (hpi / lag_hpi) ^ (1.0/5.0) - 1.0 ELSE 0.0 END
+            FROM (SELECT zip5, hpi, year, LAG(hpi, 5) OVER (PARTITION BY zip5 ORDER BY year) AS lag_hpi
+                  FROM fhfa_zip_hpi) sub
+            WHERE lag_hpi IS NOT NULL AND lag_hpi > 0
+            ORDER BY zip5, year DESC
+        """)
+        return {r[0]: float(r[1]) for r in cur.fetchall()}
+
+
+def load_tract_walk(conn) -> dict:
+    """{geoid: natwalkind} — EPA National Walkability Index."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT geoid, natwalkind FROM tract_walkability WHERE natwalkind IS NOT NULL")
+        return {r[0]: float(r[1]) for r in cur.fetchall()}
+
+
+def load_county_unemp(conn) -> dict:
+    """{fips: rate} — latest BLS county unemployment rate."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (fips) fips, unemployment_rate
+            FROM bls_county_laus WHERE unemployment_rate IS NOT NULL ORDER BY fips, period DESC
+        """)
+        return {r[0]: float(r[1]) for r in cur.fetchall()}
+
+
+def load_county_disasters(conn) -> dict:
+    """{fips: total} — FEMA disaster declarations last 10 years."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT fips, SUM(declarations)::float FROM fema_disasters
+            WHERE fy >= EXTRACT(YEAR FROM now()) - 10 GROUP BY fips
+        """)
+        return {r[0]: float(r[1]) for r in cur.fetchall()}
+
+
+def load_county_crime(conn) -> dict:
+    """{fips: violent_per_100k} — violent crime rate per 100k."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (fips) fips, violent_per_100k FROM crime_county
+            WHERE violent_per_100k IS NOT NULL AND agencies_reporting >= 2
+            ORDER BY fips, year DESC
+        """)
+        return {r[0]: float(r[1]) for r in cur.fetchall()}
+
 MODEL_DIR = os.environ.get("MODEL_DIR", "/models")
 # Optional argv[1] = subdirectory (the nightly retrain trains into
 # 'rent_v1_staging' and only swaps to 'rent_v1' after the eval gate passes).
@@ -102,31 +154,31 @@ def main() -> None:
         df = pd.read_sql(TRAINING_SQL, conn, parse_dates=["listing_date"])
         market_stats = load_market_stats(conn)
         tract_income = load_tract_income(conn)
+        print(
+            f"loaded {len(df)} rows, {len(market_stats)} hex stats, "
+            f"{len(tract_income)} tract incomes in {time.time()-t0:.0f}s",
+            flush=True,
+        )
+
+        # Compute H3 cells once for the whole frame (reused by the encoders and
+        # both feature-matrix builds).
+        df = add_h3_columns(df)
+
+        # Address-hash split (deterministic 90/10), NOT time-based: rental
+        # collection only started ~2026-06-05, so "last 30 days" would hold out
+        # 93% of the data. Hashing on address also prevents the same unit
+        # (relisted across dates) leaking between train and holdout. Revisit a
+        # true time split once several months of history exist.
+        bucket = df["split_bucket"].abs() % 10
+        train_df = df[bucket != 0]
+        hold_df = df[bucket == 0]
+        print(f"train={len(train_df)} holdout={len(hold_df)} (address-hash 90/10)", flush=True)
+
+        meta = fit_encoders(train_df, market_stats=market_stats, tract_income=tract_income, conn=conn)
+        Xt, yt, wt = frame_to_matrix(train_df, meta)
+        Xh, yh, _ = frame_to_matrix(hold_df, meta)
     finally:
         conn.close()
-    print(
-        f"loaded {len(df)} rows, {len(market_stats)} hex stats, "
-        f"{len(tract_income)} tract incomes in {time.time()-t0:.0f}s",
-        flush=True,
-    )
-
-    # Compute H3 cells once for the whole frame (reused by the encoders and
-    # both feature-matrix builds).
-    df = add_h3_columns(df)
-
-    # Address-hash split (deterministic 90/10), NOT time-based: rental
-    # collection only started ~2026-06-05, so "last 30 days" would hold out
-    # 93% of the data. Hashing on address also prevents the same unit
-    # (relisted across dates) leaking between train and holdout. Revisit a
-    # true time split once several months of history exist.
-    bucket = df["split_bucket"].abs() % 10
-    train_df = df[bucket != 0]
-    hold_df = df[bucket == 0]
-    print(f"train={len(train_df)} holdout={len(hold_df)} (address-hash 90/10)", flush=True)
-
-    meta = fit_encoders(train_df, market_stats=market_stats, tract_income=tract_income)
-    Xt, yt, wt = frame_to_matrix(train_df, meta)
-    Xh, yh, _ = frame_to_matrix(hold_df, meta)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     train_set = lgb.Dataset(Xt, label=yt, weight=wt, feature_name=meta["feature_names"])

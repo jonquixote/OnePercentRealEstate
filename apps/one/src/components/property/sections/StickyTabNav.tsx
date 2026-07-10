@@ -10,6 +10,9 @@ const TABS = [
   { id: 'analysis', label: 'Analysis' },
   { id: 'calculator', label: 'Calculator' },
   { id: 'nearby', label: 'Nearby' },
+  { id: 'risk', label: 'Risk' },
+  { id: 'neighborhood', label: 'Neighborhood' },
+  { id: 'market', label: 'Market' },
 ];
 
 export default function StickyTabNav() {

@@ -6,6 +6,7 @@ NaN-normalizes raw_data before calling us, but we defend anyway."""
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 from typing import Any, Optional
 
@@ -92,4 +93,22 @@ def extract_enrichment(row: dict) -> dict:
         "property_url": _text(row.get("property_url")),
         "parking_garage": _bool(row.get("parking_garage")),
         "lot_sqft": _num(row.get("lot_sqft")),
+        "stories": _num(row.get("stories")),
+        "nearby_schools": _json(row.get("nearby_schools")),
+        "agent_info": _agent_info(row),
+        "tax_history": _json(row.get("tax_history")),
     }
+
+
+def _json(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    if isinstance(v, (list, dict)):
+        return json.dumps(v)
+    return None
+
+
+def _agent_info(row: dict) -> Optional[str]:
+    fields = ("agent_name", "agent_email", "broker_name", "office_name")
+    data = {k: row.get(k) for k in fields if row.get(k) is not None}
+    return json.dumps(data) if data else None

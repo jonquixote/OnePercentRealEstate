@@ -45,4 +45,20 @@ listings_total:
         usage: "GAUGE"
         description: "Total rows in the listings table"
 
+rental_ingest_by_source:
+  query: |
+    SELECT
+      source,
+      COUNT(*) FILTER (WHERE listing_date > now() - interval '24 hours')::float AS last24h
+    FROM rental_listings
+    GROUP BY source
+  master: true
+  metrics:
+    - source:
+        usage: "LABEL"
+        description: "Rental data source (homeharvest, padmapper, etc.)"
+    - last24h:
+        usage: "GAUGE"
+        description: "Number of rental listings ingested in the last 24 hours from this source"
+
 

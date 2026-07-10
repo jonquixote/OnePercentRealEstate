@@ -109,6 +109,9 @@ class ScrapeRequest(BaseModel):
     max_price: Optional[float] = None
     beds_min: Optional[int] = None
     baths_min: Optional[float] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    source: str = "homeharvest"
 
 @app.get("/health")
 def health_check():
@@ -117,16 +120,26 @@ def health_check():
 @app.post("/scrape")
 def scrape_listings(req: ScrapeRequest):
     try:
+        # Dispatch to padmapper adapter if source is padmapper
+        if req.source == "padmapper":
+            return _scrape_padmapper(req)
+        
         print(f"Scraping {req.location} ({req.listing_type})...")
         
-        df = scrape_property(
+        scrape_kwargs = dict(
             location=req.location,
             listing_type=req.listing_type,
             past_days=req.past_days,
             radius=req.radius,
             mls_only=req.mls_only,
-            foreclosure=req.foreclosure
+            foreclosure=req.foreclosure,
+            extra_property_data=True,
         )
+        if req.date_from:
+            scrape_kwargs["date_from"] = req.date_from
+        if req.date_to:
+            scrape_kwargs["date_to"] = req.date_to
+        df = scrape_property(**scrape_kwargs)
         
         is_rental = req.listing_type == 'for_rent'
         is_sold = req.listing_type == 'sold'
@@ -310,7 +323,8 @@ def scrape_listings(req: ScrapeRequest):
                             county, fips_code, neighborhoods, last_sold_price, last_sold_date,
                             assessed_value, estimated_value, description, style, new_construction,
                             list_date, price_per_sqft, hoa_fee, tax_annual_amount, property_url,
-                            parking_garage, lot_sqft
+                            parking_garage, lot_sqft,
+                            stories, nearby_schools, agent_info, tax_history
                         )
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s,
@@ -322,7 +336,8 @@ def scrape_listings(req: ScrapeRequest):
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 0.95 ELSE c.sale_type_confidence END,
                             n.address_norm,
                             md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), '')),
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s
                         FROM classify_sale_type(%s::jsonb, %s) c,
                              LATERAL (
                                  SELECT NULLIF(regexp_replace(regexp_replace(lower(trim(%s)), '[.,#]', '', 'g'), '\\s+', ' ', 'g'), '') AS address_norm
@@ -361,6 +376,10 @@ def scrape_listings(req: ScrapeRequest):
                             property_url = COALESCE(EXCLUDED.property_url, listings.property_url),
                             parking_garage = COALESCE(EXCLUDED.parking_garage, listings.parking_garage),
                             lot_sqft = COALESCE(EXCLUDED.lot_sqft, listings.lot_sqft),
+                            stories = COALESCE(EXCLUDED.stories, listings.stories),
+                            nearby_schools = COALESCE(EXCLUDED.nearby_schools, listings.nearby_schools),
+                            agent_info = COALESCE(EXCLUDED.agent_info, listings.agent_info),
+                            tax_history = COALESCE(EXCLUDED.tax_history, listings.tax_history),
                             updated_at = NOW()
                         WHERE (EXCLUDED.price IS NOT NULL AND listings.price IS DISTINCT FROM EXCLUDED.price)
                            OR (EXCLUDED.bedrooms IS NOT NULL AND listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms)
@@ -390,6 +409,10 @@ def scrape_listings(req: ScrapeRequest):
                            OR (EXCLUDED.property_url IS NOT NULL AND listings.property_url IS DISTINCT FROM EXCLUDED.property_url)
                            OR (EXCLUDED.parking_garage IS NOT NULL AND listings.parking_garage IS DISTINCT FROM EXCLUDED.parking_garage)
                            OR (EXCLUDED.lot_sqft IS NOT NULL AND listings.lot_sqft IS DISTINCT FROM EXCLUDED.lot_sqft)
+                           OR (EXCLUDED.stories IS NOT NULL AND listings.stories IS DISTINCT FROM EXCLUDED.stories)
+                           OR (EXCLUDED.nearby_schools IS NOT NULL AND listings.nearby_schools IS DISTINCT FROM EXCLUDED.nearby_schools)
+                           OR (EXCLUDED.agent_info IS NOT NULL AND listings.agent_info IS DISTINCT FROM EXCLUDED.agent_info)
+                           OR (EXCLUDED.tax_history IS NOT NULL AND listings.tax_history IS DISTINCT FROM EXCLUDED.tax_history)
                         RETURNING id, (xmax = 0) as was_inserted
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,
@@ -404,6 +427,7 @@ def scrape_listings(req: ScrapeRequest):
                         enr["new_construction"], enr["list_date"], enr["price_per_sqft"],
                         enr["hoa_fee"], enr["tax_annual_amount"], enr["property_url"],
                         enr["parking_garage"], enr["lot_sqft"],
+                        enr["stories"], enr["nearby_schools"], enr["agent_info"], enr["tax_history"],
                         Json(raw_data), get_property_type(row),
                         address
                     ))
@@ -437,3 +461,304 @@ def scrape_listings(req: ScrapeRequest):
     except Exception as e:
         print(f"Error scraping {req.location}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# PadMapper adapter support
+# ---------------------------------------------------------------------------
+
+# Hardcoded ZIP to lat/lng + bbox offset for common areas (fallback when zcta_geometries doesn't exist)
+_ZIP_COORDS: dict[str, tuple[float, float]] = {
+    "10001": (40.7484, -73.9967),   # NYC
+    "10002": (40.7157, -73.9863),
+    "10003": (40.7317, -73.9893),
+    "10011": (40.7418, -74.0002),
+    "10013": (40.7201, -74.0049),
+    "10014": (40.7340, -74.0054),
+    "33602": (27.9506, -82.4572),   # Tampa
+    "33603": (27.9659, -82.4710),
+    "33605": (27.9484, -82.4367),
+    "33606": (27.9377, -82.4979),
+    "33607": (27.9528, -82.5253),
+    "33609": (27.9429, -82.5283),
+    "33610": (28.0027, -82.4370),
+    "33611": (27.9151, -82.4684),
+    "33613": (28.0444, -82.4392),
+    "33614": (28.0367, -82.5056),
+    "33615": (27.9983, -82.5482),
+    "33616": (27.9390, -82.3915),
+    "33617": (28.0440, -82.4934),
+    "33618": (28.0845, -82.4741),
+    "33619": (28.0001, -82.3860),
+    "33621": (27.8895, -82.3995),
+    "33624": (28.0640, -82.5219),
+    "33625": (28.0400, -82.5600),
+    "33626": (28.0640, -82.5600),
+    "33629": (28.0179, -82.5548),
+    "33647": (28.1429, -82.4894),
+    "33673": (27.9526, -82.4585),
+    "33674": (27.9526, -82.4585),
+    "94102": (37.7786, -122.4160),  # SF
+    "94103": (37.7715, -122.4110),
+    "94104": (37.7904, -122.4019),
+    "94105": (37.7859, -122.3919),
+    "94107": (37.7723, -122.3940),
+    "94108": (37.7893, -122.4069),
+    "94109": (37.7920, -122.4200),
+    "94110": (37.7577, -122.4103),
+    "94111": (37.7948, -122.3924),
+    "94112": (37.7278, -122.4363),
+    "94114": (37.7609, -122.4350),
+    "94115": (37.7872, -122.4360),
+    "94116": (37.7444, -122.4860),
+    "94117": (37.7667, -122.4413),
+    "94118": (37.7806, -122.4530),
+    "94121": (37.7769, -122.4943),
+    "94122": (37.7569, -122.4870),
+    "94123": (37.8004, -122.4369),
+    "94124": (37.7307, -122.3879),
+    "94127": (37.7293, -122.4577),
+    "94129": (37.7986, -122.4634),
+    "94131": (37.7490, -122.4425),
+    "94132": (37.7236, -122.4816),
+    "94133": (37.7992, -122.4088),
+    "94134": (37.7187, -122.4109),
+    "77001": (29.7545, -95.3535),   # Houston
+    "77002": (29.7591, -95.3642),
+    "77003": (29.7464, -95.3489),
+    "77004": (29.7230, -95.3553),
+    "77005": (29.7183, -95.4002),
+    "77006": (29.7388, -95.4177),
+    "77007": (29.7679, -95.4016),
+    "77008": (29.7747, -95.4242),
+    "77009": (29.7983, -95.3984),
+    "77010": (29.7549, -95.3536),
+    "77011": (29.7322, -95.2880),
+    "77012": (29.7163, -95.2398),
+    "77015": (29.7626, -95.1743),
+    "77016": (29.7969, -95.3119),
+    "77017": (29.7861, -95.2228),
+    "77018": (29.7955, -95.4531),
+    "77019": (29.7615, -95.4638),
+    "77020": (29.7610, -95.2728),
+    "77021": (29.6891, -95.3570),
+    "77022": (29.7953, -95.3264),
+    "77023": (29.7370, -95.2879),
+    "77024": (29.7710, -95.5019),
+    "77025": (29.6897, -95.4057),
+    "77026": (29.7149, -95.3149),
+    "77027": (29.7381, -95.4602),
+    "77028": (29.7719, -95.2585),
+    "77029": (29.7945, -95.2839),
+    "77030": (29.7052, -95.3993),
+    "77031": (29.6726, -95.4332),
+    "77033": (29.6880, -95.2491),
+    "77034": (29.6567, -95.1963),
+    "77035": (29.7030, -95.4780),
+    "77036": (29.7353, -95.5485),
+    "77037": (29.7991, -95.1943),
+    "77038": (29.8111, -95.4439),
+    "77039": (29.8016, -95.1797),
+    "77040": (29.8326, -95.4660),
+    "77041": (29.8020, -95.5232),
+    "77042": (29.7397, -95.5867),
+    "77043": (29.8389, -95.4062),
+    "77044": (29.8111, -95.1943),
+    "77045": (29.6507, -95.4158),
+    "77046": (29.7237, -95.4171),
+    "77047": (29.6734, -95.3443),
+    "77048": (29.6313, -95.3423),
+    "77049": (29.7991, -95.1943),
+    "77050": (29.7545, -95.3535),
+    "77051": (29.7545, -95.3535),
+    "77052": (29.7545, -95.3535),
+    "77053": (29.6543, -95.3433),
+    "77054": (29.7034, -95.3888),
+    "77055": (29.8026, -95.5630),
+    "77056": (29.7380, -95.4760),
+    "77057": (29.7380, -95.5204),
+    "77058": (29.7034, -95.3888),
+    "77059": (29.6875, -95.1818),
+    "77060": (29.8352, -95.4031),
+    "77061": (29.6819, -95.3143),
+    "77062": (29.7034, -95.3888),
+    "77063": (29.7034, -95.3888),
+    "77064": (29.8352, -95.4845),
+    "77065": (29.8352, -95.4845),
+    "77066": (29.8352, -95.4031),
+    "77067": (29.8352, -95.4031),
+    "77068": (29.8352, -95.4031),
+    "77069": (29.8352, -95.4031),
+    "77070": (29.8352, -95.4845),
+    "77071": (29.8352, -95.4845),
+    "77072": (29.8352, -95.4845),
+    "77073": (29.8352, -95.4845),
+    "77074": (29.8352, -95.4845),
+    "77075": (29.8352, -95.4845),
+    "77076": (29.8352, -95.4031),
+    "77077": (29.8352, -95.4845),
+    "77078": (29.8352, -95.1943),
+    "77079": (29.8352, -95.4845),
+    "77080": (29.8352, -95.4845),
+    "77081": (29.8352, -95.4845),
+    "77082": (29.8352, -95.4845),
+    "77083": (29.8352, -95.4845),
+    "77084": (29.8352, -95.4845),
+    "77085": (29.7545, -95.3535),
+    "77086": (29.7545, -95.3535),
+    "77087": (29.7545, -95.3535),
+    "77088": (29.7545, -95.3535),
+    "77089": (29.7545, -95.3535),
+    "77090": (29.7545, -95.3535),
+    "77091": (29.7545, -95.3535),
+    "77092": (29.7545, -95.3535),
+    "77093": (29.7545, -95.3535),
+    "77094": (29.7545, -95.3535),
+    "77095": (29.7545, -95.3535),
+    "77096": (29.7545, -95.3535),
+}
+
+BBOX_OFFSET = 0.02  # degrees offset for bbox from center
+
+# SQL expression for address normalization (matches market_stats.py)
+ADDRESS_NORM_SQL = "lower(regexp_replace(trim(address), '\\s+', ' ', 'g'))"
+
+
+def _geocode_zip_to_bbox(zip_code: str, conn) -> Optional[tuple[float, float, float, float]]:
+    """Convert a ZIP code to a bounding box for PadMapper queries.
+    
+    Tries zcta_geometries table first, falls back to hardcoded lookup.
+    Returns (south, west, north, east) bbox.
+    """
+    # Try zcta_geometries table first
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'zcta_geometries'")
+        if cur.fetchone():
+            # Use PostGIS to get bbox from zcta_geometries
+            cur.execute("""
+                SELECT ST_YMin(geom) AS south, ST_XMin(geom) AS west,
+                       ST_YMax(geom) AS north, ST_XMax(geom) AS east
+                FROM zcta_geometries
+                WHERE zcta5 = %s
+            """, (zip_code,))
+            row = cur.fetchone()
+            if row:
+                return (row[0], row[1], row[2], row[3])
+    except Exception as e:
+        print(f"zcta_geometries query failed: {e}")
+        conn.rollback()
+    
+    # Fall back to hardcoded lookup
+    if zip_code in _ZIP_COORDS:
+        lat, lng = _ZIP_COORDS[zip_code]
+        return (lat - BBOX_OFFSET, lng - BBOX_OFFSET, lat + BBOX_OFFSET, lng + BBOX_OFFSET)
+    
+    # If ZIP not found, try geocoding the ZIP as an address
+    coords = geocode_address_census(zip_code)
+    if coords:
+        lat, lng = coords
+        return (lat - BBOX_OFFSET, lng - BBOX_OFFSET, lat + BBOX_OFFSET, lng + BBOX_OFFSET)
+    
+    return None
+
+
+def _check_dupe_address(address: str, conn) -> bool:
+    """Check if address exists in rental_listings from any source in the last 14 days."""
+    cur = conn.cursor()
+    cur.execute(f"""
+        SELECT 1 FROM rental_listings 
+        WHERE {ADDRESS_NORM_SQL} = lower(regexp_replace(trim(%s), '\\s+', ' ', 'g'))
+          AND listing_date > now() - interval '14 days' 
+        LIMIT 1
+    """, (address,))
+    return cur.fetchone() is not None
+
+
+def _scrape_padmapper(req: ScrapeRequest) -> dict:
+    """Handle PadMapper scraping: geocode ZIP to bbox, fetch, normalize, upsert."""
+    from adapters.padmapper import normalize, fetch_bbox, SourceBlockedError
+    
+    # Extract ZIP code from location
+    location = req.location.strip()
+    # Try to extract 5-digit ZIP
+    import re
+    zip_match = re.search(r'\b(\d{5})\b', location)
+    if not zip_match:
+        raise HTTPException(status_code=400, detail=f"Could not extract ZIP code from location: {location}")
+    
+    zip_code = zip_match.group(1)
+    print(f"PadMapper: geocoding ZIP {zip_code} to bbox...")
+    
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        bbox = _geocode_zip_to_bbox(zip_code, conn)
+        if not bbox:
+            raise HTTPException(status_code=400, detail=f"Could not geocode ZIP {zip_code} to bbox")
+        
+        print(f"PadMapper: fetching listings for bbox {bbox}...")
+        raw_listables = fetch_bbox(bbox)
+        print(f"PadMapper: got {len(raw_listables)} raw listables")
+        
+        # Normalize all listables
+        normalized = [n for n in (normalize(l) for l in raw_listables) if n is not None]
+        print(f"PadMapper: {len(normalized)} normalized listings")
+        
+        if not normalized:
+            return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0}
+        
+        # Upsert into rental_listings
+        cursor = conn.cursor()
+        inserted = 0
+        skipped = 0
+        
+        try:
+            # Batch-fetch existing addresses for dedup (O(1) per listing instead of per-listing DB query)
+            cursor.execute("""
+                SELECT DISTINCT lower(regexp_replace(trim(address), '\\s+', ' ', 'g'))
+                FROM rental_listings
+                WHERE listing_date > now() - interval '14 days'
+                   OR (address IS NOT NULL AND listing_date = CURRENT_DATE)
+            """)
+            existing_addrs = {row[0] for row in cursor.fetchall()}
+            
+            for listing in normalized:
+                address = listing["address"]
+                norm_addr = re.sub(r'\s+', ' ', address.strip().lower())
+                
+                if norm_addr in existing_addrs:
+                    skipped += 1
+                    continue
+                
+                # Insert
+                cursor.execute("""
+                    INSERT INTO rental_listings (
+                        address, zip_code, price, bedrooms, bathrooms,
+                        sqft, property_type, latitude, longitude, source, raw_data, listing_date
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE)
+                """, (
+                    address, zip_code, listing["price"],
+                    listing["bedrooms"], listing["bathrooms"], listing["sqft"],
+                    listing["property_type"], listing["latitude"], listing["longitude"],
+                    "padmapper", Json(listing)
+                ))
+                inserted += 1
+            
+            conn.commit()
+            print(f"PadMapper: {inserted} inserted, {skipped} skipped")
+            return {"count": len(normalized), "inserted": inserted, "updated": 0, "skipped": skipped}
+        
+        except Exception as e:
+            conn.rollback()
+            print(f"PadMapper DB Error: {e}")
+            raise HTTPException(status_code=500, detail=f"PadMapper DB Error: {str(e)}")
+        finally:
+            cursor.close()
+    
+    except SourceBlockedError as e:
+        raise HTTPException(status_code=429, detail=f"PadMapper blocked: {e}")
+    finally:
+        conn.close()
