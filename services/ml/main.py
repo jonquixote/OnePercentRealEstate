@@ -199,6 +199,16 @@ app = FastAPI(
 
 @app.get("/healthz")
 def healthz() -> dict:
+    # Warm this worker's model store before reporting: loading is lazy on
+    # the predict path, so a fresh worker that hasn't served a predict yet
+    # would report model_loaded_version=null and look broken when it isn't.
+    # refresh() is mtime-cached — this is a stat() when already loaded.
+    try:
+        version = _get_active_version()
+        if version.startswith("v1"):
+            model_store.refresh(version, _DATABASE_URL)
+    except Exception:
+        pass  # health reporting must never raise
     return {
         "ok": True,
         "estimator_loaded": estimate_rent_v2 is not None,
@@ -377,7 +387,9 @@ async def refresh_market_stats() -> OpResponse:
 @app.post("/ops/run-drift", response_model=OpResponse)
 async def run_drift() -> OpResponse:
     """Trigger the drift monitor. Captures stdout and returns JSON."""
-    ok, lines, exit_code = await _run_subprocess(["python", "-m", "services.ml.drift"])
+    # sys.executable, not bare "python": under systemd the venv is not on
+    # PATH (this broke the nightly drift job after the 2026-07-09 cutover).
+    ok, lines, exit_code = await _run_subprocess([sys.executable, "-m", "services.ml.drift"])
 
     # Simple heuristic: if there are "WARNING" or "ERROR" lines, alert.
     alert = any("WARNING" in line or "ERROR" in line for line in lines)
@@ -388,22 +400,12 @@ async def run_drift() -> OpResponse:
 @app.post("/ops/run-eval", response_model=OpResponse)
 async def run_eval() -> OpResponse:
     """Trigger model evaluation. Captures stdout and returns JSON."""
-    ok, lines, exit_code = await _run_subprocess(["python", "-m", "services.ml.eval"])
+    ok, lines, exit_code = await _run_subprocess([sys.executable, "-m", "services.ml.eval"])
 
     # Simple heuristic: if there are "WARNING" or "ERROR" lines, alert.
     alert = any("WARNING" in line or "ERROR" in line for line in lines)
 
     return OpResponse(ok=ok, lines=lines, exit_code=exit_code, alert=alert)
-
-
-@app.post("/ops/refresh-market-stats", response_model=OpResponse)
-async def refresh_market_stats() -> OpResponse:
-    """Rebuild the H3 market-stats surface + address rent memory (rent v2 P1/P2).
-    Triggered nightly by the ml-scheduler."""
-    ok, lines, code = await _run_subprocess(
-        ["python", "-m", "ml_rent_estimator.market_stats"], timeout_s=600.0
-    )
-    return OpResponse(ok=ok, lines=lines, exit_code=code, alert=not ok)
 
 
 @app.post("/ops/run-train", response_model=OpResponse)

@@ -382,6 +382,19 @@ def main() -> None:
 
     conn = psycopg2.connect(dsn)
     try:
+        # Freeze the listings distribution as of training time so the nightly
+        # drift job (services/ml/drift.py) compares "last 7 days" against the
+        # world this model was trained in, not against a moving all-time
+        # baseline. Kept out of eval_report.json/eval_history — registry only.
+        registry_metrics = dict(metrics)
+        try:
+            from ml.drift import synth_baseline_from_listings
+            dist = synth_baseline_from_listings(conn)
+            if dist:
+                registry_metrics["training_distribution"] = dist
+        except Exception as exc:  # drift baseline is best-effort, never gates
+            print(f"WARNING training_distribution snapshot failed: {exc}", flush=True)
+
         with conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO rent_models (version, feature_set_hash, metrics, artifact_path, active)
@@ -393,7 +406,7 @@ def main() -> None:
                          trained_at = now()""",
                 (
                     hashlib.sha256(json.dumps(meta["feature_names"], sort_keys=True).encode()).hexdigest(),
-                    json.dumps(metrics),
+                    json.dumps(registry_metrics),
                     OUT_DIR,
                 ),
             )

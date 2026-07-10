@@ -193,8 +193,16 @@ def compute(conn, days: int) -> Tuple[List[FeatureResult], Dict]:
     expected_counts = region_meta.get("counts") or [0] * len(categories)
     observed_counts = bucket_categorical(recent.get("region", []), categories)
     region_psi = psi(observed_counts, expected_counts)
+    # Region is report-only (capped at 'monitor'): the scraper crawls in
+    # state waves, so any 7-day window's state mix structurally differs from
+    # the baseline — a PSI alert here is noise, not model risk. The model is
+    # location-aware per listing (TE cascade), so a traffic-mix shift does
+    # not degrade per-listing accuracy. Numeric features still alert.
+    region_decision = decision_for(region_psi)
+    if region_decision == "alert":
+        region_decision = "monitor"
     results.append(
-        FeatureResult(name="region", psi=region_psi, decision=decision_for(region_psi))
+        FeatureResult(name="region", psi=region_psi, decision=region_decision)
     )
 
     return results, baseline or {}

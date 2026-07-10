@@ -8,8 +8,12 @@ psycopg2-binary==2.9.10
 python-dotenv==1.0.1
 # pandas + numpy are pulled in for eval/drift CLIs even if the /predict
 # endpoint never imports them.
-pandas==2.2.3
-numpy==1.26.4
+# numpy MUST be a Python-3.14-supported release. numpy 1.26.x on CPython
+# 3.14 silently corrupts operand arrays via temp elision (borrowed stack
+# refs make locals look refcount-1): `mae(a, b)` rewrote the CALLER's `a`
+# to `a - b` in place. Found 2026-07-10 via impossible per-state hud_mae.
+pandas==2.3.3
+numpy==2.5.1
 # Wave 2: rent model v1 (training + quantile inference). Needs libgomp1 at
 # runtime — provided transitively by build-essential in the Dockerfile.
 lightgbm==4.5.0
