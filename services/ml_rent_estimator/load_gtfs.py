@@ -139,12 +139,75 @@ def load_feed(feed: str, url: str, conn) -> dict:
         _download(url, zip_path)
 
         with zipfile.ZipFile(zip_path, "r") as zf:
-            route_types_map = _load_route_types(zf)
-
-            if "stops.txt" not in zf.namelist():
-                return {"done": False, "feed": feed, "error": "stops.txt not found"}
-
-            stops_text = _read_csv_text(zf, "stops.txt")
+            # Handle nested zips (e.g., SEPTA: google_bus.zip, google_rail.zip)
+            nested_zips = [n for n in zf.namelist() if n.lower().endswith(".zip")]
+            if nested_zips and "stops.txt" not in zf.namelist():
+                # Extract and parse the first nested zip
+                nested_name = nested_zips[0]
+                nested_data = zf.read(nested_name)
+                nested_path = os.path.join(tmp_dir, nested_name)
+                with open(nested_path, "wb") as f:
+                    f.write(nested_data)
+                with zipfile.ZipFile(nested_path, "r") as nzf:
+                    route_types_map = _load_route_types(nzf)
+                    if "stops.txt" not in nzf.namelist():
+                        return {"done": False, "feed": feed, "error": "stops.txt not found in nested zip"}
+                    stops_text = _read_csv_text(nzf, "stops.txt")
+            # Handle subdirectories (e.g., Miami-Dade: "BUS 27APR26/stops.txt")
+            elif "stops.txt" not in zf.namelist():
+                stops_candidates = [n for n in zf.namelist() if n.endswith("/stops.txt")]
+                if not stops_candidates:
+                    return {"done": False, "feed": feed, "error": "stops.txt not found"}
+                stops_name = stops_candidates[0]
+                stops_text = _read_csv_text(zf, stops_name)
+                # Also try to load route_types from same directory
+                dir_prefix = stops_name.rsplit("/", 1)[0] + "/"
+                route_types_files = {
+                    "routes.txt": dir_prefix + "routes.txt",
+                    "trips.txt": dir_prefix + "trips.txt",
+                    "stop_times.txt": dir_prefix + "stop_times.txt",
+                }
+                # Build a virtual zipfile-like object for _load_route_types
+                # Simpler: just parse them directly
+                route_types_map = {}
+                try:
+                    routes_text = _read_csv_text(zf, route_types_files["routes.txt"])
+                    routes_reader = csv.DictReader(io.StringIO(routes_text))
+                    route_type_map_local = {}
+                    for row in routes_reader:
+                        rid = row.get("route_id", "").strip()
+                        rtype = row.get("route_type", "").strip()
+                        if rid and rtype:
+                            try:
+                                route_type_map_local[rid] = int(rtype)
+                            except ValueError:
+                                pass
+                    trips_text = _read_csv_text(zf, route_types_files["trips.txt"])
+                    trips_reader = csv.DictReader(io.StringIO(trips_text))
+                    trip_route = {}
+                    for row in trips_reader:
+                        tid = row.get("trip_id", "").strip()
+                        rid = row.get("route_id", "").strip()
+                        if tid and rid:
+                            trip_route[tid] = rid
+                    stop_times_text = _read_csv_text(zf, route_types_files["stop_times.txt"])
+                    st_reader = csv.DictReader(io.StringIO(stop_times_text))
+                    stop_routes = {}
+                    for row in st_reader:
+                        sid = row.get("stop_id", "").strip()
+                        tid = row.get("trip_id", "").strip()
+                        if sid and tid:
+                            rid = trip_route.get(tid)
+                            if rid:
+                                rt = route_type_map_local.get(rid)
+                                if rt is not None:
+                                    stop_routes.setdefault(sid, set()).add(rt)
+                    route_types_map = {k: sorted(v) for k, v in stop_routes.items()}
+                except Exception:
+                    pass
+            else:
+                route_types_map = _load_route_types(zf)
+                stops_text = _read_csv_text(zf, "stops.txt")
 
         reader = csv.DictReader(io.StringIO(stops_text))
         stops: list[tuple[str, float, float, list[int]]] = []
