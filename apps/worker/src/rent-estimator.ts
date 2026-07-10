@@ -97,6 +97,9 @@ interface ListingPayload {
   readonly census_tract?: string | null;
   readonly last_sold_price?: number | null;
   readonly last_sold_date?: string | null;
+  readonly tax_assessed_value?: number | null;
+  readonly price?: number | null;
+  readonly days_on_mls?: number | null;
 }
 
 interface PredictResponse {

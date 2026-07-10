@@ -23,6 +23,45 @@ const TYPE_ICON: Record<Suggestion['type'], typeof MapPin> = {
   neighborhood: MapPin,
 };
 
+function SuggestionsList({
+  suggestions,
+  activeIndex,
+  onSelect,
+  onHover,
+}: {
+  suggestions: Suggestion[];
+  activeIndex: number;
+  onSelect: (s: Suggestion) => void;
+  onHover: (i: number) => void;
+}) {
+  return (
+    <ul role="listbox" className="absolute z-[60] mt-2 w-full rounded-xl border border-line bg-card shadow-lg overflow-hidden">
+      {suggestions.map((s, i) => {
+        const Icon = TYPE_ICON[s.type];
+        return (
+          <li
+            key={`${s.label}-${s.type}-${i}`}
+            role="option"
+            aria-selected={i === activeIndex}
+            className={`flex items-center gap-3 px-4 py-2.5 text-[13px] cursor-pointer transition-colors ${
+              i === activeIndex ? 'bg-pass-dim text-pass-hi' : 'hover:bg-ink-2'
+            }`}
+            onMouseEnter={() => onHover(i)}
+            onClick={() => onSelect(s)}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0 opacity-50" />
+            <span className="font-medium">{s.label}</span>
+            {s.context && (
+              <span className="ml-auto text-[11px]" style={{ color: 'var(--mute)' }}>{s.context}</span>
+            )}
+            <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--mute)' }}>{s.type}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function GlobalSearch({ variant = 'header', placeholder, className = '' }: Props) {
   const [q, setQ] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -32,25 +71,36 @@ export default function GlobalSearch({ variant = 'header', placeholder, classNam
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchSuggestions = useCallback(async (query: string) => {
     if (!query.trim() || query.length < 2) {
       setSuggestions([]);
       return;
     }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(query)}&limit=8`);
+      const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(query)}&limit=8`, {
+        signal: controller.signal,
+      });
       const data = await res.json();
       setSuggestions(data.suggestions ?? []);
-    } catch {
-      setSuggestions([]);
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setSuggestions([]);
+      }
     }
   }, []);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => fetchSuggestions(q), 200);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
+    };
   }, [q, fetchSuggestions]);
 
   useEffect(() => {
@@ -96,6 +146,16 @@ export default function GlobalSearch({ variant = 'header', placeholder, classNam
     }
   };
 
+  const inputProps = {
+    value: q,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => { setQ(e.target.value); setActiveIndex(-1); setShowSuggestions(true); },
+    onFocus: () => suggestions.length > 0 && setShowSuggestions(true),
+    onKeyDown,
+    role: 'combobox' as const,
+    'aria-expanded': showSuggestions,
+    'aria-autocomplete': 'list' as const,
+  };
+
   if (variant === 'hero') {
     return (
       <div ref={containerRef} className={`w-full max-w-2xl relative ${className}`}>
@@ -107,15 +167,9 @@ export default function GlobalSearch({ variant = 'header', placeholder, classNam
             <Search className="h-5 w-5 text-haze" />
             <input
               ref={inputRef}
-              value={q}
-              onChange={(e) => { setQ(e.target.value); setActiveIndex(-1); setShowSuggestions(true); }}
-              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-              onKeyDown={onKeyDown}
+              {...inputProps}
               placeholder={placeholder ?? 'e.g. 90210 or Austin, TX'}
               className="flex-1 bg-transparent text-[15px] text-foreground placeholder:text-haze outline-none"
-              role="combobox"
-              aria-expanded={showSuggestions}
-              aria-autocomplete="list"
             />
             <button
               type="submit"
@@ -126,33 +180,7 @@ export default function GlobalSearch({ variant = 'header', placeholder, classNam
           </div>
         </form>
         {showSuggestions && suggestions.length > 0 && (
-          <ul
-            role="listbox"
-          className="absolute z-[60] mt-2 w-full rounded-xl border border-line bg-card shadow-lg overflow-hidden"
-          >
-            {suggestions.map((s, i) => {
-              const Icon = TYPE_ICON[s.type];
-              return (
-                <li
-                  key={`${s.label}-${s.type}-${i}`}
-                  role="option"
-                  aria-selected={i === activeIndex}
-                  className={`flex items-center gap-3 px-4 py-2.5 text-[13px] cursor-pointer transition-colors ${
-                    i === activeIndex ? 'bg-pass-dim text-pass-hi' : 'hover:bg-ink-2'
-                  }`}
-                  onMouseEnter={() => setActiveIndex(i)}
-                  onClick={() => navigateTo(s.label)}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                  <span className="font-medium">{s.label}</span>
-                  {s.context && (
-                    <span className="ml-auto text-[11px]" style={{ color: 'var(--mute)' }}>{s.context}</span>
-                  )}
-                  <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--mute)' }}>{s.type}</span>
-                </li>
-              );
-            })}
-          </ul>
+          <SuggestionsList suggestions={suggestions} activeIndex={activeIndex} onSelect={(s) => navigateTo(s.label)} onHover={setActiveIndex} />
         )}
       </div>
     );
@@ -164,15 +192,9 @@ export default function GlobalSearch({ variant = 'header', placeholder, classNam
         <Search className="h-4 w-4 text-haze shrink-0" />
         <input
           ref={inputRef}
-          value={q}
-          onChange={(e) => { setQ(e.target.value); setActiveIndex(-1); setShowSuggestions(true); }}
-          onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-          onKeyDown={onKeyDown}
+          {...inputProps}
           placeholder={placeholder ?? 'City or ZIP'}
           className="w-36 bg-transparent text-sm text-foreground placeholder:text-haze outline-none lg:w-52"
-          role="combobox"
-          aria-expanded={showSuggestions}
-          aria-autocomplete="list"
         />
         <button
           type="submit"
@@ -182,33 +204,7 @@ export default function GlobalSearch({ variant = 'header', placeholder, classNam
         </button>
       </form>
       {showSuggestions && suggestions.length > 0 && (
-        <ul
-          role="listbox"
-          className="absolute z-[60] mt-2 w-full rounded-xl border border-line bg-card shadow-lg overflow-hidden"
-        >
-          {suggestions.map((s, i) => {
-            const Icon = TYPE_ICON[s.type];
-            return (
-              <li
-                key={`${s.label}-${s.type}-${i}`}
-                role="option"
-                aria-selected={i === activeIndex}
-                className={`flex items-center gap-3 px-4 py-2.5 text-[13px] cursor-pointer transition-colors ${
-                  i === activeIndex ? 'bg-pass-dim text-pass-hi' : 'hover:bg-ink-2'
-                }`}
-                onMouseEnter={() => setActiveIndex(i)}
-                onClick={() => navigateTo(s.label)}
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                <span className="font-medium">{s.label}</span>
-                {s.context && (
-                  <span className="ml-auto text-[11px]" style={{ color: 'var(--mute)' }}>{s.context}</span>
-                )}
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--mute)' }}>{s.type}</span>
-              </li>
-            );
-          })}
-        </ul>
+        <SuggestionsList suggestions={suggestions} activeIndex={activeIndex} onSelect={(s) => navigateTo(s.label)} onHover={setActiveIndex} />
       )}
     </div>
   );

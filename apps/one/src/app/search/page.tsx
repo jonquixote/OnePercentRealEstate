@@ -52,6 +52,7 @@ export default function SearchPage() {
   const [sortBy, setSortBy] = useState('one_percent_high');
   const [showFilters, setShowFilters] = useState(false);
   const [showMap, setShowMap] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   const [qs, setQs] = useQueryStates(propertyFilterParsers, { history: 'replace', shallow: true });
   const filters = useMemo(() => toFilterState(qs), [qs]);
@@ -174,12 +175,16 @@ export default function SearchPage() {
                 {showMap ? 'List' : 'Map'}
               </button>
               <button
-                onClick={() => navigator.clipboard.writeText(window.location.href)}
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
                 className="hidden sm:flex whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors hover:border-line-hi"
-                style={{ border: '1px solid var(--line)', color: 'var(--haze)' }}
+                style={{ border: '1px solid var(--line)', color: copied ? 'var(--pass)' : 'var(--haze)' }}
                 title="Copy search link"
               >
-                Copy link
+                {copied ? 'Copied!' : 'Copy link'}
               </button>
               <WatchSearchButton filters={filters} />
             </div>

@@ -149,7 +149,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                         {specParts.join(' · ') || ''}
                                         {listingUrl && (
                                             <>
-                                                <span className="mx-2" style={{ color: 'var(--mute)' }}>·</span>
+                                                {specParts.length > 0 && <span className="mx-2" style={{ color: 'var(--mute)' }}>·</span>}
                                                 <a style={{ color: 'var(--info)' }} href={listingUrl} target="_blank" rel="noopener noreferrer">
                                                     source listing ↗
                                                 </a>

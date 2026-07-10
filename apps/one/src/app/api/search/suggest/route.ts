@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
     const q = request.nextUrl.searchParams.get('q') ?? '';
-    const limit = Math.min(Number(request.nextUrl.searchParams.get('limit') ?? '8'), 20);
+    const limitParam = parseInt(request.nextUrl.searchParams.get('limit') ?? '8', 10);
+    const limit = isNaN(limitParam) ? 8 : Math.min(Math.max(1, limitParam), 20);
 
     if (!q.trim()) {
         return NextResponse.json({ suggestions: [] });
