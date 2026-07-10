@@ -95,7 +95,7 @@ def fetch_agencies(state_abbr: str, api_key: str) -> list[dict[str, Any]]:
             agencies = flat
         result = []
         for a in agencies:
-            county = (a.get("county_name") or a.get("agency_county_name") or "").strip()
+            county = (a.get("county_name") or a.get("counties") or a.get("agency_county_name") or "").strip()
             if not county:
                 continue
             result.append({
@@ -144,49 +144,39 @@ def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str) -> i
         return 0
 
 
-def build_county_fips_lookup(state_fips_codes: list[str], api_key: str) -> dict[tuple[str, str], str]:
-    """Build county_name (upper) → 5-digit FIPS lookup from Census Bureau.
+def build_county_fips_lookup(_state_fips_codes: list[str], _api_key: str) -> dict[tuple[str, str], str]:
+    """Build county_name (upper) → 5-digit FIPS lookup from static Census reference.
 
+    Downloads the official national county FIPS file (no API key required).
     Returns dict: {(state_abbr_upper, county_name_upper): fips_5}
     """
     lookup: dict[tuple[str, str], str] = {}
-
-    # also build reverse: fips → county_name for debugging
-    for state_fips in state_fips_codes:
-        url = f"https://api.census.gov/data/2020/dec/pl?get=NAME&for=county:*&in=state:{state_fips}"
-        try:
-            resp = requests.get(url, headers=CENSUS_HEADERS, timeout=TIMEOUT)
-            resp.raise_for_status()
-            data = resp.json()
-            if not data or len(data) < 2:
+    url = "https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt"
+    try:
+        resp = requests.get(url, headers=CENSUS_HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        # Format: " State FIPS | State Abbrev | County FIPS | County Name | Functional Status"
+        for line in resp.text.strip().split("\n"):
+            line = line.strip()
+            if not line or line.startswith("State"):
                 continue
-            header = data[0]
-            name_idx = header.index("NAME")
-            county_idx = header.index("county")
-            for row in data[1:]:
-                full_name = row[name_idx]  # e.g. "Los Angeles County, California"
-                county_code = row[county_idx]
-                fips = state_fips + county_code
-                # extract just the county name part (before comma)
-                county_name = full_name.split(",")[0].strip().upper()
-                # remove " County", " parish", " city and borough" etc.
-                for suffix in [" COUNTY", " PARISH", " CITY AND BOROUGH",
-                               " MUNICIPALITY", " BOROUGH"]:
-                    if county_name.endswith(suffix):
-                        county_name = county_name[:-len(suffix)].strip()
-                        break
-                # find state abbr from FIPS
-                state_abbr = None
-                for abbr, f in STATE_FIPS_MAP.items():
-                    if f == state_fips:
-                        state_abbr = abbr
-                        break
-                if state_abbr:
-                    lookup[(state_abbr, county_name)] = fips
-            time.sleep(1.0)  # Census API rate limit — be polite
-        except Exception as exc:
-            print(f"  census counties state {state_fips}: {exc}", file=sys.stderr)
-
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) < 4:
+                continue
+            state_fips_code = parts[0].strip()
+            state_abbr = parts[1].strip().upper()
+            county_fips = parts[2].strip()
+            county_name = parts[3].strip().upper()
+            # Remove standard suffixes for matching
+            for suffix in [" COUNTY", " PARISH", " CITY AND BOROUGH",
+                           " MUNICIPALITY", " BOROUGH", " CITY"]:
+                if county_name.endswith(suffix):
+                    county_name = county_name[:-len(suffix)].strip()
+                    break
+            fips_5 = state_fips_code + county_fips
+            lookup[(state_abbr, county_name)] = fips_5
+    except Exception as exc:
+        print(f"  census county FIPS download failed: {exc}", file=sys.stderr)
     return lookup
 
 
