@@ -1,11 +1,11 @@
 """Load FEMA National Risk Index (NRI) census-tract scores into census_tracts.
 
 Source zip (verify URL at execution; it moves between NRI releases):
-  https://hazards.fema.gov/nri/Content/StaticDocuments/DataDownload/NRI_Table_CensusTracts/NRI_Table_CensusTracts.zip
+  https://www.fema.gov/about/reports-and-data/openfema/nri/v120/NRI_Table_CensusTracts.zip
 
-Columns used from the CSV:
+Columns used from the CSV (v1.20):
   TRACTFIPS          GEOID (11-digit census tract code)
-  RFLD_RISKS         Riverine flood risk score (0-100)
+  IFLD_RISKS         Inland flood risk score (replaces RFLD_RISKS in v1.20)
   CFLD_RISKS         Coastal flood risk score (0-100)
   RISK_SCORE         Overall NRI risk score (0-100)
   RISK_RATNG         Overall NRI risk rating (Very Low / Relatively Low / Relatively High / Very High)
@@ -26,7 +26,7 @@ def parse(path: str) -> list[dict]:
     rows: list[dict] = []
     with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
-        expected = {"TRACTFIPS", "RFLD_RISKS", "CFLD_RISKS", "RISK_SCORE", "RISK_RATNG"}
+        expected = {"TRACTFIPS", "IFLD_RISKS", "CFLD_RISKS", "RISK_SCORE", "RISK_RATNG"}
         if not expected.issubset(reader.fieldnames or []):
             print(f"ERROR: CSV columns missing; got {reader.fieldnames}", file=sys.stderr)
             sys.exit(1)
@@ -36,7 +36,7 @@ def parse(path: str) -> list[dict]:
                 continue
             row = {
                 "geoid": geoid,
-                "riverine": _null_blank(r.get("RFLD_RISKS")),
+                "riverine": _null_blank(r.get("IFLD_RISKS")),
                 "coastal": _null_blank(r.get("CFLD_RISKS")),
                 "overall_score": _null_blank(r.get("RISK_SCORE")),
                 "overall_rating": (r.get("RISK_RATNG") or "").strip() or None,
