@@ -148,14 +148,19 @@ async function processJob(jobId: string, parentLog: WorkerLogger): Promise<boole
       log.warn({ err: (err as Error).message }, 'pending scrape failed, continuing');
       return null;
     });
+    // Sixth pass: PadMapper/Zumper rental source
+    const padmapperResult = await scrape(job, 'for_rent', log, { source: 'padmapper' }).catch((err) => {
+      log.warn({ err: (err as Error).message }, 'padmapper scrape failed, continuing');
+      return null;
+    });
 
-    if (!saleResult && !rentResult && !foreclosureResult && !soldResult && !pendingResult) {
-      throw new Error('all scrape passes (for_sale, for_rent, foreclosure, sold, pending) failed');
+    if (!saleResult && !rentResult && !foreclosureResult && !soldResult && !pendingResult && !padmapperResult) {
+      throw new Error('all scrape passes (for_sale, for_rent, foreclosure, sold, pending, padmapper) failed');
     }
 
-    const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0) + (foreclosureResult?.count ?? 0) + (soldResult?.count ?? 0) + (pendingResult?.count ?? 0);
-    const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0) + (foreclosureResult?.inserted ?? 0) + (soldResult?.inserted ?? 0) + (pendingResult?.inserted ?? 0);
-    const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0) + (foreclosureResult?.skipped ?? 0) + (soldResult?.skipped ?? 0) + (pendingResult?.skipped ?? 0);
+    const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0) + (foreclosureResult?.count ?? 0) + (soldResult?.count ?? 0) + (pendingResult?.count ?? 0) + (padmapperResult?.count ?? 0);
+    const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0) + (foreclosureResult?.inserted ?? 0) + (soldResult?.inserted ?? 0) + (pendingResult?.inserted ?? 0) + (padmapperResult?.inserted ?? 0);
+    const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0) + (foreclosureResult?.skipped ?? 0) + (soldResult?.skipped ?? 0) + (pendingResult?.skipped ?? 0) + (padmapperResult?.skipped ?? 0);
 
     await pool.query(
       `UPDATE crawl_jobs
@@ -213,7 +218,7 @@ async function scrape(
   job: CrawlJob,
   listingType: string,
   log: WorkerLogger,
-  opts?: { foreclosure?: boolean; pastDays?: number; dateFrom?: string; dateTo?: string },
+  opts?: { foreclosure?: boolean; pastDays?: number; dateFrom?: string; dateTo?: string; source?: string },
 ): Promise<ScrapeResult> {
   const url = `${env.SCRAPER_URL.replace(/\/$/, '')}/scrape`;
   const controller = new AbortController();
@@ -229,6 +234,7 @@ async function scrape(
         ...(opts?.foreclosure ? { foreclosure: true } : {}),
         ...(opts?.dateFrom ? { date_from: opts.dateFrom } : {}),
         ...(opts?.dateTo ? { date_to: opts.dateTo } : {}),
+        ...(opts?.source ? { source: opts.source } : {}),
       }),
       signal: controller.signal,
     });

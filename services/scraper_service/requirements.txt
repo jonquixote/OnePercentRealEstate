@@ -5,3 +5,4 @@ homeharvest
 psycopg2-binary
 sqlalchemy
 requests
+httpx>=0.27
