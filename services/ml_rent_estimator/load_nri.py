@@ -82,17 +82,26 @@ def main() -> None:
         for i in range(0, len(rows), CHUNK):
             chunk = rows[i : i + CHUNK]
             with conn.cursor() as cur:
+                # Use temp table + update to avoid execute_values type issues
+                cur.execute("CREATE TEMP TABLE IF NOT EXISTS nri_tmp (geoid text, riverine numeric, coastal numeric, score numeric, rating text) ON COMMIT DROP")
+                from psycopg2.extras import execute_values
                 execute_values(
                     cur,
-                    """UPDATE census_tracts
-                          SET nri_flood_riverine_score = data.riverine,
-                              nri_flood_coastal_score  = data.coastal,
-                              nri_overall_score        = data.overall_score,
-                              nri_overall_rating       = data.overall_rating
-                         FROM (VALUES %s) AS data(geoid, riverine, coastal, overall_score, overall_rating)
-                        WHERE census_tracts.geoid = data.geoid""",
+                    "INSERT INTO nri_tmp (geoid, riverine, coastal, score, rating) VALUES %s",
                     [(r["geoid"], r["riverine"], r["coastal"], r["overall_score"], r["overall_rating"]) for r in chunk],
+                    page_size=5000,
                 )
+                cur.execute("""
+                    UPDATE census_tracts
+                    SET nri_flood_riverine_score = t.riverine,
+                        nri_flood_coastal_score  = t.coastal,
+                        nri_overall_score        = t.score,
+                        nri_overall_rating       = t.rating
+                    FROM nri_tmp t
+                    WHERE census_tracts.geoid = t.geoid
+                """)
+                updated += cur.rowcount
+                cur.execute("TRUNCATE nri_tmp")
                 updated += cur.rowcount
             conn.commit()
             print(f"  updated {updated} rows...", file=sys.stderr)
