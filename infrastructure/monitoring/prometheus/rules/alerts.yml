@@ -122,6 +122,15 @@ groups:
           summary: "Scraper backlog: {{ $value }} pending jobs for 10m"
           description: "The crawl_jobs table has > 100 pending rows. Either the scraper is down or upstream is throttling."
 
+      - alert: RentalIngestStalled
+        expr: sum(rental_ingest_by_source_last24h) < 100
+        for: 6h
+        labels:
+          severity: warn
+        annotations:
+          summary: "Rental ingest below 100/day for 6h"
+          description: "Total rental listings in last 24h is {{ $value }}. Pipeline may be sick — check scraper logs and upstream availability."
+
 # ---------------------------------------------------------------------------
 # postgres-exporter custom query (paste into postgres-exporter's
 # queries.yml; do NOT put this inside the Prometheus rules file).
