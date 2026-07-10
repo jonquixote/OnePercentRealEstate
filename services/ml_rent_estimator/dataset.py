@@ -292,14 +292,15 @@ def fit_encoders(train_df, market_stats: Optional[dict] = None,
         with conn.cursor() as cur:
             # hpi_cagr: {zip5: float} from fhfa_zip_hpi
             cur.execute("""
-                SELECT DISTINCT ON (zip5) zip5,
+                SELECT DISTINCT ON (zip5) zip5, year,
                        CASE WHEN hpi > 0 AND lag_hpi > 0 THEN (hpi / lag_hpi) ^ (1.0/5.0) - 1.0 ELSE 0.0 END AS cagr
                 FROM (
-                    SELECT zip5, hpi,
+                    SELECT zip5, hpi, year,
                            LAG(hpi, 5) OVER (PARTITION BY zip5 ORDER BY year) AS lag_hpi
                     FROM fhfa_zip_hpi
                 ) sub
                 WHERE lag_hpi IS NOT NULL AND lag_hpi > 0
+                ORDER BY zip5, year DESC
             """)
             hpi_cagr = {r[0]: float(r[1]) for r in cur.fetchall()}
 

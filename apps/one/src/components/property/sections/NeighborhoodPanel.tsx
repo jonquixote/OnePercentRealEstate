@@ -91,7 +91,7 @@ export function NeighborhoodPanel({ propertyId }: { propertyId: string | number 
       )}
 
       {/* Walk Score® attribution */}
-      {walkScore != null && (
+      {data.walkscore != null && (
         <p className="text-xs text-muted-foreground" style={{ color: 'var(--mute)' }}>
           Walk Score® measures the walkability of any address.
           {walkDesc ? ` ${walkDesc}` : ''}

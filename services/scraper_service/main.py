@@ -647,6 +647,7 @@ def _geocode_zip_to_bbox(zip_code: str, conn) -> Optional[tuple[float, float, fl
                 return (row[0], row[1], row[2], row[3])
     except Exception as e:
         print(f"zcta_geometries query failed: {e}")
+        conn.rollback()
     
     # Fall back to hardcoded lookup
     if zip_code in _ZIP_COORDS:
@@ -715,20 +716,20 @@ def _scrape_padmapper(req: ScrapeRequest) -> dict:
         skipped = 0
         
         try:
+            # Batch-fetch existing addresses for dedup (O(1) per listing instead of per-listing DB query)
+            cursor.execute("""
+                SELECT DISTINCT lower(regexp_replace(trim(address), '\\s+', ' ', 'g'))
+                FROM rental_listings
+                WHERE listing_date > now() - interval '14 days'
+                   OR (address IS NOT NULL AND listing_date = CURRENT_DATE)
+            """)
+            existing_addrs = {row[0] for row in cursor.fetchall()}
+            
             for listing in normalized:
                 address = listing["address"]
+                norm_addr = re.sub(r'\s+', ' ', address.strip().lower())
                 
-                # Cross-source dedupe: skip if address exists from any source in last 14 days
-                if _check_dupe_address(address, conn):
-                    skipped += 1
-                    continue
-                
-                # Check same address + today (existing dedupe)
-                cursor.execute(
-                    "SELECT 1 FROM rental_listings WHERE address = %s AND listing_date = CURRENT_DATE",
-                    (address,)
-                )
-                if cursor.fetchone():
+                if norm_addr in existing_addrs:
                     skipped += 1
                     continue
                 

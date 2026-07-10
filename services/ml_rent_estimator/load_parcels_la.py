@@ -105,7 +105,7 @@ def main() -> None:
                 with conn.cursor() as cur:
                     args_str = ",".join(
                         cur.mogrify(
-                            "(%s,%s,%s,%s,%s,ST_SetSRID(ST_GeomFromGeoJSON(%s),4326)::geometry(MultiPolygon,4326))",
+                            "(%s,%s,%s,%s,%s,ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(%s),4326))::geometry(MultiPolygon,4326))",
                             r,
                         ).decode()
                         for r in rows

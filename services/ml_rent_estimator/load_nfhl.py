@@ -68,27 +68,52 @@ def _parse_pg_dsn(dsn: str) -> dict[str, str]:
     return params
 
 
-def _ogr_pg_dsn(dsn: str) -> str:
-    """Build ogr2ogr PG connection string from DATABASE_URL."""
+def _ogr_pg_dsn(dsn: str) -> tuple[str, dict[str, str]]:
+    """Build ogr2ogr PG connection string from DATABASE_URL.
+    
+    Returns (pg_dsn_without_password, env_dict_with_credentials) so the
+    password is passed via environment rather than subprocess argv.
+    """
     p = _parse_pg_dsn(dsn)
+    password = p.pop("password", None)
     parts = [f"{k}={v}" for k, v in p.items()]
-    return "PG:" + " ".join(parts)
+    env = {}
+    if password:
+        env["PGPASSWORD"] = password
+    return "PG:" + " ".join(parts), env
 
 
 def get_top_states(conn, limit: int = 10) -> list[tuple[str, str]]:
-    """Return (state_fips, state_abbr) for top states by listing count."""
+    """Return (state_fips, state_abbr) for top states by listing count.
+    
+    Maps 2-letter state abbreviations to numeric FIPS codes for NFHL downloads.
+    """
+    STATE_ABBR_TO_FIPS = {
+        'AL':'01','AK':'02','AZ':'04','AR':'05','CA':'06','CO':'08','CT':'09',
+        'DE':'10','DC':'11','FL':'12','GA':'13','HI':'15','ID':'16','IL':'17',
+        'IN':'18','IA':'19','KS':'20','KY':'21','LA':'22','ME':'23','MD':'24',
+        'MA':'25','MI':'26','MN':'27','MS':'28','MO':'29','MT':'30','NE':'31',
+        'NV':'32','NH':'33','NJ':'34','NM':'35','NY':'36','NC':'37','ND':'38',
+        'OH':'39','OK':'40','OR':'41','PA':'42','RI':'44','SC':'45','SD':'46',
+        'TN':'47','TX':'48','UT':'49','VT':'50','VA':'51','WA':'53','WV':'54',
+        'WI':'55','WY':'56',
+    }
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT LEFT(state, 2) AS fips,
-                   UPPER(state) AS abbr,
-                   COUNT(*) AS cnt
+            SELECT UPPER(state) AS abbr, COUNT(*) AS cnt
             FROM listings
             WHERE state IS NOT NULL AND LENGTH(state) >= 2
-            GROUP BY 1, 2
-            ORDER BY 3 DESC
+            GROUP BY 1
+            ORDER BY 2 DESC
             LIMIT %s
         """, (limit,))
-        return [(row[0], row[1]) for row in cur.fetchall()]
+        results = []
+        for row in cur.fetchall():
+            abbr = row[0]
+            fips = STATE_ABBR_TO_FIPS.get(abbr)
+            if fips:
+                results.append((fips, abbr))
+        return results
 
 
 def _download_nfhl(state_fips: str, tmp_dir: str) -> str | None:
@@ -180,7 +205,7 @@ def _load_state(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
             return
 
         staging_table = "flood_zones_staging"
-        ogr_dsn = _ogr_pg_dsn(pg_dsn)
+        ogr_dsn, ogr_env = _ogr_pg_dsn(pg_dsn)
 
         # Drop any leftover staging table
         _drop_staging(pg_dsn, staging_table)
@@ -196,7 +221,9 @@ def _load_state(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
             "S_FLD_HAZ_AR",
         ]
         print(f"  running ogr2ogr for {state_abbr} ({state_fips})", file=sys.stderr)
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        import os as _os
+        run_env = {**_os.environ, **ogr_env}
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, env=run_env)
         if result.returncode != 0:
             print(f"  ogr2ogr failed: {result.stderr}", file=sys.stderr)
             _drop_staging(pg_dsn, staging_table)

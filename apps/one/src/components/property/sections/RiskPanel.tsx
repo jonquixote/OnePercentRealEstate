@@ -3,13 +3,12 @@
 import { useEffect, useState } from 'react';
 
 interface RiskData {
-  nri_rating?: string | null;
-  nri_score?: number | null;
+  nri_overall_rating?: string | null;
+  nri_overall_score?: number | null;
   flood_zone?: string | null;
-  sfha?: boolean | null;
+  flood_sfha?: boolean | null;
   disasters?: Record<string, number> | null;
-  parcel_flood_pct?: number | null;
-  parcel_flood_zone?: string | null;
+  parcel_pct_in_sfha?: number | null;
 }
 
 function riskColor(rating: string | null | undefined): string {
@@ -53,20 +52,20 @@ export function RiskPanel({ propertyId }: { propertyId: string | number }) {
   if (loading) return <Skeleton />;
   if (!data) return null;
 
-  const hasAny = data.nri_rating || data.flood_zone || data.sfha || (data.disasters && Object.keys(data.disasters).length > 0) || data.parcel_flood_pct != null;
+  const hasAny = data.nri_overall_rating || data.flood_zone || data.flood_sfha || (data.disasters && Object.keys(data.disasters).length > 0) || data.parcel_pct_in_sfha != null;
   if (!hasAny) return null;
 
   return (
     <div className="space-y-4 rounded-2xl border border-line bg-card p-6">
       {/* NRI overall rating */}
-      {data.nri_rating && (
+      {data.nri_overall_rating && (
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">Risk Rating</span>
           <span
             className="rounded-full border px-3 py-1 text-xs font-semibold"
-            style={{ color: riskColor(data.nri_rating), borderColor: riskColor(data.nri_rating), background: `${riskColor(data.nri_rating)}14` }}
+            style={{ color: riskColor(data.nri_overall_rating), borderColor: riskColor(data.nri_overall_rating), background: `color-mix(in srgb, ${riskColor(data.nri_overall_rating)} 8%, transparent)` }}
           >
-            {data.nri_rating}
+            {data.nri_overall_rating}
           </span>
         </div>
       )}
@@ -77,7 +76,7 @@ export function RiskPanel({ propertyId }: { propertyId: string | number }) {
           <span className="text-sm font-semibold text-foreground">Flood Zone</span>
           <span
             className="rounded-full border px-3 py-1 text-xs font-semibold"
-            style={data.sfha
+            style={data.flood_sfha
               ? { color: 'var(--loss)', borderColor: 'var(--loss)', background: 'rgba(194,59,52,.12)' }
               : { color: 'var(--haze)', borderColor: 'var(--line)' }
             }
@@ -114,9 +113,9 @@ export function RiskPanel({ propertyId }: { propertyId: string | number }) {
       )}
 
       {/* Parcel flood exposure */}
-      {data.parcel_flood_pct != null && data.parcel_flood_pct > 0 && (
+      {data.parcel_pct_in_sfha != null && data.parcel_pct_in_sfha > 0 && (
         <p className="text-xs text-haze" style={{ color: 'var(--brass-hi)' }}>
-          {data.parcel_flood_pct}% of this parcel is in flood zone {data.parcel_flood_zone || data.flood_zone || ''}
+          {data.parcel_pct_in_sfha}% of this parcel is in a flood zone
         </p>
       )}
     </div>

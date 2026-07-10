@@ -32,11 +32,15 @@ interface PropertyMapProps {
   hoveredId?: string | null;
   /** A2: map->list hover sync. */
   onFeatureHover?: (id: string | null) => void;
+  /** A2: viewport sync — fired (debounced) after every map move. */
+  onViewportChange?: (b: { north: number; south: number; east: number; west: number; zoom: number }) => void;
+  /** A3+: hands the live map instance to sibling controls (DrawSearch, LayerSwitcher). */
+  onMapInstance?: (map: maplibregl.Map | null, ready: boolean) => void;
 }
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
-export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover }: PropertyMapProps) {
+export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover, onViewportChange, onMapInstance }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const filtersRef = useRef(filters);
@@ -82,6 +86,9 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover 
     },
     [onMarkerClick, router],
   );
+
+  const onFeatureHoverRef = useRef(onFeatureHover);
+  onFeatureHoverRef.current = onFeatureHover;
 
   // Mini-dossier hover card (design-approved DOM, moved verbatim).
   const buildHoverCard = useCallback(
@@ -168,11 +175,25 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover 
   }, [buildUrl]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onViewportChangeRef = useRef(onViewportChange);
+  onViewportChangeRef.current = onViewportChange;
   const { mapRef, ready, onStyleLoad } = useOperMap({
     container: containerRef,
     onMoveEnd: (map) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => refresh(map), 150);
+      debounceRef.current = setTimeout(() => {
+        refresh(map);
+        const b = map.getBounds();
+        if (b && onViewportChangeRef.current) {
+          onViewportChangeRef.current({
+            north: b.getNorth(),
+            south: b.getSouth(),
+            east: b.getEast(),
+            west: b.getWest(),
+            zoom: map.getZoom(),
+          });
+        }
+      }, 150);
     },
   });
 
@@ -184,7 +205,7 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover 
       addListingsLayers(map, {
         tileUrl: getTileUrl,
         onSelect: navigate,
-        onHoverFeature: onFeatureHover,
+        onHoverFeature: (id) => onFeatureHoverRef.current?.(id),
         buildHoverCard,
       });
       refresh(map);
@@ -207,6 +228,12 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover 
     if (!map || !ready) return;
     setHoveredListing(map, hoveredId ?? null);
   }, [hoveredId, ready, mapRef]);
+
+  // A3+: expose the live instance to sibling controls.
+  useEffect(() => {
+    onMapInstance?.(mapRef.current, ready);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   return (
     <div className="relative h-full w-full" aria-label="Property map" role="application">

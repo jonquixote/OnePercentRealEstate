@@ -88,7 +88,7 @@ def normalize_row(row: dict, listing_type: str) -> dict:
         price = 0
 
     zip_raw = row.get('zip_code')
-    zip_code = str(zip_raw).split('.')[0] if pd.notna(zip_raw) else ""
+    zip_code = str(zip_raw).split('.')[0].zfill(5) if pd.notna(zip_raw) else ""
 
     address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
 
@@ -150,7 +150,7 @@ def normalize_row(row: dict, listing_type: str) -> dict:
         "mls_status": row.get('status'),
         "days_on_market": int(row.get('days_on_mls')) if pd.notna(row.get('days_on_mls')) else None,
         "hoa_fee": float(row.get('hoa_fee')) if pd.notna(row.get('hoa_fee')) else None,
-        "tax_annual_amount": float(row.get('tax_annual_amount') or row.get('tax_assessed_value', 0) * 0.02) if pd.notna(row.get('tax_annual_amount')) else None,
+        "tax_annual_amount": float(row.get('tax_annual_amount') or row.get('tax_assessed_value', 0) * 0.02) if pd.notna(row.get('tax_annual_amount') or row.get('tax_assessed_value')) else None,
         "agent_name": row.get('agent_name'),
         "agent_email": row.get('agent_email'),
         "agent_phone": str(row.get('agent_phones')) if pd.notna(row.get('agent_phones')) else None,
@@ -158,11 +158,11 @@ def normalize_row(row: dict, listing_type: str) -> dict:
         "lot_size_acres": float(row.get('lot_sqft', 0)) / 43560.0 if pd.notna(row.get('lot_sqft')) else None,
         "stories": int(row.get('stories')) if pd.notna(row.get('stories')) else None,
         "garage_spaces": int(row.get('garage_spaces')) if pd.notna(row.get('garage_spaces')) else None,
-        "parking_garage": bool(row["parking_garage"]) if pd.notna(row.get("parking_garage")) else None,
+        "parking_garage": bool(row.get("parking_garage")) if pd.notna(row.get("parking_garage")) else None,
         # HomeHarvest full-capture fields
-        "fips_code": str(row["fips_code"]) if pd.notna(row.get("fips_code")) else None,
-        "neighborhoods": str(row["neighborhoods"]) if pd.notna(row.get("neighborhoods")) else None,
-        "new_construction": bool(row["new_construction"]) if pd.notna(row.get("new_construction")) else None,
+        "fips_code": str(row.get("fips_code")) if pd.notna(row.get("fips_code")) else None,
+        "neighborhoods": str(row.get("neighborhoods")) if pd.notna(row.get("neighborhoods")) else None,
+        "new_construction": bool(row.get("new_construction")) if pd.notna(row.get("new_construction")) else None,
         "nearby_schools": json.dumps(row["nearby_schools"]) if isinstance(row.get("nearby_schools"), (list, dict)) else None,
         "tax_history": json.dumps(row["tax_history"]) if isinstance(row.get("tax_history"), (list, dict)) else None,
     }

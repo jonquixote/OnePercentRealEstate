@@ -123,7 +123,7 @@ groups:
           description: "The crawl_jobs table has > 100 pending rows. Either the scraper is down or upstream is throttling."
 
       - alert: RentalIngestStalled
-        expr: sum(rental_ingest_by_source_last24h) < 100
+        expr: (sum(rental_ingest_by_source_last24h) or absent(sum(rental_ingest_by_source_last24h))) < 100
         for: 6h
         labels:
           severity: warn

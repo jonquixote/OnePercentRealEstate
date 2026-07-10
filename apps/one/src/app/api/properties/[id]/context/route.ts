@@ -109,10 +109,11 @@ export async function GET(
            ORDER BY declarations DESC`,
           [countyFips],
         );
-        return res.rows.map((r: any) => ({
-          incident_type: r.incident_type,
-          declarations: Number(r.declarations),
-        }));
+        const disasters: Record<string, number> = {};
+        for (const r of res.rows) {
+          disasters[r.incident_type] = Number(r.declarations);
+        }
+        return disasters;
       } catch {
         return null;
       }
@@ -173,7 +174,7 @@ export async function GET(
         const stopsRes = await pool.query(
           `SELECT COUNT(*) AS cnt
            FROM transit_stops
-           WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 800)`,
+           WHERE ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 800)`,
           [lng, lat],
         );
         const stopsCount = Number(stopsRes.rows[0].cnt);
@@ -182,11 +183,11 @@ export async function GET(
         try {
           const railRes = await pool.query(
             `SELECT MIN(
-               ST_Distance(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
+               ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
              ) / 1000.0 AS dist_km
              FROM transit_stops
              WHERE route_types && '{0,1,2}'
-               AND ST_DWithin(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 10000)`,
+               AND ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 10000)`,
             [lng, lat],
           );
           if (railRes.rows.length > 0 && railRes.rows[0].dist_km != null) {
@@ -207,9 +208,9 @@ export async function GET(
       try {
         const res = await pool.query(
           `SELECT name, level,
-                  ST_Distance(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000.0 AS dist_km
+                  ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000.0 AS dist_km
            FROM schools
-           WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 1600)
+           WHERE ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 1600)
            ORDER BY dist_km ASC`,
           [lng, lat],
         );
@@ -319,7 +320,7 @@ export async function GET(
       nri_flood_coastal: riskNri?.nri_flood_coastal ?? null,
       flood_zone: riskFlood?.flood_zone ?? null,
       flood_sfha: riskFlood?.flood_sfha ?? null,
-      disasters_10yr: riskDisasters ?? [],
+      disasters: riskDisasters ?? {},
       parcel_pct_in_sfha: riskParcelSfha ?? null,
     },
     neighborhood: {
@@ -332,9 +333,9 @@ export async function GET(
       crime: neighborhoodCrime ?? null,
     },
     market: {
-      zip_hpi_cagr_5yr: marketHpi?.cagr ?? null,
-      zip_hpi_series: marketHpi?.series ?? [],
-      county_unemployment: marketUnemployment?.unemployment_rate ?? null,
+      cagr_5yr: marketHpi?.cagr ?? null,
+      hpi: marketHpi?.series ?? [],
+      unemployment: marketUnemployment?.unemployment_rate ?? null,
       county_unemployment_period: marketUnemployment?.period ?? null,
     },
   };

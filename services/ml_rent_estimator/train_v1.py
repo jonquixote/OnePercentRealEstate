@@ -66,11 +66,12 @@ def load_hpi_cagr(conn) -> dict:
     """{zip5: cagr} — 5-year CAGR of FHFA ZIP HPI."""
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT DISTINCT ON (zip5) zip5,
+            SELECT DISTINCT ON (zip5) zip5, year,
                    CASE WHEN hpi > 0 AND lag_hpi > 0 THEN (hpi / lag_hpi) ^ (1.0/5.0) - 1.0 ELSE 0.0 END
-            FROM (SELECT zip5, hpi, LAG(hpi, 5) OVER (PARTITION BY zip5 ORDER BY year) AS lag_hpi
+            FROM (SELECT zip5, hpi, year, LAG(hpi, 5) OVER (PARTITION BY zip5 ORDER BY year) AS lag_hpi
                   FROM fhfa_zip_hpi) sub
             WHERE lag_hpi IS NOT NULL AND lag_hpi > 0
+            ORDER BY zip5, year DESC
         """)
         return {r[0]: float(r[1]) for r in cur.fetchall()}
 
