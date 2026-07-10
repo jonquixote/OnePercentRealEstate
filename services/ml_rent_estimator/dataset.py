@@ -114,7 +114,7 @@ WITH base AS (
               THEN regexp_replace(r.raw_data->>'tax_assessed_value', '[^0-9.]', '', 'g')::float
           END AS tax_assessed_value,
           -- v3 data expansion signals
-          COALESCE(r.flood_sfha, 0) AS flood_sfha,
+          COALESCE(r.flood_sfha::int, 0) AS flood_sfha,
           COALESCE(r.transit_stops_1km, 0) AS transit_stops_1km,
           r.fips_code
   FROM rental_listings r
