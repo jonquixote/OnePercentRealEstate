@@ -76,8 +76,11 @@ def get_top_states(n: int = 15) -> list[str]:
     return FALLBACK_STATES[:n]
 
 
-def fetch_agencies(state_abbr: str, api_key: str) -> list[dict[str, Any]]:
-    """Fetch agencies for a state. Returns list of {ori, county_name, latitude, longitude}."""
+def fetch_agencies(state_abbr: str, api_key: str, max_per_county: int = 3) -> list[dict[str, Any]]:
+    """Fetch agencies for a state. Returns list of {ori, county_name, latitude, longitude}.
+
+    Limits to max_per_county agencies per county to reduce API calls.
+    """
     url = f"{FBI_BASE}/agency/byStateAbbr/{state_abbr}"
     params = {FBI_KEY_PARAM: api_key}
     try:
@@ -97,10 +100,15 @@ def fetch_agencies(state_abbr: str, api_key: str) -> list[dict[str, Any]]:
         else:
             agencies = data.get("results", data.get("data", []))
         result = []
+        county_seen: dict[str, int] = {}
         for a in agencies:
             county = (a.get("county_name") or a.get("counties") or a.get("agency_county_name") or "").strip()
             if not county:
                 continue
+            count = county_seen.get(county, 0)
+            if count >= max_per_county:
+                continue
+            county_seen[county] = count + 1
             result.append({
                 "ori": a.get("ori", ""),
                 "county_name": county,
@@ -112,7 +120,7 @@ def fetch_agencies(state_abbr: str, api_key: str) -> list[dict[str, Any]]:
         return []
 
 
-def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str, max_retries: int = 3) -> int:
+def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str, max_retries: int = 4) -> int:
     """Fetch total offense count for an agency and crime type in a given year."""
     url = f"{FBI_BASE}/summarized/agency/{ori}/{crime_type}"
     params = {
@@ -123,13 +131,12 @@ def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str, max_
     for attempt in range(max_retries):
         try:
             resp = requests.get(url, params=params, timeout=TIMEOUT)
-            if resp.status_code == 403:
-                wait = 2 ** attempt  # exponential backoff: 1, 2, 4 seconds
+            if resp.status_code in (403, 429, 503):
+                wait = min(2 ** (attempt + 1), 30)  # 2, 4, 8, 16 seconds
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
             data = resp.json()
-            # Response structure: {offenses: {actuals: {"<Agency> Offenses": {"MM-YYYY": count, ...}}}}
             offenses = data.get("offenses", {})
             actuals = offenses.get("actuals", {})
             total = 0
@@ -143,7 +150,7 @@ def fetch_crime_summary(ori: str, crime_type: str, year: int, api_key: str, max_
             return total
         except Exception as exc:
             if attempt < max_retries - 1:
-                time.sleep(1)
+                time.sleep(2)
                 continue
             print(f"  crime {ori}/{crime_type}: {exc}", file=sys.stderr)
             return 0
@@ -261,7 +268,7 @@ def main() -> None:
     year = args.year
 
     # Step 1: Get top states
-    states = get_top_states()
+    states = get_top_states(5)  # limit to top 5 states to stay within API rate limits
     print(f"Top states: {', '.join(states)}", file=sys.stderr)
 
     # Step 2: Build county FIPS lookup from Census
@@ -299,16 +306,17 @@ def main() -> None:
         ori = agency["ori"]
         fips = agency["fips"]
         violent = fetch_crime_summary(ori, "violent-crime", year, api_key)
+        time.sleep(0.5)
         property_crime = fetch_crime_summary(ori, "property-crime", year, api_key)
         return fips, violent, property_crime
 
-    # Use 3 workers to avoid rate-limiting
+    # Use 1 worker with 2s delay to avoid rate-limiting
     done_count = 0
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         futures = {executor.submit(fetch_one, a): a for a in all_agencies}
         for future in as_completed(futures):
             done_count += 1
-            if done_count % 100 == 0:
+            if done_count % 50 == 0:
                 print(f"  {done_count}/{len(all_agencies)} agencies queried...", file=sys.stderr)
             try:
                 fips, violent, property_crime = future.result()
@@ -319,6 +327,7 @@ def main() -> None:
                 county_data[fips]["agencies"].add(futures[future]["ori"])
             except Exception as exc:
                 print(f"  agency query failed: {exc}", file=sys.stderr)
+            time.sleep(2)  # rate limit ourselves
 
     print(f"  {len(county_data)} counties with crime data", file=sys.stderr)
 
