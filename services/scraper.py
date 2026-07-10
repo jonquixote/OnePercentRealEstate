@@ -77,126 +77,133 @@ def get_property_type(row):
         row.get('prop_type')
     )
 
-def process_listing(row, user_id):
+def normalize_row(row: dict, listing_type: str) -> dict:
+    """Pure function: normalize a HomeHarvest row dict for DB insertion.
+    
+    No DB, no network — just type-coerces fields and serializes JSONB.
+    listing_type controls which fields are included (e.g. agent_info for-sale only).
     """
-    Normalizes a dataframe row into a dictionary for database insertion.
-    Captures all available data fields.
+    price = row.get('list_price')
+    if pd.isna(price) or price is None:
+        price = 0
+
+    zip_raw = row.get('zip_code')
+    zip_code = str(zip_raw).split('.')[0] if pd.notna(zip_raw) else ""
+
+    address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
+
+    bedrooms = row.get('beds') if pd.notna(row.get('beds')) else None
+    bathrooms = row.get('baths') if pd.notna(row.get('baths')) else None
+    sqft = row.get('sqft') if pd.notna(row.get('sqft')) else None
+    year_built = row.get('year_built') if pd.notna(row.get('year_built')) else None
+
+    # Handle Images
+    images = []
+    if pd.notna(row.get('primary_photo')):
+        images.append(row['primary_photo'])
+    if pd.notna(row.get('alt_photos')):
+        alts = str(row['alt_photos'])
+        if alts and alts.lower() != 'nan':
+            images.extend([url.strip() for url in alts.split(',') if url.strip()])
+
+    # Handle Raw Data (Clean for JSON)
+    raw_data = row.copy()
+    for k, v in raw_data.items():
+        if isinstance(v, (list, tuple)):
+            continue
+        if pd.isna(v):
+            raw_data[k] = None
+        elif hasattr(v, 'isoformat'):
+            raw_data[k] = v.isoformat()
+
+    sold_price = row.get('sold_price') if pd.notna(row.get('sold_price')) else None
+    sold_date = row.get('last_sold_date') if pd.notna(row.get('last_sold_date')) else None
+
+    financial_snapshot = {
+        "price": price,
+        "estimated_rent": None,
+        "sqft": sqft,
+        "year_built": year_built,
+        "bedrooms": bedrooms,
+        "bathrooms": bathrooms,
+    }
+
+    data = {
+        "address": address,
+        "city": row.get('city'),
+        "state": row.get('state'),
+        "zip_code": zip_code,
+        "price": price,
+        "estimated_rent": None,
+        "expense_ratio": 50,
+        "financial_snapshot": financial_snapshot,
+        "images": images,
+        "raw_data": raw_data,
+        "sold_price": sold_price,
+        "sold_date": sold_date,
+        "property_type": get_property_type(row),
+        "bedrooms": bedrooms,
+        "bathrooms": bathrooms,
+        "sqft": sqft,
+        "year_built": year_built,
+        "mls_id": str(row.get('listing_id')) if pd.notna(row.get('listing_id')) else None,
+        "mls_status": row.get('status'),
+        "days_on_market": int(row.get('days_on_mls')) if pd.notna(row.get('days_on_mls')) else None,
+        "hoa_fee": float(row.get('hoa_fee')) if pd.notna(row.get('hoa_fee')) else None,
+        "tax_annual_amount": float(row.get('tax_annual_amount') or row.get('tax_assessed_value', 0) * 0.02) if pd.notna(row.get('tax_annual_amount')) else None,
+        "agent_name": row.get('agent_name'),
+        "agent_email": row.get('agent_email'),
+        "agent_phone": str(row.get('agent_phones')) if pd.notna(row.get('agent_phones')) else None,
+        "broker_name": row.get('broker_name') or row.get('office_name'),
+        "lot_size_acres": float(row.get('lot_sqft', 0)) / 43560.0 if pd.notna(row.get('lot_sqft')) else None,
+        "stories": int(row.get('stories')) if pd.notna(row.get('stories')) else None,
+        "garage_spaces": int(row.get('garage_spaces')) if pd.notna(row.get('garage_spaces')) else None,
+        "parking_garage": bool(row["parking_garage"]) if pd.notna(row.get("parking_garage")) else None,
+        # HomeHarvest full-capture fields
+        "fips_code": str(row["fips_code"]) if pd.notna(row.get("fips_code")) else None,
+        "neighborhoods": str(row["neighborhoods"]) if pd.notna(row.get("neighborhoods")) else None,
+        "new_construction": bool(row["new_construction"]) if pd.notna(row.get("new_construction")) else None,
+        "nearby_schools": json.dumps(row["nearby_schools"]) if isinstance(row.get("nearby_schools"), (list, dict)) else None,
+        "tax_history": json.dumps(row["tax_history"]) if isinstance(row.get("tax_history"), (list, dict)) else None,
+    }
+
+    # agent_info only on for-sale listings
+    if listing_type == "for_sale":
+        data["agent_info"] = json.dumps(
+            {k: row.get(k) for k in ("agent_name", "agent_email", "broker_name", "office_name") if pd.notna(row.get(k))}
+        ) or None
+
+    return data
+
+def process_listing(row, user_id):
+    """Normalize a row for the listings table.
+
+    Delegates to normalize_row() for pure field normalization, then adds
+    geocoded coordinates and user_id.
     """
     try:
-        price = row.get('list_price')
-        if pd.isna(price) or price is None:
-            price = 0
-            
-        # Robust zip code handling
-        zip_raw = row.get('zip_code')
-        if pd.notna(zip_raw):
-            zip_code = str(zip_raw).split('.')[0]
-        else:
-            zip_code = ""
+        data = normalize_row(row, "for_sale")
 
-        bedrooms = row.get('beds') if pd.notna(row.get('beds')) else None
-        bathrooms = row.get('baths') if pd.notna(row.get('baths')) else None
-        sqft = row.get('sqft') if pd.notna(row.get('sqft')) else None
-        year_built = row.get('year_built') if pd.notna(row.get('year_built')) else None
-        
-        address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
-        
-        # NOTE: We DO NOT calculate estimated_rent here anymore.
-        # We let the database trigger 'trigger_calculate_smart_rent' handle it on insert.
-        # This ensures the most up-to-date logic (including triangulation) is used.
-        estimated_rent = None 
-        
-        financial_snapshot = {
-            "price": price,
-            "estimated_rent": estimated_rent, # Will be populated by DB trigger
-            "sqft": sqft,
-            "year_built": year_built,
-            "bedrooms": bedrooms,
-            "bathrooms": bathrooms
-        }
-
-        # Handle Images
-        images = []
-        if pd.notna(row.get('primary_photo')):
-            images.append(row['primary_photo'])
-        
-        if pd.notna(row.get('alt_photos')):
-            alts = str(row['alt_photos'])
-            if alts and alts.lower() != 'nan':
-                images.extend([url.strip() for url in alts.split(',') if url.strip()])
-
-        # Handle Raw Data (Clean for JSON)
-        # row is already a dict now (from records)
-        raw_data = row.copy()
-        for k, v in raw_data.items():
-            if isinstance(v, (list, tuple)):
-                continue 
-            
-            if pd.isna(v):
-                raw_data[k] = None
-            elif hasattr(v, 'isoformat'): 
-                raw_data[k] = v.isoformat()
-        
         # Geocode
-        coords = geocode_address(address)
+        coords = geocode_address(data["address"])
         if coords:
-            raw_data["lat"] = coords[0]
-            raw_data["lon"] = coords[1]
+            data["latitude"] = coords[0]
+            data["longitude"] = coords[1]
+            data["raw_data"]["lat"] = coords[0]
+            data["raw_data"]["lon"] = coords[1]
         else:
-            # Fallback to scraped lat/lon if mapbox fails
             if pd.notna(row.get('latitude')) and pd.notna(row.get('longitude')):
-                raw_data["lat"] = row['latitude']
-                raw_data["lon"] = row['longitude']
+                data["latitude"] = row['latitude']
+                data["longitude"] = row['longitude']
+                data["raw_data"]["lat"] = row['latitude']
+                data["raw_data"]["lon"] = row['longitude']
             else:
-                raw_data["lat"] = None
-                raw_data["lon"] = None
-            
-        sold_price = row.get('sold_price') if pd.notna(row.get('sold_price')) else None
-        sold_date = row.get('last_sold_date') if pd.notna(row.get('last_sold_date')) else None
+                data["latitude"] = None
+                data["longitude"] = None
+                data["raw_data"]["lat"] = None
+                data["raw_data"]["lon"] = None
 
-        # Build comprehensive data object
-        data = {
-            "address": address,
-            "city": row.get('city'),
-            "state": row.get('state'),
-            "zip_code": zip_code,
-            "price": price, # Correct column name for Postgres
-            "estimated_rent": None, # Trigger will populate
-            "expense_ratio": 50,
-            "financial_snapshot": financial_snapshot,
-            "user_id": user_id,
-            "images": images,
-            "raw_data": raw_data,
-            "sold_price": sold_price,
-            "sold_date": sold_date,
-            "property_type": get_property_type(row),
-            "bedrooms": bedrooms,
-            "bathrooms": bathrooms,
-            "sqft": sqft,
-            "year_built": year_built,
-            
-            # New Fields Mapping
-            "mls_id": str(row.get('listing_id')) if pd.notna(row.get('listing_id')) else None,
-            "mls_status": row.get('status'), # 'FOR_SALE', 'SOLD', etc
-            "days_on_market": int(row.get('days_on_mls')) if pd.notna(row.get('days_on_mls')) else None,
-            "hoa_fee": float(row.get('hoa_fee')) if pd.notna(row.get('hoa_fee')) else None,
-            "tax_annual_amount": float(row.get('tax_annual_amount') or row.get('tax_assessed_value', 0) * 0.02) if pd.notna(row.get('tax_annual_amount')) else None,
-            "agent_name": row.get('agent_name'),
-            "agent_email": row.get('agent_email'),
-            "agent_phone": str(row.get('agent_phones')) if pd.notna(row.get('agent_phones')) else None,
-            "broker_name": row.get('broker_name') or row.get('office_name'),
-            "lot_size_acres": float(row.get('lot_sqft', 0)) / 43560.0 if pd.notna(row.get('lot_sqft')) else None,
-            "stories": int(row.get('stories')) if pd.notna(row.get('stories')) else None,
-            "garage_spaces": int(row.get('garage_spaces')) if pd.notna(row.get('garage_spaces')) else None,
-            
-            # Coordinates
-            "latitude": raw_data["lat"],
-            "longitude": raw_data["lon"]
-        }
-        
-        # Alias 'listing_price' to 'price' for insertion matching DB schema
-        data['price'] = data['listing_price']
-        
+        data["user_id"] = user_id
         return data
 
     except Exception as e:
@@ -204,58 +211,43 @@ def process_listing(row, user_id):
         return None
 
 def process_rental(row):
-    """
-    Normalizes a dataframe row into a dictionary for rental_listings table.
+    """Normalize a row for the rental_listings table.
+
+    Delegates to normalize_row() for pure field normalization, then adds
+    geocoded coordinates and source.
     """
     try:
-        price = row.get('list_price')
-        if pd.isna(price) or price <= 0:
-            return None
-            
-        zip_raw = row.get('zip_code')
-        zip_code = str(zip_raw).split('.')[0] if pd.notna(zip_raw) else ""
-        
-        address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
-        
-        raw_data = dict(row)  # row is already a dict from cleaned_records
-        for k, v in raw_data.items():
-            if isinstance(v, (list, tuple)):
-                continue
-            if pd.isna(v):
-                raw_data[k] = None
-            elif hasattr(v, 'isoformat'):
-                raw_data[k] = v.isoformat()
-        
-        coords = geocode_address(address)
+        base = normalize_row(row, "for_rent")
+
+        # Geocode
+        coords = geocode_address(base["address"])
         lat, lon = (None, None)
         if coords:
             lat, lon = coords
-            raw_data["lat"] = lat
-            raw_data["lon"] = lon
         else:
             if pd.notna(row.get('latitude')) and pd.notna(row.get('longitude')):
-               lat = row['latitude']
-               lon = row['longitude']
-               raw_data["lat"] = lat
-               raw_data["lon"] = lon
-            else:
-               raw_data["lat"] = None
-               raw_data["lon"] = None
+                lat = row['latitude']
+                lon = row['longitude']
 
+        # rental_listings has a smaller column set than listings
         return {
-            "address": address,
-            "zip_code": str(zip_code),
-            "city": row.get('city'),
-            "state": row.get('state'),
-            "price": price,
-            "bedrooms": row.get('beds') if pd.notna(row.get('beds')) else None,
-            "bathrooms": row.get('baths') if pd.notna(row.get('baths')) else None,
-            "sqft": row.get('sqft') if pd.notna(row.get('sqft')) else None,
-            "property_type": get_property_type(row),
+            "address": base["address"],
+            "zip_code": base["zip_code"],
+            "city": base["city"],
+            "state": base["state"],
+            "price": base["price"],
+            "bedrooms": base["bedrooms"],
+            "bathrooms": base["bathrooms"],
+            "sqft": base["sqft"],
+            "property_type": base["property_type"],
             "latitude": lat,
             "longitude": lon,
             "source": "homeharvest",
-            "raw_data": raw_data
+            "raw_data": base["raw_data"],
+            # HomeHarvest full-capture fields
+            "fips_code": base.get("fips_code"),
+            "neighborhoods": base.get("neighborhoods"),
+            "nearby_schools": base.get("nearby_schools"),
         }
     except Exception as e:
         print(f"Error processing rental: {e}", file=sys.stderr)
@@ -287,9 +279,8 @@ def run_scraper(args):
                     location=args.location,
                     listing_type=l_type,
                     past_days=args.past_days,
+                    extra_property_data=True,
                 )
-                if l_type == "for_rent":
-                    scrape_kwargs["extra_property_data"] = True
                 properties = scrape_property(**scrape_kwargs)
             except Exception as scrape_err:
                  print(f"HomeHarvest Error: {scrape_err}", file=sys.stderr)

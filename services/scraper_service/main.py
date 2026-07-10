@@ -125,7 +125,8 @@ def scrape_listings(req: ScrapeRequest):
             past_days=req.past_days,
             radius=req.radius,
             mls_only=req.mls_only,
-            foreclosure=req.foreclosure
+            foreclosure=req.foreclosure,
+            extra_property_data=True,
         )
         
         is_rental = req.listing_type == 'for_rent'
@@ -310,7 +311,8 @@ def scrape_listings(req: ScrapeRequest):
                             county, fips_code, neighborhoods, last_sold_price, last_sold_date,
                             assessed_value, estimated_value, description, style, new_construction,
                             list_date, price_per_sqft, hoa_fee, tax_annual_amount, property_url,
-                            parking_garage, lot_sqft
+                            parking_garage, lot_sqft,
+                            stories, nearby_schools, agent_info, tax_history
                         )
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s,
@@ -322,7 +324,8 @@ def scrape_listings(req: ScrapeRequest):
                             CASE WHEN %s::bool AND c.sale_type = 'standard' THEN 0.95 ELSE c.sale_type_confidence END,
                             n.address_norm,
                             md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), '')),
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s
                         FROM classify_sale_type(%s::jsonb, %s) c,
                              LATERAL (
                                  SELECT NULLIF(regexp_replace(regexp_replace(lower(trim(%s)), '[.,#]', '', 'g'), '\\s+', ' ', 'g'), '') AS address_norm
@@ -361,6 +364,10 @@ def scrape_listings(req: ScrapeRequest):
                             property_url = COALESCE(EXCLUDED.property_url, listings.property_url),
                             parking_garage = COALESCE(EXCLUDED.parking_garage, listings.parking_garage),
                             lot_sqft = COALESCE(EXCLUDED.lot_sqft, listings.lot_sqft),
+                            stories = COALESCE(EXCLUDED.stories, listings.stories),
+                            nearby_schools = COALESCE(EXCLUDED.nearby_schools, listings.nearby_schools),
+                            agent_info = COALESCE(EXCLUDED.agent_info, listings.agent_info),
+                            tax_history = COALESCE(EXCLUDED.tax_history, listings.tax_history),
                             updated_at = NOW()
                         WHERE (EXCLUDED.price IS NOT NULL AND listings.price IS DISTINCT FROM EXCLUDED.price)
                            OR (EXCLUDED.bedrooms IS NOT NULL AND listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms)
@@ -390,6 +397,10 @@ def scrape_listings(req: ScrapeRequest):
                            OR (EXCLUDED.property_url IS NOT NULL AND listings.property_url IS DISTINCT FROM EXCLUDED.property_url)
                            OR (EXCLUDED.parking_garage IS NOT NULL AND listings.parking_garage IS DISTINCT FROM EXCLUDED.parking_garage)
                            OR (EXCLUDED.lot_sqft IS NOT NULL AND listings.lot_sqft IS DISTINCT FROM EXCLUDED.lot_sqft)
+                           OR (EXCLUDED.stories IS NOT NULL AND listings.stories IS DISTINCT FROM EXCLUDED.stories)
+                           OR (EXCLUDED.nearby_schools IS NOT NULL AND listings.nearby_schools IS DISTINCT FROM EXCLUDED.nearby_schools)
+                           OR (EXCLUDED.agent_info IS NOT NULL AND listings.agent_info IS DISTINCT FROM EXCLUDED.agent_info)
+                           OR (EXCLUDED.tax_history IS NOT NULL AND listings.tax_history IS DISTINCT FROM EXCLUDED.tax_history)
                         RETURNING id, (xmax = 0) as was_inserted
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,
@@ -404,6 +415,7 @@ def scrape_listings(req: ScrapeRequest):
                         enr["new_construction"], enr["list_date"], enr["price_per_sqft"],
                         enr["hoa_fee"], enr["tax_annual_amount"], enr["property_url"],
                         enr["parking_garage"], enr["lot_sqft"],
+                        enr["stories"], enr["nearby_schools"], enr["agent_info"], enr["tax_history"],
                         Json(raw_data), get_property_type(row),
                         address
                     ))
