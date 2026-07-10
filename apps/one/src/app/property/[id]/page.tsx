@@ -107,7 +107,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     const provParts: string[] = [];
     if (cutPct != null && firstPrice != null) provParts.push(`\u2212${(cutPct * 100).toFixed(1)}% since list`);
     if (dom != null) provParts.push(`${dom} days on market`);
-    if (motivated != null) provParts.push(`seller motivation ${motivated}`);
+    if (motivated != null && motivated > 0) provParts.push(`seller motivation ${motivated}`);
 
     const specParts: string[] = [];
     if (beds) specParts.push(`${beds} bd`);
@@ -146,11 +146,14 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                         {property.address}
                                     </h1>
                                     <p className="mt-2 text-[13px]" style={{ color: 'var(--haze)' }}>
-                                        {specParts.join(' \u00b7 ') || ''}
+                                        {specParts.join(' · ') || ''}
                                         {listingUrl && (
-                                            <a className="ml-3" style={{ color: 'var(--info)' }} href={listingUrl} target="_blank" rel="noopener noreferrer">
-                                                source listing \u2197
-                                            </a>
+                                            <>
+                                                {specParts.length > 0 && <span className="mx-2" style={{ color: 'var(--mute)' }}>·</span>}
+                                                <a style={{ color: 'var(--info)' }} href={listingUrl} target="_blank" rel="noopener noreferrer">
+                                                    source listing ↗
+                                                </a>
+                                            </>
                                         )}
                                     </p>
                                 </div>
@@ -170,7 +173,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                             </div>
 
                             {/* Seller intel */}
-                            {(cutPct != null || motivated != null || dom != null) && (
+                            {(cutPct != null || (motivated != null && motivated > 0) || dom != null) && (
                                 <section className="mt-8">
                                     <h2 className="prov prov--brass mb-5 inline-block">seller intel</h2>
                                     <div className="grid grid-cols-1 gap-4 text-[14px] sm:grid-cols-3">
@@ -187,7 +190,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                                 <p className="figure text-[20px]">{dom}</p>
                                             </div>
                                         )}
-                                        {motivated != null && (
+                                        {motivated != null && motivated > 0 && (
                                             <div className="rounded-[var(--r-panel)] p-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
                                                 <p style={{ color: 'var(--haze)' }}>Motivation score</p>
                                                 <p className={`figure text-[20px] ${motivated >= 60 ? '' : ''}`} style={{ color: motivated >= 60 ? 'var(--brass-hi)' : 'var(--text)' }}>{motivated}/100</p>
@@ -201,12 +204,12 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                         {/* ── Financials ──────────────────── */}
                         <section id="financials" className="scroll-mt-32">
                             <h2 className="prov mb-5 inline-block">rent, three ways</h2>
-                            <div className="space-y-4">
+                            <div className="space-y-5">
                                 {/* Model estimate */}
-                                <div>
+                                <div className="rounded-[var(--r-panel)] p-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
                                     <div className="flex items-baseline justify-between">
-                                        <span className="text-[14px]" style={{ color: 'var(--haze)' }}>OnePercent model (v{property.rent_model_version || '1'})</span>
-                                        <span className={`figure text-[18px] ${hasRent ? 'figure--pass' : ''}`}>
+                                        <span className="text-[13px] font-medium" style={{ color: 'var(--haze)' }}>OnePercent model (v{property.rent_model_version || '1'})</span>
+                                        <span className={`figure text-[20px] ${hasRent ? 'figure--pass' : ''}`}>
                                             {hasRent ? `${usd0.format(rent)}/mo` : '\u2014'}
                                         </span>
                                     </div>
@@ -221,15 +224,20 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                             </div>
                                         );
                                     })()}
+                                    {hasRent && rentLow != null && rentHigh != null && (
+                                        <p className="mt-1 text-[11px]" style={{ color: 'var(--mute)' }}>
+                                            p10–p90 confidence band
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* HUD FMR */}
-                                <div>
+                                <div className="rounded-[var(--r-panel)] p-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
                                     <div className="flex items-baseline justify-between">
-                                        <span className="text-[14px]" style={{ color: 'var(--haze)' }}>
-                                            HUD Fair Market Rent \u00b7 {raw.zip_code || ''} \u00b7 {beds ? `${beds}BR` : ''}
+                                        <span className="text-[13px] font-medium" style={{ color: 'var(--haze)' }}>
+                                            HUD Fair Market Rent · {raw.zip_code || ''} · {beds ? `${beds}BR` : ''}
                                         </span>
-                                        <span className="figure text-[18px]">
+                                        <span className="figure text-[20px]">
                                             {hudFmr ? `${usd0.format(hudFmr)}/mo` : '\u2014'}
                                         </span>
                                     </div>
@@ -237,16 +245,18 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
 
                                 {/* Comps median (streamed) */}
                                 <Suspense fallback={
-                                    <div className="flex items-baseline justify-between">
-                                        <span className="text-[14px]" style={{ color: 'var(--haze)' }}>Area comps median (last 90d)</span>
-                                        <span className="figure text-[18px]">\u2014</span>
+                                    <div className="rounded-[var(--r-panel)] p-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
+                                        <div className="flex items-baseline justify-between">
+                                            <span className="text-[13px] font-medium" style={{ color: 'var(--haze)' }}>Area comps median (last 90d)</span>
+                                            <span className="figure text-[20px]">\u2014</span>
+                                        </div>
                                     </div>
                                 }>
                                     <RentCompsLine id={id} zip={zip} />
                                 </Suspense>
                             </div>
-                            <p className="mt-4 text-[12px]" style={{ color: 'var(--mute)' }}>
-                                Band = the model&rsquo;s p10\u2013p90. FMR from HUD SAFMR FY2026. Never a naked estimate.
+                            <p className="mt-3 text-[11px]" style={{ color: 'var(--mute)' }}>
+                                FMR from HUD SAFMR FY2026. Never a naked estimate.
                             </p>
                         </section>
 

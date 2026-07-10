@@ -30,12 +30,12 @@ export function SoldCompsList({ id, property, sqft }: { id: string; property: an
         {summary?.median_sold_price != null && (
           <div className="mb-4 rounded-[var(--r-panel)] p-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
             <div className="flex items-baseline justify-between">
-              <span style={{ color: 'var(--haze)' }}>Median sold price (90d)</span>
-              <span className="figure">{usd0.format(summary.median_sold_price)}</span>
+              <span className="text-[13px] font-medium" style={{ color: 'var(--haze)' }}>Median sold price (90d)</span>
+              <span className="figure text-[20px]">{usd0.format(summary.median_sold_price)}</span>
             </div>
             {summary.avg_price_per_sqft != null && (
-              <p className="mt-1 text-[12px]" style={{ color: 'var(--mute)' }}>
-                ${summary.avg_price_per_sqft}/sqft avg \u00b7 {comps.length} comps
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--mute)' }}>
+                ${summary.avg_price_per_sqft}/sqft avg · {comps.length} comps
               </p>
             )}
           </div>
@@ -67,16 +67,22 @@ export function SoldCompsList({ id, property, sqft }: { id: string; property: an
 
         {/* ARV */}
         {(summary?.p75_price_per_sqft != null && sqft != null ? (
-          <div className="flex items-center gap-3 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
-            <span className="text-[14px]" style={{ color: 'var(--haze)' }}>After-repair value</span>
-            <span className="figure text-[18px]">{usd0.format(Math.round(summary.p75_price_per_sqft * sqft))}</span>
-            <span className="prov prov--real">ARV from sold comps \u00b7 P75 ${Math.round(summary.p75_price_per_sqft)}/sqft</span>
+          <div className="rounded-[var(--r-panel)] p-4 mt-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
+            <div className="flex items-baseline justify-between">
+              <span className="text-[13px] font-medium" style={{ color: 'var(--haze)' }}>After-repair value</span>
+              <span className="figure text-[20px]">{usd0.format(Math.round(summary.p75_price_per_sqft * sqft))}</span>
+            </div>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--mute)' }}>
+              P75 ${Math.round(summary.p75_price_per_sqft)}/sqft from {comps.length} sold comps
+            </p>
           </div>
         ) : property.estimated_value != null ? (
-          <div className="flex items-center gap-3 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
-            <span className="text-[14px]" style={{ color: 'var(--haze)' }}>After-repair value</span>
-            <span className="figure text-[18px]">{usd0.format(Number(property.estimated_value))}</span>
-            <span className="prov prov--est">ARV from source estimate</span>
+          <div className="rounded-[var(--r-panel)] p-4 mt-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
+            <div className="flex items-baseline justify-between">
+              <span className="text-[13px] font-medium" style={{ color: 'var(--haze)' }}>After-repair value</span>
+              <span className="figure text-[20px]">{usd0.format(Number(property.estimated_value))}</span>
+            </div>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--mute)' }}>Source estimate</p>
           </div>
         ) : null)}
       </div>

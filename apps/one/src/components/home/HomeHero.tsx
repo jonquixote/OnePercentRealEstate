@@ -2,6 +2,8 @@
 
 import GlobalSearch from '@/components/GlobalSearch';
 
+const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
 interface HistogramBin {
   loPct: number;
   hiPct: number;
@@ -15,21 +17,22 @@ interface Stats {
   rentCalcPending: number;
   histogram: HistogramBin[];
   thresholdPct: number;
+  medianRentEstimate?: number | null;
 }
 
 interface HomeHeroProps {
   stats: Stats | null;
   priceCuts?: number;
-  mortgageRate?: number | null;
+  medianRent?: number | null;
 }
 
 const num = new Intl.NumberFormat('en-US');
 
-export function HomeHero({ stats, priceCuts, mortgageRate }: HomeHeroProps) {
+export function HomeHero({ stats, priceCuts, medianRent }: HomeHeroProps) {
 
   return (
     <section aria-labelledby="hero-headline" className="relative isolate overflow-hidden bg-ink">
-        <div className="mx-auto max-w-6xl px-6 pt-10 pb-10 lg:px-8">
+        <div className="mx-auto max-w-6xl px-6 py-8 lg:px-8">
         {/* provenance chip */}
         <p className="prov mb-4 inline-block">
           {stats ? num.format(stats.total) : '\u2014'} listings \u00b7 rescored nightly
@@ -47,14 +50,8 @@ export function HomeHero({ stats, priceCuts, mortgageRate }: HomeHeroProps) {
           </em>
         </h1>
 
-        <p className="mt-4 max-w-xl text-[15px] leading-relaxed" style={{ color: 'var(--haze)' }}>
-          The 1% rule, computed honestly: modeled rent with confidence bands,
-          county tax records where they exist, and a per-property target that
-          knows a duplex from a condo.
-        </p>
-
         {/* THE glowing Rule Line */}
-        <div className="rule-line mt-10" />
+        <div className="rule-line mt-8" />
 
         {/* engraved ticker strip — no boxes */}
         <div className="mt-4 flex flex-wrap gap-x-10 gap-y-2 text-[13px]" style={{ color: 'var(--haze)' }}>
@@ -62,7 +59,7 @@ export function HomeHero({ stats, priceCuts, mortgageRate }: HomeHeroProps) {
             <b className="figure" style={{ color: 'var(--text)' }}>
               {stats ? num.format(stats.onePercentPasses) : '—'}
             </b>{' '}
-            clear the line today
+            clear the 1% line
           </span>
           <span>
             <b className="figure" style={{ color: 'var(--brass-hi)' }}>
@@ -72,15 +69,9 @@ export function HomeHero({ stats, priceCuts, mortgageRate }: HomeHeroProps) {
           </span>
           <span>
             <b className="figure" style={{ color: 'var(--text)' }}>
-              $484
+              {medianRent != null ? usd0.format(medianRent) : '—'}
             </b>{' '}
-            model error (MAE, holdout)
-          </span>
-          <span>
-            <b className="figure" style={{ color: 'var(--text)' }}>
-              {mortgageRate != null ? `${mortgageRate.toFixed(2)}%` : '—'}
-            </b>{' '}
-            30-yr rate · FRED
+            median rent estimate
           </span>
         </div>
 
