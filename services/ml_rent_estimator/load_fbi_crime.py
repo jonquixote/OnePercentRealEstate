@@ -22,10 +22,11 @@ from typing import Any
 
 import requests
 
-FBI_BASE = "https://api.usa.gov/crime/fbi/cde"
+FBI_BASE = "https://api.usa.gov/crime/fbi/sapi"
 FBI_KEY_PARAM = "API_KEY"
 TIMEOUT = 15
 DELAY = 0.5  # seconds between requests — be polite
+CENSUS_HEADERS = {"User-Agent": "Mozilla/5.0 (OnePercentRealEstate)"}  # Census API requires UA
 
 # fallback top-15 states by listing count
 FALLBACK_STATES = [
@@ -145,7 +146,7 @@ def build_county_fips_lookup(state_fips_codes: list[str], api_key: str) -> dict[
     for state_fips in state_fips_codes:
         url = f"https://api.census.gov/data/2020/dec/pl?get=NAME&for=county:*&in=state:{state_fips}"
         try:
-            resp = requests.get(url, timeout=TIMEOUT)
+            resp = requests.get(url, headers=CENSUS_HEADERS, timeout=TIMEOUT)
             resp.raise_for_status()
             data = resp.json()
             if not data or len(data) < 2:
@@ -173,7 +174,7 @@ def build_county_fips_lookup(state_fips_codes: list[str], api_key: str) -> dict[
                         break
                 if state_abbr:
                     lookup[(state_abbr, county_name)] = fips
-            time.sleep(0.3)
+            time.sleep(1.0)  # Census API rate limit — be polite
         except Exception as exc:
             print(f"  census counties state {state_fips}: {exc}", file=sys.stderr)
 

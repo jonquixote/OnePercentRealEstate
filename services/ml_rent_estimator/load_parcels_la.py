@@ -40,7 +40,7 @@ def normalize_address(addr: str) -> str | None:
 
 def fetch_page(offset: int) -> list[dict]:
     params = (
-        f"?f=geojson"
+        f"?f=json"
         f"&where=1%3D1"
         f"&outFields=*"
         f"&resultOffset={offset}"
@@ -51,7 +51,29 @@ def fetch_page(offset: int) -> list[dict]:
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         data = json.loads(resp.read())
-    return data.get("features", [])
+    # ArcGIS JSON format wraps features differently than GeoJSON
+    features = data.get("features", [])
+    return [
+        {
+            "properties": f.get("attributes", {}),
+            "geometry": f.get("geometry"),  # already in {rings: [[...]]} format
+        }
+        for f in features
+    ]
+
+
+def arcgis_to_geojson(geom: dict) -> dict | None:
+    """Convert ArcGIS JSON geometry to GeoJSON."""
+    if not geom:
+        return None
+    # ArcGIS returns {"rings": [...], "spatialReference": {...}}
+    rings = geom.get("rings")
+    if rings:
+        return {"type": "Polygon", "coordinates": rings}
+    # Already GeoJSON-like
+    if geom.get("type") and geom.get("coordinates"):
+        return geom
+    return None
 
 
 def main() -> None:
@@ -88,7 +110,8 @@ def main() -> None:
                 situs = props.get("SitusFullAddress", "")
                 land_val = props.get("Roll_LandValue")
                 imp_val = props.get("Roll_ImpValue")
-                geom = feat.get("geometry")
+                geom_raw = feat.get("geometry")
+                geom = arcgis_to_geojson(geom_raw)
                 if not geom:
                     continue
 

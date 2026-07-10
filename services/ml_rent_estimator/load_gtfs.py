@@ -22,10 +22,11 @@ import zipfile
 from pathlib import Path
 
 FEEDS = {
-    "la-metro": "https://gtfsfeeds.s3.amazonaws.com/lametro-gtfs.zip",
+    "la-metro-bus": "https://gitlab.com/LACMTA/gtfs_bus/raw/master/gtfs_bus.zip",
+    "la-metro-rail": "https://gitlab.com/LACMTA/gtfs_rail/raw/master/gtfs_rail.zip",
     "nyc-mta-subway": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/subway%2Fgtfs",
     "nyc-mta-bus": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/bus%2Fgtfs",
-    "chicago-cta": "https://data.gtfsdepot.com/chicago/cta/gtfs.zip",
+    "chicago-cta": "https://data.transitchicago.com/downloads/gtfs/google_transit.zip",
     "boston-mbta": "https://cdn.mbta.com/MBFGTFS.zip",
     "septa": "https://www3.septa.org/gtfs/google_transit.zip",
     "wmata": "https://developer.wmata.com/gtfs_data/google_transit.zip",

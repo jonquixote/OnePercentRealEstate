@@ -19,6 +19,7 @@ import urllib.request
 import pandas as pd
 
 URLS = [
+    "https://edg.epa.gov/data/public/OA/EPA_SmartLocationDatabase_V3_Jan_2021_Final.csv",
     "https://edap-ecf.s3.us-west-2.amazonaws.com/docsets/smartlocation/SmartLocationDBv3.csv",
     "https://www.epa.gov/system/files/documents/smartlocationdbv3.csv",
 ]
