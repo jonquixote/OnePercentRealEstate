@@ -128,7 +128,7 @@ export function FinancialCalculatorSection({ property }: Props) {
                   <div>
                     <p className="font-semibold text-pass mb-1">Pros</p>
                     <ul className="space-y-0.5">
-                      {result.score.pros.slice(0, 3).map((p, i) => <li key={i} className="text-foreground">{'\u2713'} {p}</li>)}
+                      {result.score.pros.slice(0, 3).map((p, i) => <li key={i} className="text-foreground">✓ {p}</li>)}
                     </ul>
                   </div>
                 )}
@@ -136,7 +136,7 @@ export function FinancialCalculatorSection({ property }: Props) {
                   <div>
                     <p className="font-semibold" style={{ color: 'var(--loss)' }}>Cons</p>
                     <ul className="space-y-0.5">
-                      {result.score.cons.slice(0, 3).map((c, i) => <li key={i} className="text-foreground">{'\u2717'} {c}</li>)}
+                      {result.score.cons.slice(0, 3).map((c, i) => <li key={i} className="text-foreground">✗ {c}</li>)}
                     </ul>
                   </div>
                 )}

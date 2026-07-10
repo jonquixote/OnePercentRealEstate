@@ -140,7 +140,6 @@ export function FeaturedDeals({ strategy, rentCalcPending = 0 }: FeaturedDealsPr
                   {/* provenance chips */}
                   <div className="mt-2 flex items-center gap-2">
                     <span className="prov prov--est">rent estimate</span>
-                    <span className="prov">model v1</span>
                   </div>
 
                   {/* address */}

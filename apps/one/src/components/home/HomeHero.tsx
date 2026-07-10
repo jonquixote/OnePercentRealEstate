@@ -35,7 +35,7 @@ export function HomeHero({ stats, priceCuts, medianRent }: HomeHeroProps) {
         <div className="mx-auto max-w-6xl px-6 py-8 lg:px-8">
         {/* provenance chip */}
         <p className="prov mb-4 inline-block">
-          {stats ? num.format(stats.total) : '\u2014'} listings \u00b7 rescored nightly
+          {stats ? num.format(stats.total) : '—'} listings · rescored nightly
         </p>
 
         {/* editorial serif headline */}

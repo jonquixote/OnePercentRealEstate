@@ -106,7 +106,7 @@ export function SoldCompsList({ id, property, sqft }: { id: string; property: an
 
   return (
     <p className="text-[14px]" style={{ color: 'var(--mute)' }}>
-      Sold comps are being computed \u2014 check back soon.
+      Sold comps are being computed — check back soon.
     </p>
   );
 }

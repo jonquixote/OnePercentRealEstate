@@ -119,7 +119,7 @@ export function AnalysisSection({ property, hudData, demographics }: { property:
                 <p className="text-xs font-mono uppercase tracking-wider text-pass mb-2">Pros</p>
                 <ul className="space-y-1">
                   {grade.pros.map((p, i) => (
-                    <li key={i} className="text-sm text-foreground">\u2713 {p}</li>
+                    <li key={i} className="text-sm text-foreground">✓ {p}</li>
                   ))}
                 </ul>
               </div>
@@ -129,7 +129,7 @@ export function AnalysisSection({ property, hudData, demographics }: { property:
                 <p className="text-xs font-mono uppercase tracking-wider" style={{ color: 'var(--loss)' }}>Cons</p>
                 <ul className="space-y-1">
                   {grade.cons.map((c, i) => (
-                    <li key={i} className="text-sm text-foreground">\u2717 {c}</li>
+                    <li key={i} className="text-sm text-foreground">✗ {c}</li>
                   ))}
                 </ul>
               </div>
@@ -137,7 +137,7 @@ export function AnalysisSection({ property, hudData, demographics }: { property:
           </div>
         </div>
       ) : loading ? (
-        <p className="text-sm text-haze">Computing analysis\u2026</p>
+        <p className="text-sm text-haze">Computing analysis…</p>
       ) : error ? (
         <p className="text-sm text-haze">{error}</p>
       ) : null}

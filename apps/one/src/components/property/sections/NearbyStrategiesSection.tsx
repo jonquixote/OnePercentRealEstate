@@ -68,7 +68,7 @@ export function NearbyStrategiesSection({ id, zipCode }: Props) {
       </div>
 
       {loading ? (
-        <p className="text-sm text-haze">Loading nearby listings\u2026</p>
+        <p className="text-sm text-haze">Loading nearby listings…</p>
       ) : strategyListings.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {strategyListings.slice(0, 6).map((p: any) => {

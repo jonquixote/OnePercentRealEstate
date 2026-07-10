@@ -105,7 +105,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     const hudFmr = hudRow ? Number(hudRow.safmr) : null;
 
     const provParts: string[] = [];
-    if (cutPct != null && firstPrice != null) provParts.push(`\u2212${(cutPct * 100).toFixed(1)}% since list`);
+    if (cutPct != null && firstPrice != null) provParts.push(`−${(cutPct * 100).toFixed(1)}% since list`);
     if (dom != null) provParts.push(`${dom} days on market`);
     if (motivated != null && motivated > 0) provParts.push(`seller motivation ${motivated}`);
 
@@ -140,7 +140,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                             <header className="mt-6 flex flex-wrap items-end justify-between gap-6 pb-8" style={{ borderBottom: '1px solid var(--line)' }}>
                                 <div>
                                     {provParts.length > 0 && (
-                                        <p className="prov prov--brass mb-3 inline-block">{provParts.join(' \u00b7 ')}</p>
+                                        <p className="prov prov--brass mb-3 inline-block">{provParts.join(' · ')}</p>
                                     )}
                                     <h1 style={{ font: '400 var(--display-2)/1.15 var(--font-display)' }}>
                                         {property.address}
@@ -158,7 +158,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="figure text-[34px]">{price > 0 ? usd0.format(price) : '\u2014'}</p>
+                                    <p className="figure text-[34px]">{price > 0 ? usd0.format(price) : '—'}</p>
                                     {firstPrice != null && firstPrice > price && (
                                         <p className="text-[12px] line-through" style={{ color: 'var(--mute)' }}>
                                             {usd0.format(firstPrice)} first listed
@@ -180,7 +180,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                         {cutPct != null && (
                                             <div className="rounded-[var(--r-panel)] p-4" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
                                                 <p style={{ color: 'var(--haze)' }}>Price cut</p>
-                                                <p className="figure text-[20px]" style={{ color: 'var(--brass-hi)' }}>\u2212{(cutPct * 100).toFixed(1)}%</p>
+                                                <p className="figure text-[20px]" style={{ color: 'var(--brass-hi)' }}>−{(cutPct * 100).toFixed(1)}%</p>
                                                 {firstPrice != null && <p className="text-[11px]" style={{ color: 'var(--mute)' }}>from {usd0.format(firstPrice)}</p>}
                                             </div>
                                         )}

@@ -28,7 +28,7 @@ export function RentalCompsSection({ id }: { id: string }) {
   }, [id]);
 
   if (loading) return (
-    <p className="text-sm text-haze">Loading rental comps\u2026</p>
+    <p className="text-sm text-haze">Loading rental comps…</p>
   );
 
   if (error) return (

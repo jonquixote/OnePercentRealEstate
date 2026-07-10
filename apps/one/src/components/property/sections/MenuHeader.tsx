@@ -63,39 +63,36 @@ export default function MenuHeader({ id, address, price, propertyUrl }: Props) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={toggleWatch}
             disabled={savingWatch}
-            title={watched ? 'Unwatch' : 'Watch this property'}
-            aria-label={watched ? 'Unwatch this property' : 'Watch this property'}
-            className={`flex items-center justify-center rounded-full border w-9 h-9 transition-colors ${
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
               watched
                 ? 'border-pass text-pass bg-pass/10'
                 : 'border-line text-haze hover:text-foreground hover:border-foreground'
             }`}
           >
-            <Heart className={`h-4 w-4 ${watched ? 'fill-pass' : ''}`} />
+            <Heart className={`h-3.5 w-3.5 ${watched ? 'fill-pass' : ''}`} />
+            {watched ? 'Watched' : 'Watch'}
           </button>
           {propertyUrl && (
             <a
               href={propertyUrl}
               target="_blank"
               rel="noopener noreferrer"
-              title="Open source listing"
-              aria-label="Open source listing in new tab"
-              className="flex items-center justify-center rounded-full border border-line w-9 h-9 text-haze hover:text-foreground hover:border-foreground transition-colors"
+              className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-haze hover:text-foreground hover:border-foreground transition-colors"
             >
-              <ExternalLink className="h-4 w-4" />
+              <ExternalLink className="h-3.5 w-3.5" />
+              Source
             </a>
           )}
           <button
             onClick={copyShare}
-            title="Copy share link"
-            aria-label="Copy share link to clipboard"
-            className="flex items-center justify-center rounded-full border border-line w-9 h-9 text-haze hover:text-foreground hover:border-foreground transition-colors"
+            className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-haze hover:text-foreground hover:border-foreground transition-colors"
           >
-            <Share2 className="h-4 w-4" />
+            <Share2 className="h-3.5 w-3.5" />
+            Share
           </button>
         </div>
       </div>

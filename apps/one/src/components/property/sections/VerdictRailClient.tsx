@@ -78,7 +78,7 @@ export default function VerdictRailClient({
       <div className="flex items-baseline gap-3">
         <span className={`figure text-[40px] ${ratioPct && ratioPct >= targetPct ? 'figure--pass' : ''}`}
           style={ratioPct != null && ratioPct < targetPct ? { color: 'var(--haze)' } : undefined}>
-          {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '\u2014'}
+          {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '—'}
         </span>
         <span className="text-[13px]" style={{ color: 'var(--haze)' }}>
           vs {targetPct.toFixed(1)}% target
@@ -88,7 +88,7 @@ export default function VerdictRailClient({
 
       <dl className="space-y-3 text-[14px]">
         {[
-          ['Modeled rent', hasRent ? `${usd0.format(rent)}/mo` : '\u2014', 'model v1', hasRent],
+          ['Modeled rent', hasRent ? `${usd0.format(rent)}/mo` : '—', 'rent estimate', hasRent],
           ['Property tax', taxAnnual ? `${usd0.format(taxAnnual)}/yr` : '\u2014', 'listing', !!taxAnnual],
           ['Insurance', insurance ? `${usd0.format(insurance)}/yr` : '\u2014', 'state avg', !!insurance],
           ['HOA', hoa != null ? (hoa > 0 ? `${usd0.format(hoa)}/mo` : 'None') : '\u2014', 'listing', hoa != null],
@@ -108,17 +108,17 @@ export default function VerdictRailClient({
       <dl className="space-y-3 text-[14px]">
         <div className="flex justify-between">
           <dt style={{ color: 'var(--haze)' }}>Cap rate</dt>
-          <dd className="figure">{capRate != null ? `${(capRate * 100).toFixed(1)}%` : '\u2014'}</dd>
+          <dd className="figure">{capRate != null ? `${(capRate * 100).toFixed(1)}%` : '—'}</dd>
         </div>
         <div className="flex justify-between">
           <dt style={{ color: 'var(--haze)' }}>Cash flow</dt>
           <dd className={`figure ${monthlyCashflow != null && monthlyCashflow >= 0 ? 'figure--pass' : monthlyCashflow != null ? 'figure--loss' : ''}`}>
-            {monthlyCashflow != null ? `${monthlyCashflow >= 0 ? '+' : ''}${usd0.format(Math.abs(Math.round(monthlyCashflow)))}/mo` : '\u2014'}
+            {monthlyCashflow != null ? `${monthlyCashflow >= 0 ? '+' : ''}${usd0.format(Math.abs(Math.round(monthlyCashflow)))}/mo` : '—'}
           </dd>
         </div>
         <div className="flex justify-between">
           <dt style={{ color: 'var(--haze)' }}>Cash-on-cash</dt>
-          <dd className="figure">{cashOnCash != null ? `${(cashOnCash * 100).toFixed(1)}%` : '\u2014'}</dd>
+          <dd className="figure">{cashOnCash != null ? `${(cashOnCash * 100).toFixed(1)}%` : '—'}</dd>
         </div>
       </dl>
 
@@ -128,10 +128,10 @@ export default function VerdictRailClient({
         className="mt-6 w-full rounded-full py-2.5 text-[14px] font-semibold transition-colors disabled:opacity-50"
         style={{ background: watched ? 'var(--line-hi)' : 'var(--pass)', color: watched ? 'var(--text)' : '#fff' }}
       >
-        {savingWatch ? 'Saving\u2026' : watched ? 'Watching' : 'Watch this property'}
+        {savingWatch ? 'Saving…' : watched ? 'Watching' : 'Watch this property'}
       </button>
       <p className="mt-3 text-center text-[11px]" style={{ color: 'var(--mute)' }}>
-        financing: 20% down \u00b7 {mortgageRate != null ? `${mortgageRate.toFixed(2)}%` : '\u2014'} (FRED, live) \u00b7 30yr
+        financing: 20% down · {mortgageRate != null ? `${mortgageRate.toFixed(2)}%` : '—'} (FRED, live) · 30yr
       </p>
     </div>
   );
