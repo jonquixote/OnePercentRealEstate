@@ -14,6 +14,9 @@ import { AnalysisSection } from '@/components/property/sections/AnalysisSection'
 import { FinancialCalculatorSection } from '@/components/property/sections/FinancialCalculatorSection';
 import { NearbyStrategiesSection } from '@/components/property/sections/NearbyStrategiesSection';
 import { RentalCompsSection } from '@/components/property/sections/RentalCompsSection';
+import { RiskPanel } from '@/components/property/sections/RiskPanel';
+import { NeighborhoodPanel } from '@/components/property/sections/NeighborhoodPanel';
+import { MarketContextPanel } from '@/components/property/sections/MarketContextPanel';
 import VerdictRailClient from '@/components/property/sections/VerdictRailClient';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -338,6 +341,24 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                         <section id="nearby" className="scroll-mt-32">
                             <h2 className="prov mb-5 inline-block">nearby by strategy</h2>
                             <NearbyStrategiesSection id={id} zipCode={zip} lat={property.latitude} lng={property.longitude} beds={beds} />
+                        </section>
+
+                        {/* ── Risk ───────────────────────── */}
+                        <section id="risk" className="scroll-mt-32">
+                            <h2 className="prov mb-5 inline-block">risk & safety</h2>
+                            <RiskPanel propertyId={id} />
+                        </section>
+
+                        {/* ── Neighborhood ───────────────── */}
+                        <section id="neighborhood" className="scroll-mt-32">
+                            <h2 className="prov mb-5 inline-block">neighborhood</h2>
+                            <NeighborhoodPanel propertyId={id} />
+                        </section>
+
+                        {/* ── Market Context ─────────────── */}
+                        <section id="market" className="scroll-mt-32">
+                            <h2 className="prov mb-5 inline-block">market context</h2>
+                            <MarketContextPanel propertyId={id} />
                         </section>
                     </main>
 
