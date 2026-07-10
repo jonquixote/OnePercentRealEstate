@@ -157,18 +157,18 @@ def build_county_fips_lookup(_state_fips_codes: list[str], _api_key: str) -> dic
     try:
         resp = requests.get(url, headers=CENSUS_HEADERS, timeout=TIMEOUT)
         resp.raise_for_status()
-        # Format: " State FIPS | State Abbrev | County FIPS | County Name | Functional Status"
+        # Format: STATE|STATEFP|COUNTYFP|COUNTYNS|COUNTYNAME|CLASSFP|FUNCSTAT
         for line in resp.text.strip().split("\n"):
             line = line.strip()
-            if not line or line.startswith("State"):
+            if not line or line.startswith("STATE|"):
                 continue
             parts = [p.strip() for p in line.split("|")]
-            if len(parts) < 4:
+            if len(parts) < 5:
                 continue
-            state_fips_code = parts[0].strip()
-            state_abbr = parts[1].strip().upper()
+            state_abbr = parts[0].strip().upper()
+            state_fips_code = parts[1].strip()
             county_fips = parts[2].strip()
-            county_name = parts[3].strip().upper()
+            county_name = parts[4].strip().upper()
             # Remove standard suffixes for matching
             for suffix in [" COUNTY", " PARISH", " CITY AND BOROUGH",
                            " MUNICIPALITY", " BOROUGH", " CITY"]:
