@@ -1,0 +1,33 @@
+{
+  "name": "@oper/map",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./useOperMap": "./src/useOperMap.ts",
+    "./layers/listings": "./src/layers/listings.ts",
+    "./layers/registry": "./src/layers/registry.ts",
+    "./layers/rentHeat": "./src/layers/rentHeat.ts",
+    "./layers/tracts": "./src/layers/tracts.ts",
+    "./layers/context": "./src/layers/context.ts",
+    "./controls/LayerSwitcher": "./src/controls/LayerSwitcher.tsx",
+    "./controls/DrawSearch": "./src/controls/DrawSearch.tsx",
+    "./controls/BasemapToggle": "./src/controls/BasemapToggle.tsx"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "maplibre-gl": "^5.24.0",
+    "react": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.14",
+    "@types/react": "^19",
+    "typescript": "^5",
+    "vitest": "^2"
+  }
+}
