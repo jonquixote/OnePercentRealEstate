@@ -24,7 +24,7 @@ import urllib.request
 COUNTY_FIPS = "06037"
 BASE_URL = (
     "https://public.gis.lacounty.gov/public/rest/services/"
-    "LACounty_Cache/LACounty_Parcel/MapServer/0"
+    "LACounty_Cache/LACounty_Parcel/MapServer/0/query"
 )
 PAGE_SIZE = 1000
 TIMEOUT = 120
