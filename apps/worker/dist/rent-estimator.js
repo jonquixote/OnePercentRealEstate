@@ -144,7 +144,10 @@ async function loadListing(listingId, parentLog) {
             lot_size_acres,
             census_tract,
             last_sold_price,
-            last_sold_date::text AS last_sold_date
+            last_sold_date::text AS last_sold_date,
+            (raw_data->>'tax_assessed_value')::text AS tax_assessed_value,
+            price::text AS price,
+            (raw_data->>'days_on_mls')::text AS days_on_mls
        FROM listings
       WHERE id = $1`, [listingId]);
     if (res.rowCount === 0) {
@@ -171,6 +174,9 @@ async function loadListing(listingId, parentLog) {
         census_tract: r.census_tract,
         last_sold_price: r.last_sold_price != null ? Number(r.last_sold_price) : null,
         last_sold_date: r.last_sold_date,
+        tax_assessed_value: r.tax_assessed_value != null ? Number(r.tax_assessed_value) : null,
+        price: r.price != null ? Number(r.price) : null,
+        days_on_mls: r.days_on_mls != null ? Number(r.days_on_mls) : null,
     };
 }
 async function callMlService(payload, parentLog) {
@@ -382,7 +388,10 @@ async function drainBatch(parentLog) {
     const page = await pool.query(`SELECT id::text AS id, address, city, state,
             zip_code, bedrooms, bathrooms, sqft, year_built,
             latitude, longitude, property_type, hoa_fee, lot_size_acres,
-            census_tract, last_sold_price, last_sold_date::text AS last_sold_date
+            census_tract, last_sold_price, last_sold_date::text AS last_sold_date,
+            (raw_data->>'tax_assessed_value')::text AS tax_assessed_value,
+            price::text AS price,
+            (raw_data->>'days_on_mls')::text AS days_on_mls
        FROM listings
       WHERE rent_calc_status = 'pending'
         AND public.is_rentable(property_type)

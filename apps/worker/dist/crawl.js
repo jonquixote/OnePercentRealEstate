@@ -118,12 +118,22 @@ async function processJob(jobId, parentLog) {
             log.warn({ err: err.message }, 'sold scrape failed, continuing');
             return null;
         });
-        if (!saleResult && !rentResult && !foreclosureResult && !soldResult) {
-            throw new Error('all scrape passes (for_sale, for_rent, foreclosure, sold) failed');
+        // Fifth pass: pending listings (leading inventory signal)
+        const pendingResult = await scrape(job, 'pending', log, { pastDays: 14 }).catch((err) => {
+            log.warn({ err: err.message }, 'pending scrape failed, continuing');
+            return null;
+        });
+        // Sixth pass: PadMapper/Zumper rental source
+        const padmapperResult = await scrape(job, 'for_rent', log, { source: 'padmapper' }).catch((err) => {
+            log.warn({ err: err.message }, 'padmapper scrape failed, continuing');
+            return null;
+        });
+        if (!saleResult && !rentResult && !foreclosureResult && !soldResult && !pendingResult && !padmapperResult) {
+            throw new Error('all scrape passes (for_sale, for_rent, foreclosure, sold, pending, padmapper) failed');
         }
-        const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0) + (foreclosureResult?.count ?? 0) + (soldResult?.count ?? 0);
-        const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0) + (foreclosureResult?.inserted ?? 0) + (soldResult?.inserted ?? 0);
-        const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0) + (foreclosureResult?.skipped ?? 0) + (soldResult?.skipped ?? 0);
+        const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0) + (foreclosureResult?.count ?? 0) + (soldResult?.count ?? 0) + (pendingResult?.count ?? 0) + (padmapperResult?.count ?? 0);
+        const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0) + (foreclosureResult?.inserted ?? 0) + (soldResult?.inserted ?? 0) + (pendingResult?.inserted ?? 0) + (padmapperResult?.inserted ?? 0);
+        const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0) + (foreclosureResult?.skipped ?? 0) + (soldResult?.skipped ?? 0) + (pendingResult?.skipped ?? 0) + (padmapperResult?.skipped ?? 0);
         await pool.query(`UPDATE crawl_jobs
           SET status = 'completed',
               finished_at = NOW(),
@@ -169,6 +179,9 @@ async function scrape(job, listingType, log, opts) {
                 listing_type: listingType,
                 past_days: opts?.pastDays ?? 30,
                 ...(opts?.foreclosure ? { foreclosure: true } : {}),
+                ...(opts?.dateFrom ? { date_from: opts.dateFrom } : {}),
+                ...(opts?.dateTo ? { date_to: opts.dateTo } : {}),
+                ...(opts?.source ? { source: opts.source } : {}),
             }),
             signal: controller.signal,
         });
