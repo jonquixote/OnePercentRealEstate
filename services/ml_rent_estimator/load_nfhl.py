@@ -1,15 +1,26 @@
 """Load FEMA NFHL flood zone polygons into the flood_zones table.
 
-Uses ogr2ogr (GDAL) to import S_FLD_HAZ_AR from the NFHL GDB per state,
-filtered to SFHA polygons only. Downloads state-level NFHL zips from FEMA.
+Two sources are supported (select with NFHL_SOURCE, default "arcgis"):
+
+  * arcgis (DEFAULT, WORKS 2026-07-12): page FEMA's public NFHL ArcGIS REST
+    service layer 28 (Flood Hazard Zones = S_FLD_HAZ_AR) in 2000-feature GeoJSON
+    chunks, filtered per state by DFIRM_ID prefix. No GDAL / no multi-GB temp
+    extract — geometry streams straight into Postgres via ST_GeomFromGeoJSON.
+    This replaces the dead bulk endpoints (see `_download_nfhl`).
+
+  * gdb (legacy): ogr2ogr-import S_FLD_HAZ_AR from a per-state NFHL GDB zip.
+    Kept for reference; the FEMA bulk/MSC download endpoints it relied on are
+    currently broken (see `_download_nfhl`).
 
 Requirements:
-  - ogr2ogr installed (apt install gdal-bin)
   - DATABASE_URL env var
+  - arcgis source: psycopg2 only (stdlib urllib for HTTP)
+  - gdb source: ogr2ogr installed (apt install gdal-bin)
 
 Usage:
-  DATABASE_URL=... python load_nfhl.py
-  DATABASE_URL=... python load_nfhl.py --state-fips 06   # single state
+  DATABASE_URL=... python load_nfhl.py                     # top-N states, arcgis
+  DATABASE_URL=... python load_nfhl.py --state-fips 06     # single state
+  DATABASE_URL=... NFHL_SOURCE=gdb python load_nfhl.py     # legacy GDB path
 """
 from __future__ import annotations
 
@@ -20,6 +31,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -27,7 +40,23 @@ from pathlib import Path
 # Safety floor (GB free required before loading). Override with MIN_FREE_GB
 # when the VPS is tight but you've confirmed headroom for the temp extract
 # (e.g. after the parcels load finishes and free space is < 30 GB).
+# The arcgis source needs almost no disk; the guard mainly protects the gdb path.
 MIN_FREE_GB = int(os.environ.get("MIN_FREE_GB", "30"))
+
+# FEMA public NFHL ArcGIS REST service. Layer 28 = Flood Hazard Zones
+# (the S_FLD_HAZ_AR feature class). Supports pagination (maxRecordCount=2000).
+NFHL_REST_URL = os.environ.get(
+    "NFHL_REST_URL",
+    "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer",
+)
+NFHL_FLOOD_LAYER = int(os.environ.get("NFHL_FLOOD_LAYER", "28"))
+# The service's maxRecordCount is 2000, but flood-zone geometries are large —
+# a 2000-feature GeoJSON page (~40 MB) makes the server 500. 1000 works (~21 MB);
+# we start here and shrink adaptively on failure.
+NFHL_PAGE_SIZE = int(os.environ.get("NFHL_PAGE_SIZE", "1000"))
+NFHL_MIN_PAGE_SIZE = int(os.environ.get("NFHL_MIN_PAGE_SIZE", "100"))
+# High-risk (SFHA) zone codes we retain when SFHA_TF isn't explicitly 'T'.
+SFHA_ZONES = {"A", "AE", "AH", "AO", "AR", "A99", "V", "VE"}
 
 
 def _check_disk(path: str = "/") -> None:
@@ -211,8 +240,117 @@ def _gdb_layers(gdb_path: str) -> list[str]:
         return []
 
 
+def _arcgis_get(params: dict, retries: int = 4) -> dict:
+    """GET the NFHL query endpoint with retry/backoff; return parsed JSON."""
+    url = f"{NFHL_REST_URL}/{NFHL_FLOOD_LAYER}/query?" + urllib.parse.urlencode(params)
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "oper-nfhl/1.0"})
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            wait = 2 ** attempt
+            print(f"    arcgis request failed ({exc}); retry in {wait}s", file=sys.stderr)
+            time.sleep(wait)
+    raise RuntimeError(f"arcgis request failed after {retries} tries: {last_exc}")
+
+
+def _arcgis_count(state_fips: str) -> int:
+    data = _arcgis_get({
+        "where": f"DFIRM_ID LIKE '{state_fips}%'",
+        "returnCountOnly": "true",
+        "f": "json",
+    })
+    return int(data.get("count", 0))
+
+
+def _load_state_arcgis(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
+    """Page the NFHL ArcGIS REST service and load SFHA polygons for one state."""
+    import psycopg2
+    from psycopg2.extras import execute_values
+
+    total = _arcgis_count(state_fips)
+    print(f"  {state_abbr}: {total} flood-zone features to page", file=sys.stderr)
+    if total == 0:
+        print(json.dumps({"done": True, "state": state_fips, "abbr": state_abbr, "rows": 0}))
+        return
+
+    insert_sql = "INSERT INTO flood_zones (state_fips, fld_zone, sfha, geom) VALUES %s"
+    template = (
+        "(%s, %s, %s, "
+        "ST_Multi(ST_CollectionExtract(ST_MakeValid("
+        "ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), 3)))"
+    )
+
+    conn = psycopg2.connect(pg_dsn)
+    inserted = 0
+    skipped = 0
+    page_size = NFHL_PAGE_SIZE
+    try:
+        offset = 0
+        while offset < total:
+            try:
+                data = _arcgis_get({
+                    "where": f"DFIRM_ID LIKE '{state_fips}%'",
+                    "outFields": "DFIRM_ID,FLD_ZONE,SFHA_TF",
+                    "returnGeometry": "true",
+                    "outSR": "4326",
+                    "orderByFields": "OBJECTID",
+                    "resultOffset": str(offset),
+                    "resultRecordCount": str(page_size),
+                    "f": "geojson",
+                }, retries=3)
+            except RuntimeError:
+                # Page too large for the server (500) — shrink and retry same offset.
+                if page_size > NFHL_MIN_PAGE_SIZE:
+                    page_size = max(NFHL_MIN_PAGE_SIZE, page_size // 2)
+                    print(f"    shrinking page_size to {page_size} and retrying offset {offset}", file=sys.stderr)
+                    continue
+                raise
+            feats = data.get("features", [])
+            if not feats:
+                break
+
+            rows = []
+            for feat in feats:
+                geom = feat.get("geometry")
+                props = feat.get("properties") or {}
+                if not geom or not geom.get("coordinates"):
+                    skipped += 1
+                    continue
+                fld_zone = props.get("FLD_ZONE")
+                sfha_tf = (props.get("SFHA_TF") or "").upper()
+                is_sfha = sfha_tf == "T"
+                # Retain SFHA polygons (the flood-risk footprint we care about).
+                if not is_sfha and (fld_zone or "").upper() not in SFHA_ZONES:
+                    skipped += 1
+                    continue
+                rows.append((state_fips, fld_zone, is_sfha, json.dumps(geom)))
+
+            if rows:
+                with conn.cursor() as cur:
+                    execute_values(cur, insert_sql, rows, template=template, page_size=200)
+                conn.commit()
+                inserted += len(rows)
+
+            offset += len(feats)
+            print(json.dumps({
+                "progress": True, "state": state_fips, "abbr": state_abbr,
+                "offset": offset, "total": total, "inserted": inserted, "skipped": skipped,
+            }), flush=True)
+    finally:
+        conn.close()
+
+    print(json.dumps({
+        "done": True, "state": state_fips, "abbr": state_abbr,
+        "rows": inserted, "skipped": skipped,
+    }))
+
+
 def _load_state(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
-    """Download and load flood zones for a single state."""
+    """Download and load flood zones for a single state (legacy GDB path)."""
     tmp_dir = tempfile.mkdtemp(prefix=f"nfhl_{state_fips}_")
     try:
         _check_disk()
@@ -369,7 +507,9 @@ def _drop_staging(pg_dsn: str, table: str) -> None:
 
 
 def main() -> None:
-    _check_ogr2ogr()
+    source = os.environ.get("NFHL_SOURCE", "arcgis").lower()
+    if source == "gdb":
+        _check_ogr2ogr()
 
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
@@ -390,14 +530,21 @@ def main() -> None:
         if single_state:
             states = [(single_state, single_state.upper())]
         else:
-            states = get_top_states(conn)
+            limit = 3
+            if "--limit" in sys.argv:
+                li = sys.argv.index("--limit")
+                if li + 1 < len(sys.argv):
+                    limit = int(sys.argv[li + 1])
+            states = get_top_states(conn, limit=limit)
             print(f"Top {len(states)} states: {[s[1] for s in states]}", file=sys.stderr)
     finally:
         conn.close()
 
+    load_fn = _load_state_arcgis if source == "arcgis" else _load_state
+    print(f"NFHL source: {source}", file=sys.stderr)
     for state_fips, state_abbr in states:
         print(f"\nProcessing {state_abbr} (FIPS {state_fips})...", file=sys.stderr)
-        _load_state(state_fips, state_abbr, dsn)
+        load_fn(state_fips, state_abbr, dsn)
 
     print(json.dumps({"done": True, "states_loaded": len(states)}))
 
