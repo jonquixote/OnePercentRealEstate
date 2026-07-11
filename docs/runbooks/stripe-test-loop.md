@@ -11,29 +11,34 @@ confirming webhook signature verification is ON and the paid gate
 - `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_ANNUAL` = valid `price_…` IDs in the test account
 - `STRIPE_WEBHOOK_SECRET=whsec_…` = the **real** test-mode signing secret
 
-> **KNOWN BREAKAGE (2026-07-11):** `STRIPE_WEBHOOK_SECRET` was a placeholder
-> (`…PLACEHOLDER_GET_FROM_STRIPE_DASHBOARD`), so webhook signature checks failed
-> with `400 Webhook Error`. Replace it with the real signing secret (below)
-> before the loop can complete.
+> **RESOLVED (2026-07-11):** `STRIPE_WEBHOOK_SECRET` was a placeholder
+> (`…PLACEHOLDER_GET_FROM_STRIPE_DASHBOARD`) so signature checks failed with
+> `400 Webhook Error`. For the test loop we ran the Stripe CLI locally and
+> forwarded events to the **public** server URL (the app runs on the server,
+> not localhost): `stripe listen --forward-to https://one.octavo.press/api/webhooks`.
+> The printed `whsec_…` was written into `/etc/oper.env` (and `/opt/onepercent/.env`)
+> and `oper-app` restarted. **For production** replace it with the real
+> dashboard signing secret (below).
 
 ## Get the signing secret
 
 Stripe Dashboard → Developers → Webhooks → (the `one.octavo.press/api/webhooks`
 endpoint, **test mode**) → "Reveal signing secret" → copy the `whsec_…` value.
 
-For pure local dev you can instead use the Stripe CLI (no dashboard secret needed):
+For the test loop on this deploy (app runs on the remote server), use the
+Stripe CLI locally and forward to the public URL — no dashboard secret needed:
 
 ```bash
-stripe listen --forward-to localhost:3001/api/webhooks   # prints a whsec_… secret
-# in another shell:
-export STRIPE_WEBHOOK_SECRET=<printed whsec_…>
+# local machine (Stripe CLI logged in, full sk_test_ key exported):
+export STRIPE_API_KEY=sk_test_…      # CLI ignores the local rk_ restricted key
+stripe listen --forward-to https://one.octavo.press/api/webhooks   # prints whsec_…
+# copy the printed whsec_… into /etc/oper.env + /opt/onepercent/.env, then:
+ssh root@209.94.61.108 'systemctl restart oper-app'
 ```
 
-Then restart the app so it picks up the new secret:
-
-```bash
-cd /opt/onepercent && bash ops/systemd/deploy-systemd.sh app
-```
+> The CLI's saved key is a **restricted** key (`rk_test_…`) which `stripe listen`
+> rejects — export the full `sk_test_…` (same Stripe account as the server) when
+> running `listen`/`trigger`.
 
 ## Walk the loop
 
@@ -67,6 +72,28 @@ cd /opt/onepercent && bash ops/systemd/deploy-systemd.sh app
    curl -sS -o /dev/null -w '%{http_code}\n' -b cj.txt \
      'http://localhost:3001/api/properties?ids=1,2,3&compare=1'   # 402
    ```
+
+## Verified run (2026-07-11)
+
+Executed headlessly against the live server using `stripe listen` →
+`https://one.octavo.press/api/webhooks` + `stripe trigger` / `stripe` CLI calls:
+
+1. `stripe trigger customer.created` → server logged `<-- [200]` (signature OK;
+   a bad secret would have returned `400 Webhook Error`).
+2. Created a Stripe test customer (attached `tok_visa`), linked a DB `profiles`
+   row via `stripe_customer_id`, then `stripe subscriptions create …` →
+   `customer.subscription.created` (status `active`) forwarded → **tier became
+   `pro`**.
+3. `stripe subscriptions cancel …` → `customer.subscription.deleted` forwarded →
+   **tier reverted to `free`**.
+4. Events recorded once each in `stripe_webhook_events` (idempotent).
+
+> **BUG FIX (commit `860506b`):** the webhook handler only switched on
+> `customer.subscription.updated` / `.deleted` and **ignored
+> `.created`**. A brand-new active subscription therefore never granted `pro`
+> (Stripe test mode fires `.created` without a follow-up `.updated`). Added
+> `customer.subscription.created` to the same case so initial subscribe grants
+> `pro`. Re-deployed and re-tested — grant now fires on `.created`.
 
 ## Signature-verification acceptance
 
