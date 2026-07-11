@@ -95,20 +95,27 @@ export function addListingsLayers(map: maplibregl.Map, opts: ListingsLayerOption
     paint: { 'circle-color': '#000', 'circle-opacity': 0, 'circle-radius': 22 },
   });
 
-  // Selected halo (behind points)
+  // Selected halo (behind points). feature-state is NOT allowed in layer
+  // filters (silently broken in the original implementation) — drive
+  // visibility through paint opacity instead.
   map.addLayer({
     id: 'mvt-selected-halo',
     type: 'circle',
     source: LISTINGS_MVT_SOURCE,
     'source-layer': MVT_SOURCE_LAYER,
     minzoom: 9,
-    filter: ['==', ['feature-state', 'selected'], true],
     paint: {
       'circle-color': 'transparent',
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 8, 14, 12, 16, 15],
       'circle-stroke-color': '#2a2520',
       'circle-stroke-width': 2,
-      'circle-opacity': 0.9,
+      'circle-opacity': 0,
+      'circle-stroke-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'selected'], false],
+        0.9,
+        0,
+      ],
     },
   });
 
@@ -128,11 +135,16 @@ export function addListingsLayers(map: maplibregl.Map, opts: ListingsLayerOption
         '#c9a35c',
         '#1f9d6e',
       ],
+      // Only ONE zoom interpolate is allowed per expression — the hover
+      // branch goes inside the interpolate outputs, not around it.
       'circle-radius': [
-        'case',
-        ['boolean', ['feature-state', 'hover'], false],
-        ['interpolate', ['linear'], ['zoom'], 9, 6, 14, 10],
-        ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 7],
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        9,
+        ['case', ['boolean', ['feature-state', 'hover'], false], 6, 4],
+        14,
+        ['case', ['boolean', ['feature-state', 'hover'], false], 10, 7],
       ],
       'circle-stroke-color': '#faf7f2',
       'circle-stroke-width': 1.5,

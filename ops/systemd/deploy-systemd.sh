@@ -58,6 +58,10 @@ bash "$(dirname "$0")/gen-alertmanager.sh"
 # Build steps
 build_node() {
   echo "--- Building Node.js (pnpm) ---"
+  # NEXT_PUBLIC_* vars are baked into the client bundle AT BUILD TIME —
+  # without sourcing .env here, Stripe's publishable key (and any other
+  # NEXT_PUBLIC config) ships as undefined.
+  set -a; . ./.env; set +a
   pnpm install --frozen-lockfile
   pnpm build
 
