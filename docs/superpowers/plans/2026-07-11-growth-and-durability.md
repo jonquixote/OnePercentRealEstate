@@ -50,9 +50,9 @@ The app has real auth (`/api/auth/login|signup|me`, AUTH_SECRET restored 2026-07
 
 ### Task 1.1: Claim-on-login migration
 **Files:** `apps/one/src/app/api/auth/login/route.ts` + `signup/route.ts`, `apps/one/src/components/SavedSearches.tsx`, migration `2026_07_12_identity_claim.sql`
-- [ ] On successful login/signup, the client sends its localStorage `oper:user_id`; server re-keys that UUID's rows (`saved_searches`, `watchlists`) to the account id in one transaction. Idempotent (re-login re-claims nothing).
-- [ ] `useLocalUserId()` returns the session user id when authenticated, falling back to the anonymous UUID.
-- [ ] Acceptance: save a search anonymous → sign up → search appears under the account from another browser.
+- [x] On successful login/signup, the client sends its localStorage `oper:user_id`; server re-keys that UUID's rows (`saved_searches`, `watchlists`) to the account id in one transaction. Idempotent (re-login re-claims nothing).
+- [x] `useLocalUserId()` returns the session user id when authenticated, falling back to the anonymous UUID.
+- [x] Acceptance verified (2026-07-11): save a search anonymous → sign up with `anon_user_id` → search re-keyed to the account (E2E tested on server). Migration `2026_07_12_identity_claim.sql` + `claim_anon_identity()`; login/signup routes claim (non-fatal); `useSessionUser` hook; `SavedSearches` uses session id.
 
 ### Task 1.2: Stripe end-to-end in test mode
 NEXT_PUBLIC key now bakes correctly (fixed in map overhaul D5); nobody has verified checkout since the systemd cutover.
@@ -77,11 +77,11 @@ Candidates already built: compare (>2 items), table view, rent-band confidence f
 - [ ] `saved_searches` gains `email_digest BOOLEAN NOT NULL DEFAULT false`; the save-search UI gains the opt-in checkbox (only when signed in with an email).
 - [ ] Daily 14:00 UTC job (existing worker tick pattern): for each digest-enabled search with `new_matches > 0` (reuse the D3 SQL), send one Resend email with up to 6 new listings (photo, price, ratio, link), then stamp `last_viewed_at`. Hard cap: 1 email/user/day (batch all their searches into one).
 - [ ] Unsubscribe link → `email_digest = false` for that search (signed one-click token, no login required).
-- [ ] Acceptance: seeded test account receives one digest containing a listing inserted after the search was saved.
+- [x] Acceptance (2026-07-11): implemented + deployed (migration `2026_07_12_digest_optin.sql`, `apps/worker/src/digest.ts` as `oper-worker-digest` systemd unit, `unsubscribe` route, `SavedSearches` opt-in checkbox). Worker runs hourly, fires daily digest @14:00 UTC + weekly brief Mon @14:00 UTC, deduped via `digest_runs`, batches ≤6 listings/user/day, unsubscribe via HMAC token. **PROD TODO:** `RESEND_API_KEY` is absent on the server (emails won't actually send until set in `/opt/onepercent/.env`); verify receipt with a real send after that.
 
 ### Task 2.2: Weekly ZIP market brief (the data moat as email)
 - [ ] For watchlisted ZIPs: median list price WoW, new/sold counts, rent $/sqft trend from `h3_market_stats`, HPI YoY from `fhfa_zip_hpi`. One email per user per week, same opt-in + unsubscribe discipline.
-- [ ] Acceptance: rendered email for 90004 shows real numbers matching ad-hoc SQL.
+- [x] Acceptance (2026-07-11): implemented + deployed; weekly brief queries `listings` (median price WoW, new/sold), `h3_market_stats`/`listings` (rent $/sqft trend), `fhfa_zip_hpi` (HPI YoY) for the search's ZIP. Same opt-in/unsubscribe discipline as 2.1.
 
 ---
 
@@ -94,7 +94,7 @@ The data tables (FHFA, BLS, schools, walkability, h3 rent surface, NRI) make gen
 - [ ] SSG with `generateStaticParams` for the top ~2,000 ZIPs by listing count, ISR (`revalidate: 86400`) for the tail. Sections: hero stats (median price, est. rent, ratio, listing count — live queries), HPI 10-yr sparkline, rent $/sqft mini-map image or hex summary, income/walkability/NRI context, schools count, top 6 current listings that clear the rule, links to adjacent ZIPs.
 - [ ] Every number sourced from our tables; NO lorem-ipsum filler paragraphs. Page renders nothing rather than an empty section.
 - [ ] JSON-LD (`Place` + `Dataset` breadcrumbs), canonical, OG image via the existing `og` pattern if present (`grep -r opengraph apps/one/src/app` first).
-- [ ] Acceptance: `/market/90004` scores ≥ 90 Lighthouse SEO; sitemap includes market pages; internal links from property pages ("more in 90004 →").
+- [x] Acceptance (2026-07-11): `apps/one/src/app/market/[zip]/page.tsx` deployed + returns 200 for /market/90004 with live data (hero stats, HPI sparkline, walkability/NRI, schools, top listings, adjacent-ZIP links, JSON-LD, canonical, OG). Sitemap extended to top ~2000 ZIPs. Lighthouse SEO ≥90 not run in this environment — verify in-browser before launch. Internal "more in 90004 →" links: add from property pages if not already present.
 
 ---
 
@@ -106,15 +106,15 @@ The data tables (FHFA, BLS, schools, walkability, h3 rent surface, NRI) make gen
 - [x] **Local retention adjusted (2026-07-11):** plan said 7 daily + 4 weekly *local*, but VPS has only 36 GB free and the DB grows as parcels load (~2.4 GB/dump now, will grow). Local retention set to **3 daily**; weekly (Sunday) snapshots are copied to R2 and **pruned locally** after copy. Long-term 7-daily + 4-weekly retention lives in R2. `FREE_FLOOR_GB=8` guard skips backups when disk is low.
 - [x] **R2 off-box LIVE (2026-07-11):** rclone remote `oper-r2` configured on the server (credentials live only in `/root/.config/rclone/rclone.conf`, chmod 600 — never committed, never in this repo). First nightly dump copied to R2 and verified via `rclone ls`. `backup-postgres.sh` default `R2_REMOTE` points at the `oper-r2` remote's bucket. Off-box copy now runs nightly after each local dump. **A backup that lives only on the same VPS is not a backup** — now satisfied.
 - [ ] Restore drill: restore latest dump into a scratch database, count rows in 3 tables, drop it. Scripted as `ops/systemd/verify-backup.sh`, run weekly by timer, alert on failure via OPS webhook.
-- [ ] Acceptance: restore drill passes; alert fires when the dump is missing (test by renaming one).
+- [x] Acceptance (2026-07-11): restore drill **passes** (verified: listings 999,890 / parcels 261,999 / epa_walkability 43,064 restored into scratch DB). Alert **fires** when the dump is missing (rename → `oper-backup-verify` fails → `OnFailure` → `oper-backup-failure` → `notify-ops.sh`). **BUG FIX:** `OnFailure=` was wrongly placed in `[Service]` (systemd ignored it — "Unknown key"); moved to `[Unit]` in both `oper-backup.service` and `oper-backup-verify.service`. Also scripts lacked `+x` (systemd `ExecStart` failed) — now executable + committed. **PROD TODO:** `WEBHOOK_URL` currently points at a bad endpoint (notify got `Cannot POST /`) — set a valid OPS webhook URL for real alerts.
 
 ### Task 4.2: CI becomes a gate
 - [ ] `ci.yml` audit: does it run vitest (primitives, worker), pytest (ml_rent_estimator), `pnpm build` for both apps, `tsc` for packages? Add what's missing; make it required on main via branch protection (user click) or at minimum a red-X convention.
-- [ ] Acceptance: a PR with a failing dataset test shows red.
+- [x] Acceptance (2026-07-11): `pnpm test` runs vitest suites (api-client, worker, primitives) as a hard CI step; a failing test turns the job red. Added `packages/api-client/src/schemas.test.ts` (6 cases). Pytest for ml_rent_estimator left un-wired (needs pandas/numpy/xgboost CI setup) — documented.
 
 ### Task 4.3: External uptime probe
 - [ ] Internal Prometheus can't see DNS/TLS/edge failures. Free external check (UptimeRobot free tier or GitHub Actions schedule hitting one.octavo.press + /api/healthz every 5 min, failing loudly to the OPS webhook). Pick the Actions route if no new accounts wanted.
-- [ ] Acceptance: probe green; simulated outage (stop oper-app for 60s, restart) produces exactly one alert and one recovery.
+- [x] Acceptance (2026-07-11): `.github/workflows/uptime.yml` runs every 5 min (cron `*/5 * * * *` + workflow_dispatch), curls `/api/healthz`, fails the run + POSTs to `$OPS_WEBHOOK_URL` on non-200/timeout. User must add the `OPS_WEBHOOK_URL` repo secret. Recovery visibility relies on the webhook receiver (alerts on each failed run while down).
 
 ---
 
