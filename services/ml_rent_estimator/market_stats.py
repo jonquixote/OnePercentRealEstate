@@ -161,9 +161,51 @@ def refresh_address_rent_history(conn) -> int:
     return affected
 
 
-def refresh(conn) -> dict:
-    """Run both refreshes. Each is independent — one failing does not abort
-    the other (address_rent_history only exists after the P2 migration)."""
+def refresh_h3_geoms(conn, backfill: bool = False) -> int:
+    """Write hex boundary polygons for hexes in h3_market_stats that are
+    missing from h3_geoms (map overlay B1). Nightly this is a few hundred
+    new hexes; --backfill-geoms does the full ~100K set once."""
+    import h3
+
+    with conn.cursor() as cur:
+        limit_sql = "" if backfill else "LIMIT 5000"
+        cur.execute(
+            f"""SELECT DISTINCT m.h3_8 FROM h3_market_stats m
+                LEFT JOIN h3_geoms g ON g.h3_8 = m.h3_8
+                WHERE g.h3_8 IS NULL {limit_sql}"""
+        )
+        missing = [r[0] for r in cur.fetchall()]
+        if not missing:
+            return 0
+        rows = []
+        for hex_id in missing:
+            try:
+                # cell_to_boundary returns (lat, lng) pairs; WKT wants lng lat.
+                ring = h3.cell_to_boundary(hex_id)
+                pts = ", ".join(f"{lng} {lat}" for lat, lng in ring)
+                first = f"{ring[0][1]} {ring[0][0]}"
+                rows.append((hex_id, f"POLYGON(({pts}, {first}))"))
+            except (ValueError, TypeError):
+                continue
+        from psycopg2.extras import execute_values
+
+        execute_values(
+            cur,
+            """INSERT INTO h3_geoms (h3_8, geom)
+               VALUES %s ON CONFLICT (h3_8) DO NOTHING""",
+            rows,
+            template="(%s, ST_GeomFromText(%s, 4326))",
+            page_size=2000,
+        )
+    conn.commit()
+    log.info("h3_geoms: %d hex polygons written", len(missing))
+    return len(missing)
+
+
+def refresh(conn, backfill_geoms: bool = False) -> dict:
+    """Run all refreshes. Each is independent — one failing does not abort
+    the others (address_rent_history only exists after the P2 migration,
+    h3_geoms after the map-overlay migration)."""
     out: dict[str, Any] = {}
     out["h3_rows"] = refresh_h3_market_stats(conn)
     try:
@@ -172,19 +214,30 @@ def refresh(conn) -> dict:
         conn.rollback()
         out["addr_error"] = str(exc)[:200]
         log.warning("address_rent_history refresh skipped: %s", exc)
+    try:
+        out["geom_rows"] = refresh_h3_geoms(conn, backfill=backfill_geoms)
+    except Exception as exc:  # table may not exist yet (pre-map-overlay)
+        conn.rollback()
+        out["geom_error"] = str(exc)[:200]
+        log.warning("h3_geoms refresh skipped: %s", exc)
     return out
 
 
 def main() -> None:
     import json
     import os
+    import sys
 
     import psycopg2
 
     logging.basicConfig(level="INFO", format='{"level":"%(levelname)s","msg":"%(message)s","service":"ml.market_stats"}')
+    backfill = "--backfill-geoms" in sys.argv
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     try:
-        result = refresh(conn)
+        if backfill:
+            result: dict[str, Any] = {"geom_rows": refresh_h3_geoms(conn, backfill=True)}
+        else:
+            result = refresh(conn)
     finally:
         conn.close()
     print(json.dumps({"done": True, **result}), flush=True)

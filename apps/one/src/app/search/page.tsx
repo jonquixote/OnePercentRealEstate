@@ -3,7 +3,9 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useQueryStates } from 'nuqs';
 import { Loader2, SlidersHorizontal, Map, List } from 'lucide-react';
+import type maplibregl from 'maplibre-gl';
 import { PropertyMap } from '@/components/PropertyMap';
+import { DrawSearch } from '@oper/map/controls/DrawSearch';
 import { SearchCard } from '@/components/search/SearchCard';
 import { WatchSearchButton } from '@/components/WatchSearchButton';
 import {
@@ -57,6 +59,48 @@ export default function SearchPage() {
   const [qs, setQs] = useQueryStates(propertyFilterParsers, { history: 'replace', shallow: true });
   const filters = useMemo(() => toFilterState(qs), [qs]);
 
+  // Split-view sync (A2): hover both directions + viewport-bound list.
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null); // list -> map
+  const [mapHoveredId, setMapHoveredId] = useState<string | null>(null);  // map -> list
+  const [searchAsMove, setSearchAsMove] = useState(true);
+  const [mapBounds, setMapBounds] = useState<{ north: number; south: number; east: number; west: number } | null>(null);
+  const [pendingArea, setPendingArea] = useState(false); // searchAsMove off + map moved
+  const boundsRef = useRef(mapBounds);
+  boundsRef.current = mapBounds;
+  // A3: draw-to-search. Serialized 'lng,lat;...' — supersedes bounds server-side.
+  const [polygon, setPolygon] = useState<string | null>(null);
+  const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('oper:map:searchAsMove');
+      if (stored != null) setSearchAsMove(stored === '1');
+    } catch { /* SSR/private mode */ }
+  }, []);
+
+  // Viewport restore: /search?mv=lng,lat,zoom (written below on move).
+  const initialView = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const raw = new URLSearchParams(window.location.search).get('mv');
+    if (!raw) return null;
+    const [lng, lat, z] = raw.split(',').map(Number);
+    if (![lng, lat, z].every(Number.isFinite)) return null;
+    return { center: [lng, lat] as [number, number], zoom: z };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const toggleSearchAsMove = (on: boolean) => {
+    setSearchAsMove(on);
+    try { localStorage.setItem('oper:map:searchAsMove', on ? '1' : '0'); } catch { /* ignore */ }
+  };
+
+  // Map -> list: highlight + keep the row visible.
+  useEffect(() => {
+    if (!mapHoveredId) return;
+    const el = document.querySelector(`[data-listing-id="${CSS.escape(mapHoveredId)}"]`);
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [mapHoveredId]);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -64,7 +108,7 @@ export default function SearchPage() {
     debounceRef.current = setTimeout(() => loadProperties(1), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, qs.sold, qs.pmin, qs.pmax, qs.beds, qs.baths, qs.op, qs.cap, qs.coc, qs.type, qs.sale, qs.strat, qs.hoamax, qs.dom, qs.cut, qs.q]);
+  }, [sortBy, qs.sold, qs.pmin, qs.pmax, qs.beds, qs.baths, qs.op, qs.cap, qs.coc, qs.type, qs.sale, qs.strat, qs.hoamax, qs.dom, qs.cut, qs.q, mapBounds, polygon]);
 
   async function loadProperties(pageNum: number) {
     try {
@@ -85,6 +129,8 @@ export default function SearchPage() {
         domMin: filters.domMin > 0 ? filters.domMin : undefined,
         hasPriceCut: filters.hasPriceCut || undefined,
         q: qs.q || undefined,
+        bounds: showMap && mapBounds ? mapBounds : undefined,
+        polygon: showMap && polygon ? polygon : undefined,
       });
       const items = data?.items ?? [];
       setHasMore(items.length >= 100);
@@ -230,7 +276,12 @@ export default function SearchPage() {
               <>
                 <div className={`grid gap-6 ${showMap ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
                   {properties.map((p) => (
-                    <SearchCard key={p.id} property={p} />
+                    <SearchCard
+                      key={p.id}
+                      property={p}
+                      onHover={showMap ? setHoveredCardId : undefined}
+                      highlighted={mapHoveredId === p.id}
+                    />
                   ))}
                 </div>
 
@@ -265,7 +316,77 @@ export default function SearchPage() {
                   status: filters.showSold ? 'sold' : 'for_sale',
                   saleType: filters.saleType,
                 }}
+                hoveredId={hoveredCardId}
+                onFeatureHover={setMapHoveredId}
+                onMapInstance={(m, r) => { setMapInstance(m); setMapReady(r); }}
+                showLayerControls
+                initialCenter={initialView?.center}
+                initialZoom={initialView?.zoom}
+                onViewportChange={(b) => {
+                  // Shareable viewport: write ?mv= without a Next navigation.
+                  try {
+                    const u = new URL(window.location.href);
+                    u.searchParams.set('mv', `${((b.east + b.west) / 2).toFixed(4)},${((b.north + b.south) / 2).toFixed(4)},${b.zoom.toFixed(1)}`);
+                    window.history.replaceState(window.history.state, '', u);
+                  } catch { /* ignore */ }
+                  // Only bound the list once the user is looking at an area,
+                  // not at the whole-country initial view.
+                  if (b.zoom < 8) {
+                    if (boundsRef.current) setMapBounds(null);
+                    return;
+                  }
+                  const next = { north: b.north, south: b.south, east: b.east, west: b.west };
+                  if (searchAsMove) setMapBounds(next);
+                  else {
+                    boundsRef.current = next; // stash for the chip
+                    setPendingArea(true);
+                  }
+                }}
               />
+              {/* search-as-move control */}
+              <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+                <label
+                  className="flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium backdrop-blur"
+                  style={{ background: 'rgba(250,247,242,.92)', borderColor: 'var(--line)', color: 'var(--text)' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={searchAsMove}
+                    onChange={(e) => toggleSearchAsMove(e.target.checked)}
+                    className="h-3 w-3 accent-[var(--pass)]"
+                  />
+                  Search as I move
+                </label>
+                {!searchAsMove && pendingArea && (
+                  <button
+                    onClick={() => {
+                      setPendingArea(false);
+                      setMapBounds(boundsRef.current ? { ...boundsRef.current } : null);
+                    }}
+                    className="rounded-full border px-3 py-1.5 text-[12px] font-semibold backdrop-blur transition-colors hover:opacity-90"
+                    style={{ background: 'var(--pass)', borderColor: 'var(--pass)', color: 'var(--ink)' }}
+                  >
+                    Search this area
+                  </button>
+                )}
+                {mapBounds && !polygon && (
+                  <button
+                    onClick={() => { setMapBounds(null); setPendingArea(false); }}
+                    className="rounded-full border px-3 py-1.5 text-[12px] font-medium backdrop-blur transition-colors hover:opacity-80"
+                    style={{ background: 'rgba(250,247,242,.92)', borderColor: 'var(--line)', color: 'var(--haze)' }}
+                    title="Stop limiting results to the map area"
+                  >
+                    Clear area ×
+                  </button>
+                )}
+                <DrawSearch
+                  map={mapInstance}
+                  ready={mapReady}
+                  onPolygon={(coords) =>
+                    setPolygon(coords ? coords.map(([x, y]) => `${x.toFixed(5)},${y.toFixed(5)}`).join(';') : null)
+                  }
+                />
+              </div>
             </div>
           )}
         </div>

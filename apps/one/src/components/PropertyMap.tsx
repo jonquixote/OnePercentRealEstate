@@ -8,12 +8,21 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useMemo } from 'react';
 import {
   useOperMap,
   addListingsLayers,
   updateViewportData,
   setMvtTiles,
   setHoveredListing,
+  useLayerRegistry,
+  rentHeatLayer,
+  tractLayer,
+  floodLayer,
+  transitLayer,
+  schoolsLayer,
+  LayerSwitcher,
+  BasemapToggle,
   type ViewportResponse,
 } from '@oper/map';
 
@@ -36,11 +45,20 @@ interface PropertyMapProps {
   onViewportChange?: (b: { north: number; south: number; east: number; west: number; zoom: number }) => void;
   /** A3+: hands the live map instance to sibling controls (DrawSearch, LayerSwitcher). */
   onMapInstance?: (map: maplibregl.Map | null, ready: boolean) => void;
+  /** A4/A5/B: render the layer switcher + basemap toggle inside the map. */
+  showLayerControls?: boolean;
+  /** Overlays on by default (property MiniMap turns rent-heat on). */
+  defaultLayers?: string[];
+  /** Initial camera (viewport restore from URL / property page focus). */
+  initialCenter?: [number, number];
+  initialZoom?: number;
+  /** Static context map: no drag/zoom interactions (property MiniMap). */
+  interactive?: boolean;
 }
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
-export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover, onViewportChange, onMapInstance }: PropertyMapProps) {
+export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover, onViewportChange, onMapInstance, showLayerControls, defaultLayers, initialCenter, initialZoom, interactive }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const filtersRef = useRef(filters);
@@ -177,8 +195,13 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover,
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
-  const { mapRef, ready, onStyleLoad } = useOperMap({
+  const esriKey = process.env.NEXT_PUBLIC_ESRI_API_KEY;
+  const { mapRef, ready, onStyleLoad, setBasemap, basemap } = useOperMap({
     container: containerRef,
+    esriKey,
+    center: initialCenter,
+    zoom: initialZoom,
+    interactive,
     onMoveEnd: (map) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
@@ -235,9 +258,32 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
+  // A5/B: overlay registry. Defs are stable for the component lifetime.
+  const overlayDefs = useMemo(
+    () => [rentHeatLayer(), tractLayer(), floodLayer(), transitLayer(), schoolsLayer()],
+    [],
+  );
+  const { toggles } = useLayerRegistry(showLayerControls || defaultLayers ? mapRef.current : null, ready, overlayDefs);
+
+  // Default-on layers (e.g. rent-heat on the property MiniMap) — applied once.
+  const defaultsAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!defaultLayers?.length || defaultsAppliedRef.current || !ready) return;
+    defaultsAppliedRef.current = true;
+    for (const t of toggles) {
+      if (defaultLayers.includes(t.def.id) && !t.on) t.set(true);
+    }
+  }, [defaultLayers, toggles, ready]);
+
   return (
     <div className="relative h-full w-full" aria-label="Property map" role="application">
       <div ref={containerRef} className="h-full w-full" style={{ minHeight: '400px' }} />
+      {showLayerControls && (
+        <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">
+          <BasemapToggle basemap={basemap} setBasemap={setBasemap} hasSatellite={!!esriKey} />
+          <LayerSwitcher toggles={toggles} />
+        </div>
+      )}
       <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-lg border border-line bg-ink-panel/90 p-2 shadow-sm backdrop-blur">
         <p className="mb-1 text-[10px] font-medium text-haze">Map</p>
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground">

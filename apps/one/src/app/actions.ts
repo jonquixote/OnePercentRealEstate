@@ -9,6 +9,24 @@ const HUD_CACHE_TTL = 86400;
 const CACHE_VERSION_KEY = 'props:version';
 
 // Parameterized whitelists — never interpolate these into SQL as identifiers.
+// Validate a 'lng,lat;lng,lat;...' polygon string into a closed WKT POLYGON.
+// Returns null on anything malformed. Max 100 vertices; every coordinate must
+// be a finite number in world range. The caller binds the WKT as a parameter.
+function parsePolygonParam(raw?: string): string | null {
+    if (!raw) return null;
+    const pts = raw.split(';').map((pair) => pair.split(',').map(Number));
+    if (pts.length < 3 || pts.length > 100) return null;
+    for (const p of pts) {
+        if (p.length !== 2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return null;
+        if (Math.abs(p[0]) > 180 || Math.abs(p[1]) > 90) return null;
+    }
+    const ring = [...pts];
+    const [fx, fy] = ring[0];
+    const [lx, ly] = ring[ring.length - 1];
+    if (fx !== lx || fy !== ly) ring.push([fx, fy]); // close the ring
+    return `POLYGON((${ring.map(([x, y]) => `${x} ${y}`).join(', ')}))`;
+}
+
 const SALE_TYPE_WHITELIST = new Set([
     'standard', 'foreclosure', 'pre_foreclosure', 'reo', 'auction', 'short_sale',
 ]);
@@ -56,6 +74,11 @@ export async function getProperties(
         hasPriceCut?: boolean;
         minRentConfidence?: number; // 0..1; 1 - band_spread/rent, clamped
         q?: string;                 // free-text / ZIP search
+        // Split-view map sync: restrict the list to the visible viewport.
+        bounds?: { north: number; south: number; east: number; west: number };
+        // Draw-to-search: 'lng,lat;lng,lat;...' (max 100 vertices). When
+        // present it supersedes bounds.
+        polygon?: string;
     },
     cursor: string | null = null
 ) {
@@ -179,6 +202,22 @@ export async function getProperties(
         if (filters?.q && /^\d{5}$/.test(filters.q)) {
             whereClauses.push(`zip_code = $${paramIndex++}`);
             params.push(filters.q);
+        }
+        // Draw-to-search polygon takes precedence over viewport bounds.
+        // Vertices are validated to finite floats and capped at 100; the WKT
+        // string itself is passed as a bind parameter (never interpolated).
+        const polygonWkt = parsePolygonParam(filters?.polygon);
+        if (polygonWkt) {
+            whereClauses.push(`geom IS NOT NULL AND ST_Contains(ST_GeomFromText($${paramIndex++}, 4326), geom)`);
+            params.push(polygonWkt);
+        } else if (filters?.bounds) {
+            const b = filters.bounds;
+            if ([b.north, b.south, b.east, b.west].every((v) => Number.isFinite(v))) {
+                whereClauses.push(`latitude BETWEEN $${paramIndex++} AND $${paramIndex++}`);
+                params.push(Math.min(b.south, b.north), Math.max(b.south, b.north));
+                whereClauses.push(`longitude BETWEEN $${paramIndex++} AND $${paramIndex++}`);
+                params.push(Math.min(b.west, b.east), Math.max(b.west, b.east));
+            }
         }
 
         if (useCursor) {

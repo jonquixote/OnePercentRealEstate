@@ -21,9 +21,13 @@ interface SearchCardProps {
     is_rentable?: boolean | null;
     target_ratio?: number | null;
   };
+  /** Split-view sync: list -> map hover. */
+  onHover?: (id: string | null) => void;
+  /** Split-view sync: map -> list highlight (accent ring + scroll target). */
+  highlighted?: boolean;
 }
 
-export function SearchCard({ property }: SearchCardProps) {
+export function SearchCard({ property, onHover, highlighted }: SearchCardProps) {
   const {
     id, address, listing_price, estimated_rent, rent_low, rent_high,
     primary_photo, property_type, price_cut_pct, days_on_market, is_rentable,
@@ -43,9 +47,18 @@ export function SearchCard({ property }: SearchCardProps) {
   const targetPct = target_ratio != null ? target_ratio * 100 : 1.0;
 
   return (
-    <Link href={`/property/${id}`} className="group cursor-pointer">
+    <Link
+      href={`/property/${id}`}
+      className="group cursor-pointer"
+      data-listing-id={id}
+      onMouseEnter={onHover ? () => onHover(id) : undefined}
+      onMouseLeave={onHover ? () => onHover(null) : undefined}
+    >
       {/* photo mat */}
-      <div className="mat relative aspect-[4/3] transition-colors group-hover:border-[var(--line-hi)]">
+      <div
+        className="mat relative aspect-[4/3] transition-colors group-hover:border-[var(--line-hi)]"
+        style={highlighted ? { borderColor: 'var(--pass-hi)', boxShadow: '0 0 0 1px var(--pass-hi)' } : undefined}
+      >
         {primary_photo ? (
           <div className="h-full w-full overflow-hidden rounded-[6px]">
             <Image
