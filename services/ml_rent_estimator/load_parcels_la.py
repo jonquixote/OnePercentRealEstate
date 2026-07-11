@@ -125,6 +125,19 @@ def main() -> None:
                 ))
 
             if rows:
+                # ArcGIS paging can return duplicate AIN/APN values within a
+                # single page; dedupe by apn (county_fips is constant) so the
+                # multi-row ON CONFLICT INSERT never hits the same key twice.
+                seen_apn: set[str] = set()
+                deduped: list[tuple] = []
+                for r in rows:
+                    apn = r[1]
+                    if apn in seen_apn:
+                        continue
+                    seen_apn.add(apn)
+                    deduped.append(r)
+                rows = deduped
+
                 with conn.cursor() as cur:
                     args_str = ",".join(
                         cur.mogrify(
