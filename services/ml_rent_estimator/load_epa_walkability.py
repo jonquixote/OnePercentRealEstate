@@ -49,8 +49,16 @@ def _to_float(v):
 def parse_rows(df: pd.DataFrame) -> list[tuple[str, float | None, float | None, float | None, float | None]]:
     rows: list[tuple[str, float | None, float | None, float | None, float | None]] = []
     for _, r in df.iterrows():
-        geoid = str(r["geoid_bg"]).strip().zfill(12)
-        if not geoid or geoid == "000000000000":
+        raw = r["geoid_bg"]
+        if pd.isna(raw) or str(raw).strip() == "":
+            continue
+        # EPA SLD v3 stores GEOID10 as scientific notation (e.g. "4.8113E+11");
+        # coerce via float so it round-trips to a 12-digit block-group FIPS.
+        try:
+            geoid = f"{int(float(raw)):012d}"
+        except (TypeError, ValueError):
+            continue
+        if geoid == "000000000000":
             continue
         rows.append((
             geoid,
