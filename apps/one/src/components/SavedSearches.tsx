@@ -176,9 +176,14 @@ export function SavedSearches() {
       void setQs(
         paramsToQuerystate(search.params) as Parameters<typeof setQs>[0],
       );
+      // D3: stamp last_viewed_at (clears the new-matches badge). Fire and
+      // forget — badge freshness must never block restoring the filters.
+      if (userId) {
+        void fetch(`/api/saved-searches?id=${search.id}&user_id=${encodeURIComponent(userId)}`, { method: 'PATCH' }).catch(() => {});
+      }
       setOpen(false);
     },
-    [setQs],
+    [setQs, userId],
   );
 
   const handleDelete = useCallback(
@@ -251,10 +256,19 @@ export function SavedSearches() {
                   >
                     <div className="min-w-0 flex-1">
                       <p
-                        className="truncate text-sm font-medium text-slate-900"
+                        className="flex items-center gap-2 truncate text-sm font-medium text-slate-900"
                         title={search.name}
                       >
                         {search.name}
+                        {(search.new_matches ?? 0) > 0 && (
+                          <span
+                            className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none"
+                            style={{ background: 'var(--pass)', color: 'var(--ink)' }}
+                            title={`${search.new_matches} new since you last looked`}
+                          >
+                            {search.new_matches! > 99 ? '99+' : search.new_matches}
+                          </span>
+                        )}
                       </p>
                       <p className="text-[11px] text-slate-500">
                         {active === 0

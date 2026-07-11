@@ -262,3 +262,25 @@
 .figure { font: 500 1em/1.05 var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .figure--pass { color: var(--pass-hi); }
 .figure--loss { color: var(--loss); }
+
+/* ── Motion vocabulary (frontend overhaul D4) ─────────────────────────
+   One entrance + one hover speed app-wide; everything motion-gated. */
+@keyframes oper-tray-in {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Keyboard travel: a visible ring on every interactive element, in the
+   accent color, offset so it reads against both panel and mat surfaces. */
+:focus-visible {
+  outline: 2px solid var(--pass);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

@@ -113,6 +113,11 @@ export const SavedSearchSchema = z.object({
   name: z.string(),
   params: z.record(z.string(), z.unknown()),
   created_at: z.string(),
+  // D3 freshness: listings created since last_viewed_at that match the
+  // saved params' cheap subset (a badge, not a result set). Optional so
+  // older API responses stay valid.
+  last_viewed_at: z.string().optional(),
+  new_matches: z.number().optional(),
 });
 export type SavedSearch = z.infer<typeof SavedSearchSchema>;
 

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { rentToPriceMonthly } from '@oper/primitives';
+import { useCompare } from '@/components/compare/useCompare';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -33,6 +34,9 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
     primary_photo, property_type, price_cut_pct, days_on_market, is_rentable,
     target_ratio,
   } = property;
+
+  const compare = useCompare();
+  const inCompare = compare.has(id);
 
   const price = listing_price ?? 0;
   const rent = estimated_rent ?? 0;
@@ -88,6 +92,25 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
             −{(cutPct * 100).toFixed(cutPct >= 0.1 ? 0 : 1)}%
           </span>
         )}
+        {/* compare toggle — visible on hover or when selected */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            compare.toggle(id);
+          }}
+          className={`absolute right-3 top-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold backdrop-blur transition-opacity ${inCompare ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          style={
+            inCompare
+              ? { background: 'var(--pass)', borderColor: 'var(--pass)', color: 'var(--ink)' }
+              : { background: 'rgba(250,247,242,.92)', borderColor: 'var(--line)', color: 'var(--text)' }
+          }
+          aria-pressed={inCompare}
+          aria-label={inCompare ? 'Remove from comparison' : 'Add to comparison'}
+        >
+          {inCompare ? '✓ Comparing' : '+ Compare'}
+        </button>
       </div>
 
       {/* one metric — tri-state */}

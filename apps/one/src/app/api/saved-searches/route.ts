@@ -71,8 +71,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // D3 freshness: new_matches counts listings created since the search was
+    // last opened, matching the cheap-and-indexable subset of the saved
+    // params (price band, beds, ZIP). It's a badge, not a result set — an
+    // approximation is fine and keeps this one indexed query per row.
     const result = await pool.query(
-      'SELECT id, user_id, name, params, created_at FROM saved_searches WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100',
+      `SELECT s.id, s.user_id, s.name, s.params, s.created_at, s.last_viewed_at,
+              (SELECT count(*)::int FROM listings l
+                WHERE l.created_at > s.last_viewed_at
+                  AND l.listing_type = 'for_sale'
+                  AND (s.params->>'pmin' IS NULL OR l.price >= (s.params->>'pmin')::numeric)
+                  AND (s.params->>'pmax' IS NULL OR l.price <= (s.params->>'pmax')::numeric)
+                  AND (s.params->>'beds' IS NULL OR l.bedrooms >= (s.params->>'beds')::numeric)
+                  AND (s.params->>'q' IS NULL OR s.params->>'q' !~ '^\\d{5}$' OR l.zip_code = s.params->>'q')
+              ) AS new_matches
+       FROM saved_searches s WHERE s.user_id = $1
+       ORDER BY s.created_at DESC LIMIT 100`,
       [userId]
     );
 
@@ -132,6 +146,46 @@ export async function POST(request: NextRequest) {
     console.error('POST /api/saved-searches error:', error);
     return NextResponse.json(
       { error: 'Failed to save search' },
+      { status: 500 }
+    );
+  }
+}
+
+// D3: stamp last_viewed_at when the user opens a saved search — clears the
+// new-matches badge.
+export async function PATCH(request: NextRequest) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
+
+  try {
+    const id = request.nextUrl.searchParams.get('id');
+    const userId = sessionUser?.id ?? readUserId(request);
+
+    if (!id || !/^\d+$/.test(id) || !userId) {
+      return NextResponse.json(
+        { error: 'id (numeric) and user_id required' },
+        { status: 400 }
+      );
+    }
+
+    const result = await pool.query(
+      'UPDATE saved_searches SET last_viewed_at = now() WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, userId]
+    );
+    if (result.rowCount === 0) {
+      return NextResponse.json(
+        { error: 'Saved search not found or access denied' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('PATCH /api/saved-searches error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update saved search' },
       { status: 500 }
     );
   }

@@ -4,6 +4,7 @@ import { use } from 'react';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useProperties, type PropertyListItem } from '@oper/api-client';
+import { capRate, monthlyMortgage } from '@oper/primitives';
 
 type Property = PropertyListItem;
 
@@ -11,6 +12,15 @@ const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD'
 
 function formatPercent(val: number): string {
     return `${(val * 100).toFixed(2)}%`;
+}
+
+// Buy-hold default financing, mirrors the search filters' SQL exactly
+// (50%-rule NOI, 80% LTV @ 6.5%/30yr, 23% invested).
+function cashOnCash(price: number, rent: number): number | null {
+    if (!(price > 0) || !(rent > 0)) return null;
+    const noi = rent * 12 * 0.5;
+    const debtService = monthlyMortgage(price * 0.8, 0.065, 30) * 12;
+    return (noi - debtService) / (price * 0.23);
 }
 
 export default function ComparePage({ searchParams }: { searchParams: Promise<{ ids: string }> }) {
@@ -98,6 +108,15 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                                 const y = price > 0 ? (rent * 12) / price : 0;
                                 return <>{price > 0 ? formatPercent(y) : '—'}</>;
                             }} />
+                            <BestRow label="$ / sqft" properties={properties} best="min"
+                                value={(p) => (p.listing_price && p.financial_snapshot?.sqft ? p.listing_price / p.financial_snapshot.sqft : null)}
+                                format={(v) => usd0.format(v)} />
+                            <BestRow label="Cap Rate (50% rule)" properties={properties} best="max"
+                                value={(p) => (p.listing_price && p.estimated_rent ? capRate(p.listing_price, p.estimated_rent, 0.5) : null)}
+                                format={formatPercent} />
+                            <BestRow label="Cash-on-Cash (20% down)" properties={properties} best="max"
+                                value={(p) => (p.listing_price && p.estimated_rent ? cashOnCash(p.listing_price, p.estimated_rent) : null)}
+                                format={(v) => `${(v * 100).toFixed(1)}%`} />
 
                             {/* Specs Section */}
                             <tr>
@@ -137,6 +156,42 @@ function TableRow({ label, properties, render }: {
             {properties.map(p => (
                 <td key={p.id} className="p-4 text-[14px]" style={{ borderLeft: '1px solid var(--line)' }}>
                     {render(p)}
+                </td>
+            ))}
+        </tr>
+    );
+}
+
+// Numeric row with best-value highlighting: the winning cell gets the accent
+// figure treatment + a small 'best' provenance tag.
+function BestRow({ label, properties, value, format, best }: {
+    label: string;
+    properties: Property[];
+    value: (p: Property) => number | null;
+    format: (v: number) => string;
+    best: 'max' | 'min';
+}) {
+    const values = properties.map(value);
+    let bestIdx = -1;
+    let bestVal: number | null = null;
+    values.forEach((v, i) => {
+        if (v == null) return;
+        if (bestVal == null || (best === 'max' ? v > bestVal : v < bestVal)) {
+            bestVal = v;
+            bestIdx = i;
+        }
+    });
+    return (
+        <tr style={{ borderBottom: '1px solid var(--line)' }}>
+            <td className="p-4 text-[14px] font-medium" style={{ color: 'var(--haze)' }}>{label}</td>
+            {properties.map((p, i) => (
+                <td key={p.id} className="p-4 text-[14px]" style={{ borderLeft: '1px solid var(--line)' }}>
+                    {values[i] == null ? '—' : (
+                        <span className="figure" style={i === bestIdx ? { color: 'var(--pass-hi)', fontWeight: 600 } : undefined}>
+                            {format(values[i]!)}
+                            {i === bestIdx && <span className="prov ml-1.5">best</span>}
+                        </span>
+                    )}
                 </td>
             ))}
         </tr>

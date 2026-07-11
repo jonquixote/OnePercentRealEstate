@@ -275,6 +275,25 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover,
     }
   }, [defaultLayers, toggles, ready]);
 
+  // D2: command-palette map actions (only the controls-bearing map listens).
+  const togglesRef = useRef(toggles);
+  togglesRef.current = toggles;
+  useEffect(() => {
+    if (!showLayerControls) return;
+    const onAction = (e: Event) => {
+      const { action, value } = (e as CustomEvent).detail ?? {};
+      if (action === 'toggle-layer' && value) {
+        const t = togglesRef.current.find((x) => x.def.id === value);
+        if (t && t.available) t.set(!t.on);
+      } else if (action === 'basemap' && value) {
+        setBasemap(value);
+      }
+    };
+    window.addEventListener('oper:map', onAction);
+    return () => window.removeEventListener('oper:map', onAction);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showLayerControls]);
+
   return (
     <div className="relative h-full w-full" aria-label="Property map" role="application">
       <div ref={containerRef} className="h-full w-full" style={{ minHeight: '400px' }} />

@@ -17,6 +17,7 @@ import { RentalCompsSection } from '@/components/property/sections/RentalCompsSe
 import { RiskPanel } from '@/components/property/sections/RiskPanel';
 import { NeighborhoodPanel } from '@/components/property/sections/NeighborhoodPanel';
 import { MarketContextPanel } from '@/components/property/sections/MarketContextPanel';
+import { MiniMap } from '@/components/property/sections/MiniMap';
 import VerdictRailClient from '@/components/property/sections/VerdictRailClient';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -280,6 +281,15 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                         {/* ── Location ────────────────────── */}
                         <section id="location" className="scroll-mt-32">
                             <h2 className="prov mb-5 inline-block">the locale</h2>
+                            {property.latitude && property.longitude ? (
+                                <div className="mb-8">
+                                    <MiniMap
+                                        latitude={Number(property.latitude)}
+                                        longitude={Number(property.longitude)}
+                                        id={id}
+                                    />
+                                </div>
+                            ) : null}
                             <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                                 <div>
                                     {schools.length > 0 ? (

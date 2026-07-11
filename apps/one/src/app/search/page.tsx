@@ -7,6 +7,7 @@ import type maplibregl from 'maplibre-gl';
 import { PropertyMap } from '@/components/PropertyMap';
 import { DrawSearch } from '@oper/map/controls/DrawSearch';
 import { SearchCard } from '@/components/search/SearchCard';
+import { ResultsTable } from '@/components/search/ResultsTable';
 import { WatchSearchButton } from '@/components/WatchSearchButton';
 import {
   PropertyFilters,
@@ -54,6 +55,7 @@ export default function SearchPage() {
   const [sortBy, setSortBy] = useState('one_percent_high');
   const [showFilters, setShowFilters] = useState(false);
   const [showMap, setShowMap] = useState(true);
+  const [tableView, setTableView] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const [qs, setQs] = useQueryStates(propertyFilterParsers, { history: 'replace', shallow: true });
@@ -212,6 +214,14 @@ export default function SearchPage() {
                 ))}
               </select>
               <button
+                onClick={() => setTableView(!tableView)}
+                className="hidden sm:flex items-center gap-1 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors hover:border-line-hi"
+                style={{ borderColor: tableView ? 'var(--pass)' : 'var(--line)', color: tableView ? 'var(--pass)' : 'var(--haze)' }}
+                title={tableView ? 'Card view' : 'Table view'}
+              >
+                {tableView ? 'Cards' : 'Table'}
+              </button>
+              <button
                 onClick={() => setShowMap(!showMap)}
                 className="hidden lg:flex items-center gap-1 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors hover:border-line-hi"
                 style={{ borderColor: 'var(--line)', color: 'var(--haze)' }}
@@ -272,6 +282,29 @@ export default function SearchPage() {
                 <p className="text-[15px] font-semibold" style={{ color: 'var(--text)' }}>No properties match your search</p>
                 <p className="mt-1.5 text-[13px]" style={{ color: 'var(--haze)' }}>Try adjusting your filters or criteria.</p>
               </div>
+            ) : tableView ? (
+              <>
+                <ResultsTable
+                  properties={properties}
+                  sortBy={sortBy}
+                  onSort={setSortBy}
+                  onHover={showMap ? setHoveredCardId : undefined}
+                  highlightedId={mapHoveredId}
+                />
+
+                {hasMore && (
+                  <div className="mt-8 text-center">
+                    <button
+                      onClick={() => loadProperties(page + 1)}
+                      disabled={loadingMore}
+                      className="inline-flex items-center gap-2 rounded-full border px-6 py-2.5 text-[13px] font-medium transition-colors hover:border-line-hi disabled:opacity-50"
+                      style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
+                    >
+                      {loadingMore ? <><Loader2 className="h-4 w-4 animate-spin" />Loading…</> : 'Load more'}
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 <div className={`grid gap-6 ${showMap ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
