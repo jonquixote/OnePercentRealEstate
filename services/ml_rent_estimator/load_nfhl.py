@@ -24,7 +24,10 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-MIN_FREE_GB = 30
+# Safety floor (GB free required before loading). Override with MIN_FREE_GB
+# when the VPS is tight but you've confirmed headroom for the temp extract
+# (e.g. after the parcels load finishes and free space is < 30 GB).
+MIN_FREE_GB = int(os.environ.get("MIN_FREE_GB", "30"))
 
 
 def _check_disk(path: str = "/") -> None:
@@ -117,7 +120,20 @@ def get_top_states(conn, limit: int = 10) -> list[tuple[str, str]]:
 
 
 def _download_nfhl(state_fips: str, tmp_dir: str) -> str | None:
-    """Download the NFHL zip for a state and return the extracted GDB path."""
+    """Download the NFHL zip for a state and return the extracted GDB path.
+
+    NOTE (2026-07-11): FEMA's bulk state endpoint
+    (https://hazards.fema.gov/nfhlv2/output/State/NFHL_<FIPS>_Current.zip …)
+    now 404s, and the Map Service Center direct-download
+    (https://msc.fema.gov/portal/downloadProduct?productID=NFHL_<FIPS>C) returns
+    a portal HTML login page rather than the file — automated bulk fetch is
+    currently BLOCKED on FEMA access control. To unblock, either (a) script the
+    MSC session (capture JSESSIONID/cookie from the portal, then re-request), or
+    (b) page the public NFHL ArcGIS REST service
+    (https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer) in
+    1000-feature chunks, or (c) source the per-state GDBs another way. After a
+    working source exists, this function's URL list is the only thing to update.
+    """
     # FEMA filenames vary — try common patterns
     patterns = [
         f"NFHL_{state_fips}_*",

@@ -32,7 +32,7 @@
 
 ### Task 0.3: NFHL flood zones — load top-3 states, then decide
 Full top-10 was never run (0 rows). Load CA, FL, TX first (60% of listings), measure disk + tile latency, THEN decide whether states 4-10 are worth it.
-- [ ] Acceptance: `flood_zone_at(29.76, -95.36)` returns a row; flood layer toggle enables itself on the map (availability probe flips automatically).
+- [x] **INVESTIGATION + BLOCKER (2026-07-11):** `flood_zones` = 0 rows. The loader's FEMA source is dead: `hazards.fema.gov/nfhlv2/output/State/NFHL_<FIPS>_Current.zip` → **404**, and the MSC direct-download (`msc.fema.gov/portal/downloadProduct?productID=NFHL_<FIPS>C`) returns a **portal HTML login page**, not the file — automated bulk fetch is blocked on FEMA access control. Additionally the VPS has only ~32 GB free with the loader's `MIN_FREE_GB=30` guard (and `parcels` is still growing the DB), so even a working source would be gated. Made `MIN_FREE_GB` env-overridable and documented the exact unblock path in `load_nfhl.py` (`_download_nfhl`). **Not loaded.** To finish: script the MSC session or page the public NFHL ArcGIS REST service, then update the URL list; lower `MIN_FREE_GB` if disk is tight post-parcels.
 
 ### Task 0.4: HomeHarvest upgrade spike (nearby_schools)
 Installed version returns 100% NA for `nearby_schools` even with `extra_property_data=True`. One time-boxed spike: upgrade homeharvest in a scratch venv, test the same 90004 pull. If populated → pin the new version + redeploy scraper. If still NA → delete the dead capture columns' write path (keep columns) and note it in the plan-1 doc.
