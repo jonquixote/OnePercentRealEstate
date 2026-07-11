@@ -16,10 +16,12 @@ async function fetchZipCodes(): Promise<string[]> {
         const client = await pool.connect();
         try {
             const result = await client.query(`
-                SELECT DISTINCT raw_data->>'zip_code' AS zip_code
+                SELECT zip_code
                 FROM listings
-                WHERE raw_data->>'zip_code' IS NOT NULL
-                LIMIT 500
+                WHERE listing_type = 'for_sale' AND sale_type = 'standard' AND zip_code ~ '^\\d{5}$'
+                GROUP BY zip_code
+                ORDER BY count(*) DESC
+                LIMIT 2000
             `);
             return result.rows
                 .map((r: { zip_code: string | null }) => r.zip_code)
