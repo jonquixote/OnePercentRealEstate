@@ -19,7 +19,14 @@ export const RENT_HEAT_STOPS: Array<[number, string]> = [
   [4.5, '#b0532f'],
 ];
 
-export function rentHeatLayer(tileBase = '/tiles'): LayerDef {
+
+// MapLibre fetches tiles from a web worker where relative URLs fail Request
+// construction — tile templates must be absolute.
+function _defaultTileBase(): string {
+  return typeof window !== 'undefined' ? `${window.location.origin}/tiles` : '/tiles';
+}
+
+export function rentHeatLayer(tileBase = _defaultTileBase()): LayerDef {
   return {
     id: 'rent-heat',
     label: 'Rent $/sqft',

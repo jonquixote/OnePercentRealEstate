@@ -7,7 +7,14 @@ import type maplibregl from 'maplibre-gl';
 import type { LayerDef } from './registry';
 import { tileSourceAvailable } from './registry';
 
-export function floodLayer(tileBase = '/tiles'): LayerDef {
+
+// MapLibre fetches tiles from a web worker where relative URLs fail Request
+// construction — tile templates must be absolute.
+function _defaultTileBase(): string {
+  return typeof window !== 'undefined' ? `${window.location.origin}/tiles` : '/tiles';
+}
+
+export function floodLayer(tileBase = _defaultTileBase()): LayerDef {
   const SRC = 'flood-zones';
   const FILL = 'flood-fill';
   return {
@@ -57,7 +64,7 @@ export function floodLayer(tileBase = '/tiles'): LayerDef {
   };
 }
 
-export function transitLayer(tileBase = '/tiles'): LayerDef {
+export function transitLayer(tileBase = _defaultTileBase()): LayerDef {
   const SRC = 'transit-stops';
   const CIRCLE = 'transit-circle';
   return {
@@ -113,7 +120,7 @@ export function transitLayer(tileBase = '/tiles'): LayerDef {
   };
 }
 
-export function schoolsLayer(tileBase = '/tiles'): LayerDef {
+export function schoolsLayer(tileBase = _defaultTileBase()): LayerDef {
   const SRC = 'schools';
   const CIRCLE = 'schools-circle';
   const LABEL = 'schools-label';

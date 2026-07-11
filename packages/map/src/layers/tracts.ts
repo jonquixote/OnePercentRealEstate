@@ -49,7 +49,14 @@ const RAMPS: Record<TractMetric, { prop: string; stops: Array<[number, string]>;
   },
 };
 
-export function tractLayer(tileBase = '/tiles', initialMetric: TractMetric = 'income'): LayerDef & {
+
+// MapLibre fetches tiles from a web worker where relative URLs fail Request
+// construction — tile templates must be absolute.
+function _defaultTileBase(): string {
+  return typeof window !== 'undefined' ? `${window.location.origin}/tiles` : '/tiles';
+}
+
+export function tractLayer(tileBase = _defaultTileBase(), initialMetric: TractMetric = 'income'): LayerDef & {
   setMetric: (map: maplibregl.Map, m: TractMetric) => void;
 } {
   let metric: TractMetric = initialMetric;

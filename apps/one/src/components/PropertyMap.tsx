@@ -94,7 +94,10 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover,
     if (f.minBeds) p.set('p_min_beds', String(f.minBeds));
     if (f.minBaths) p.set('p_min_baths', String(f.minBaths));
     if (f.propertyType) p.set('p_property_type', f.propertyType);
-    return `/tiles/public.listings_mvt/{z}/{x}/{y}.pbf?${p.toString()}`;
+    // ABSOLUTE url: MapLibre fetches tiles from a web worker where relative
+    // URLs fail Request construction — this is why MVT pins never rendered.
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/tiles/public.listings_mvt/{z}/{x}/{y}.pbf?${p.toString()}`;
   }, []);
 
   const navigate = useCallback(
