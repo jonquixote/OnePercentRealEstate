@@ -630,23 +630,31 @@ def _geocode_zip_to_bbox(zip_code: str, conn) -> Optional[tuple[float, float, fl
     Tries zcta_geometries table first, falls back to hardcoded lookup.
     Returns (south, west, north, east) bbox.
     """
-    # Try zcta_geometries table first
+    # Primary: bbox of listings we already hold in this ZIP — covers exactly
+    # the ZIP set the crawler works (there is no zcta_geometries table in
+    # this database). Padded so edge listings don't clip the box.
     try:
         cur = conn.cursor()
-        cur.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'zcta_geometries'")
-        if cur.fetchone():
-            # Use PostGIS to get bbox from zcta_geometries
-            cur.execute("""
-                SELECT ST_YMin(geom) AS south, ST_XMin(geom) AS west,
-                       ST_YMax(geom) AS north, ST_XMax(geom) AS east
-                FROM zcta_geometries
-                WHERE zcta5 = %s
-            """, (zip_code,))
-            row = cur.fetchone()
-            if row:
-                return (row[0], row[1], row[2], row[3])
+        cur.execute(
+            """
+            SELECT min(latitude), min(longitude), max(latitude), max(longitude), count(*)
+            FROM (
+                SELECT latitude, longitude FROM listings
+                WHERE zip_code = %s AND latitude IS NOT NULL AND longitude IS NOT NULL
+                UNION ALL
+                SELECT latitude, longitude FROM rental_listings
+                WHERE zip_code = %s AND latitude IS NOT NULL AND longitude IS NOT NULL
+            ) pts
+            """,
+            (zip_code, zip_code),
+        )
+        row = cur.fetchone()
+        if row and row[4] and int(row[4]) >= 3:
+            s, w, n, e = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+            pad = max(BBOX_OFFSET, (n - s) * 0.15, 0.01)
+            return (s - pad, w - pad, n + pad, e + pad)
     except Exception as e:
-        print(f"zcta_geometries query failed: {e}")
+        print(f"listing-bbox query failed: {e}")
         conn.rollback()
     
     # Fall back to hardcoded lookup

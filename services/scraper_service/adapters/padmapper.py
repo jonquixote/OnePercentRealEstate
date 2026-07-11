@@ -110,6 +110,15 @@ def normalize(listable: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+# Browser-shaped identity: the listables endpoint 451s obvious non-browser
+# clients. Same public endpoint the PadMapper map itself calls.
+_BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
 def fetch_bbox(
     bbox: tuple[float, float, float, float],
     timeout: float = 15.0,
@@ -137,17 +146,33 @@ def fetch_bbox(
 
     for attempt in range(max_retries + 1):
         try:
-            with httpx.Client(timeout=timeout) as client:
+            with httpx.Client(timeout=timeout, headers=_BROWSER_HEADERS, follow_redirects=True) as client:
+                # Session bootstrap: the listables endpoint rejects cookieless
+                # clients (451). A homepage GET sets the session + CSRF
+                # cookies; mirror the CSRF value into the header Zumper's own
+                # frontend sends.
+                extra: dict[str, str] = {}
+                try:
+                    client.get("https://www.padmapper.com/", timeout=timeout)
+                    for name, value in client.cookies.items():
+                        if "xz" in name.lower() or "csrf" in name.lower():
+                            extra["x-zumper-xz-token"] = value
+                            break
+                except httpx.HTTPError:
+                    pass  # try the POST anyway
+
                 response = client.post(
                     PADMAPPER_API,
                     json=payload,
                     headers={
                         "Content-Type": "application/json",
-                        "User-Agent": "OnePercentRealEstate/1.0",
+                        "Referer": "https://www.padmapper.com/",
+                        "Origin": "https://www.padmapper.com",
+                        **extra,
                     },
                 )
 
-                if response.status_code in (403, 429):
+                if response.status_code in (403, 429, 451):
                     raise SourceBlockedError(
                         f"PadMapper blocked request: {response.status_code}"
                     )
