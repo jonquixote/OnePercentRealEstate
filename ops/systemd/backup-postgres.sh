@@ -11,7 +11,7 @@
 set -euo pipefail
 
 BACKUP_DIR="/var/backups/oper"
-R2_REMOTE="${R2_REMOTE:-oper-r2:oper-backups}"
+R2_REMOTE="${R2_REMOTE:-oper-r2:onepercent-pg-backups}"
 PGUSER="${PGUSER:-postgres}"
 PGDB="${PGDB:-postgres}"
 DAILY_KEEP=3
