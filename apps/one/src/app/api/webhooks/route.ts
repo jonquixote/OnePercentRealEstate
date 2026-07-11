@@ -113,6 +113,7 @@ async function dispatchEvent(event: Stripe.Event): Promise<void> {
       await handleCheckoutSessionCompleted(session);
       break;
     }
+    case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
       const subscription = event.data.object as Stripe.Subscription;
