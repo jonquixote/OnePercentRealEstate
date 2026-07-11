@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 
 COUNTY_FIPS = "06037"
@@ -38,7 +39,7 @@ def normalize_address(addr: str) -> str | None:
     return s or None
 
 
-def fetch_page(offset: int) -> list[dict]:
+def fetch_page(offset: int, retries: int = 5, backoff: float = 2.0) -> list[dict]:
     params = (
         f"?f=json"
         f"&where=1%3D1"
@@ -48,18 +49,30 @@ def fetch_page(offset: int) -> list[dict]:
         f"&outSR=4326"
     )
     url = BASE_URL + params
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-        data = json.loads(resp.read())
-    # ArcGIS JSON format wraps features differently than GeoJSON
-    features = data.get("features", [])
-    return [
-        {
-            "properties": f.get("attributes", {}),
-            "geometry": f.get("geometry"),  # already in {rings: [[...]]} format
-        }
-        for f in features
-    ]
+    last_err: Exception | None = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                data = json.loads(resp.read())
+            # ArcGIS JSON format wraps features differently than GeoJSON
+            features = data.get("features", [])
+            return [
+                {
+                    "properties": f.get("attributes", {}),
+                    "geometry": f.get("geometry"),
+                }
+                for f in features
+            ]
+        except Exception as exc:  # transient network resets, timeouts, etc.
+            last_err = exc
+            print(
+                f"  fetch offset={offset} attempt {attempt + 1}/{retries} "
+                f"failed: {exc}; retrying in {backoff * (attempt + 1):.0f}s",
+                file=sys.stderr,
+            )
+            time.sleep(backoff * (attempt + 1))
+    raise last_err or RuntimeError("fetch_page failed")
 
 
 def arcgis_to_geojson(geom: dict) -> dict | None:
@@ -92,13 +105,22 @@ def main() -> None:
 
     conn = psycopg2.connect(dsn)
     total_upserted = 0
+    empty_streak = 0
 
     try:
         while True:
             print(f"  fetching offset={offset}", file=sys.stderr)
             features = fetch_page(offset)
             if not features:
-                break
+                # Require several consecutive empty pages before declaring
+                # done — a single transient empty response must not end the
+                # load prematurely (we resume via --offset regardless).
+                empty_streak += 1
+                if empty_streak >= 3:
+                    break
+                offset += PAGE_SIZE
+                continue
+            empty_streak = 0
 
             rows = []
             for feat in features:
