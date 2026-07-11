@@ -52,6 +52,10 @@ __pycache__
 infrastructure/.env
 infrastructure/n8n_credentials/*.json
 infrastructure/backup/pgbackrest.conf.local
+# rclone / off-box backup credentials (server-only, never commit)
+rclone.conf
+**/rclone.conf
+.rclone*
 .agent/
 skills
 monitoring/alertmanager/alertmanager.runtime.yml
