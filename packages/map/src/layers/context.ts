@@ -160,7 +160,7 @@ export function schoolsLayer(tileBase = _defaultTileBase()): LayerDef {
         minzoom: 14,
         layout: {
           'text-field': ['get', 'name'],
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
+          'text-font': ['Noto Sans Medium', 'Noto Sans Regular'],
           'text-size': 10,
           'text-offset': [0, 1.1],
           'text-anchor': 'top',

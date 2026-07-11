@@ -78,7 +78,7 @@ export function addListingsLayers(map: maplibregl.Map, opts: ListingsLayerOption
     filter: ['==', ['get', 'cluster'], true],
     layout: {
       'text-field': ['to-string', ['get', 'count']],
-      'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
+      'text-font': ['Noto Sans Medium', 'Noto Sans Regular'],
       'text-size': 12,
       'text-allow-overlap': true,
     },
@@ -162,7 +162,7 @@ export function addListingsLayers(map: maplibregl.Map, opts: ListingsLayerOption
     minzoom: 13,
     layout: {
       'text-field': ['coalesce', ['get', 'price_short'], ''],
-      'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
+      'text-font': ['Noto Sans Medium', 'Noto Sans Regular'],
       'text-size': 12,
       'text-padding': 6,
       'text-allow-overlap': false,
