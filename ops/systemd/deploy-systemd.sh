@@ -19,6 +19,7 @@ ALL_UNITS=(
   oper-pg-tileserv oper-n8n
   oper-worker oper-worker-rent oper-worker-refresh
   oper-worker-watchlist oper-worker-media oper-worker-ml-scheduler
+  oper-worker-digest
 )
 
 # Service name → systemd unit mapping
@@ -37,6 +38,7 @@ declare -A UNITS=(
   [worker-watchlist]="oper-worker-watchlist"
   [worker-media]="oper-worker-media"
   [worker-ml-scheduler]="oper-worker-ml-scheduler"
+  [worker-digest]="oper-worker-digest"
 )
 
 if [[ "${1:-}" == "status" ]]; then
