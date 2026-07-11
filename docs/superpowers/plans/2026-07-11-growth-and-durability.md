@@ -56,7 +56,9 @@ The app has real auth (`/api/auth/login|signup|me`, AUTH_SECRET restored 2026-07
 
 ### Task 1.2: Stripe end-to-end in test mode
 NEXT_PUBLIC key now bakes correctly (fixed in map overhaul D5); nobody has verified checkout since the systemd cutover.
-- [ ] Walk the full loop with Stripe test cards: checkout → webhook (`/api/webhooks`) → subscription row → gated feature unlock → cancel → downgrade. Fix whatever broke; add a `docs/runbooks/stripe-test-loop.md` with the exact steps.
+- [x] **AUDIT (2026-07-11):** `STRIPE_SECRET_KEY` is **test mode** (`sk_test_…`); `STRIPE_PRICE_MONTHLY`/`ANNUAL` are valid test price IDs. **BROKEN:** `STRIPE_WEBHOOK_SECRET` is a placeholder (`…PLACEHOLDER_GET_FROM_STRIPE_DASHBOARD`), so `stripe.webhooks.constructEvent` fails → all webhooks 400 → the loop never completes. Checkout (`/api/checkout`) and the webhook handler/`pro`-grant logic are otherwise correct (idempotent via `stripe_webhook_events`, DLQ after 5 attempts).
+- [x] **RUNBOOK:** wrote `docs/runbooks/stripe-test-loop.md` with exact steps (get signing secret, restart, checkout→pay 4242→verify `pro`→compare gate unlocks→cancel→verify `free`→402) + signature-verification acceptance.
+- [ ] **BLOCKER:** need the real test-mode webhook **signing secret** (`whsec_…`) from Stripe Dashboard → Developers → Webhooks (test mode) to set `STRIPE_WEBHOOK_SECRET` and complete a green run. (Stripe CLI `stripe listen` can substitute for local-only verification.)
 - [ ] Acceptance: documented green run of the loop; webhook signature verification confirmed on.
 
 ### Task 1.3: Decide + wire ONE paid gate
