@@ -28,7 +28,7 @@
 
 ### Task 0.2: LA parcels resume
 15,999 / ~2.4M. The loader supports `--offset`; run to completion in a `systemd-run --unit=parcels-load` transient unit (survives SSH drops), ~2.4M rows at 1K/page — expect hours; nice it.
-- [ ] Acceptance: ≥ 2M rows; a known LA address matches by `situs_addr_norm`.
+- [x] Acceptance (2026-07-12): **DONE.** Resumed loader ran to source exhaustion (`{"done": true}` at offset ~2.104M). `parcels` = **2,100,994 rows** (≥2M target met; the LA County source has ~2.1M, not the ~2.4M estimate). `situs_addr_norm` populated on 1,988,983 (95%). Address match verified: **6,142 `listings` join `parcels` exactly on normalized address** (e.g. `43342 Windrose Ln, Lancaster CA 93536` → APN `3110039020`). Loader logged to `/tmp/parcels.log`.
 
 ### Task 0.3: NFHL flood zones — load top-3 states, then decide
 Full top-10 was never run (0 rows). Load CA, FL, TX first (60% of listings), measure disk + tile latency, THEN decide whether states 4-10 are worth it.
@@ -77,7 +77,8 @@ Candidates already built: compare (>2 items), table view, rent-band confidence f
 - [ ] `saved_searches` gains `email_digest BOOLEAN NOT NULL DEFAULT false`; the save-search UI gains the opt-in checkbox (only when signed in with an email).
 - [ ] Daily 14:00 UTC job (existing worker tick pattern): for each digest-enabled search with `new_matches > 0` (reuse the D3 SQL), send one Resend email with up to 6 new listings (photo, price, ratio, link), then stamp `last_viewed_at`. Hard cap: 1 email/user/day (batch all their searches into one).
 - [ ] Unsubscribe link → `email_digest = false` for that search (signed one-click token, no login required).
-- [x] Acceptance (2026-07-11): implemented + deployed (migration `2026_07_12_digest_optin.sql`, `apps/worker/src/digest.ts` as `oper-worker-digest` systemd unit, `unsubscribe` route, `SavedSearches` opt-in checkbox). Worker runs hourly, fires daily digest @14:00 UTC + weekly brief Mon @14:00 UTC, deduped via `digest_runs`, batches ≤6 listings/user/day, unsubscribe via HMAC token. **PROD TODO:** `RESEND_API_KEY` is absent on the server (emails won't actually send until set in `/opt/onepercent/.env`); verify receipt with a real send after that.
+- [x] Acceptance (2026-07-11): implemented + deployed (migration `2026_07_12_digest_optin.sql`, `apps/worker/src/digest.ts` as `oper-worker-digest` systemd unit, `unsubscribe` route, `SavedSearches` opt-in checkbox). Worker runs hourly, fires daily digest @14:00 UTC + weekly brief Mon @14:00 UTC, deduped via `digest_runs`, batches ≤6 listings/user/day, unsubscribe via HMAC token.
+- [x] **SENDING VERIFIED then PAUSED (2026-07-12):** Wired Resend + Hostinger DNS end-to-end on the temporary domain: verified Resend domain `one.octavo.press` (DKIM/SPF/Receiving all green via Hostinger DNS records), created a `sending_access` `RESEND_API_KEY` scoped to it, set `WATCHLIST_FROM_EMAIL=alerts@one.octavo.press`, and confirmed a live send is accepted by Resend (message id returned). **DECISION:** `one.octavo.press` is a throwaway domain — do not stand up a paid mailbox / finalize email on it. Full email rollout (real from-address, deliverability warm-up, confirming inbox receipt) is **tabled until the permanent domain lands**. Env + workers are configured and functional in the meantime.
 
 ### Task 2.2: Weekly ZIP market brief (the data moat as email)
 - [ ] For watchlisted ZIPs: median list price WoW, new/sold counts, rent $/sqft trend from `h3_market_stats`, HPI YoY from `fhfa_zip_hpi`. One email per user per week, same opt-in + unsubscribe discipline.
