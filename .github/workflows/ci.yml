@@ -48,5 +48,6 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install
       - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm lint 2>&1 | head -50 || true
       - run: pnpm build
