@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useCompare } from './useCompare';
 
 export function CompareTray() {
-  const { ids, remove, clear } = useCompare();
+  const { ids, remove, clear, limit, isPro } = useCompare();
   if (ids.length === 0) return null;
 
   return (
@@ -18,7 +18,7 @@ export function CompareTray() {
     >
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-3 lg:px-8">
         <span className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
-          Compare · {ids.length}/4
+          Compare · {ids.length}/{limit}{!isPro ? ' (free)' : ''}
         </span>
         <div className="flex items-center gap-2 overflow-x-auto">
           {ids.map((id) => (

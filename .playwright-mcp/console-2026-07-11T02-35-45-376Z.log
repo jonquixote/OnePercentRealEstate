@@ -1,0 +1,55 @@
+[    3120ms] [INFO] Connecting to 'https://tiles.openfreemap.org/styles/positron' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    3121ms] [INFO] Connecting to 'https://tiles.openfreemap.org/styles/positron' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    5909ms] [INFO] Connecting to 'https://tiles.openfreemap.org/planet' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    5909ms] [INFO] Connecting to 'https://tiles.openfreemap.org/planet' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    5910ms] [INFO] Connecting to 'https://tiles.openfreemap.org/sprites/ofm_f384/ofm@2x.json' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    5910ms] [INFO] Connecting to 'https://tiles.openfreemap.org/sprites/ofm_f384/ofm@2x.json' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    5911ms] [INFO] Connecting to 'https://tiles.openfreemap.org/sprites/ofm_f384/ofm@2x.png' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    5911ms] [INFO] Connecting to 'https://tiles.openfreemap.org/sprites/ofm_f384/ofm@2x.png' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    6438ms] [INFO] Loading the script 'https://js.stripe.com/clover/stripe.js' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-eval' 'unsafe-inline'". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/1th69o7_j3guh.js:0
+[    6972ms] [WARNING] Expected value to be of type number, but found null instead. @ blob:https://one.octavo.press/9165b40c-0d07-4200-9c66-62c2228cbd19:0
+[    6973ms] [WARNING] Expected value to be of type number, but found null instead. @ blob:https://one.octavo.press/9165b40c-0d07-4200-9c66-62c2228cbd19:0
+[    6974ms] [WARNING] Expected value to be of type number, but found null instead. @ blob:https://one.octavo.press/9165b40c-0d07-4200-9c66-62c2228cbd19:0
+[    7100ms] [INFO] Connecting to 'https://tiles.openfreemap.org/fonts/Noto%20Sans%20Italic/0-255.pbf' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    7100ms] [INFO] Connecting to 'https://tiles.openfreemap.org/fonts/Noto%20Sans%20Italic/0-255.pbf' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    7101ms] [INFO] Connecting to 'https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    7101ms] [INFO] Connecting to 'https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf' violates the following Content Security Policy directive: "connect-src 'self' https://api.stripe.com". The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    7220ms] Error: Expected publishable key to be of type string, got type undefined instead.
+    at b (https://one.octavo.press/_next/static/chunks/1th69o7_j3guh.js:1:1731)
+    at https://one.octavo.press/_next/static/chunks/1th69o7_j3guh.js:1:3107
+[    8618ms] [ERROR] Framing 'https://js.stripe.com/' violates the following report-only Content Security Policy directive: "default-src 'self'". The violation has been logged, but no further action has been taken. Note that 'frame-src' was not explicitly set, so 'default-src' is used as a fallback.
+ @ https://js.stripe.com/:0
+[    8697ms] [ERROR] Framing 'https://js.stripe.com/' violates the following report-only Content Security Policy directive: "default-src 'self'". The violation has been logged, but no further action has been taken. Note that 'frame-src' was not explicitly set, so 'default-src' is used as a fallback.
+ @ https://js.stripe.com/:0
+[    8746ms] [ERROR] Error: layers.mvt-selected-halo.filter: "feature-state" data expressions are not supported with filters.
+    at Object.aA [as C] (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:2:12845)
+    at t2 (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:51:76482)
+    at t5._validate (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:51:102653)
+    at t5.addLayer (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:51:91370)
+    at aU.addLayer (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:114778)
+    at https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:184752
+    at Object.p [as current] (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:182249)
+    at aU.<anonymous> (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:182961)
+    at aU.fire (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:1:13066)
+    at aU._render (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:121679) @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8749ms] [ERROR] Error: layers.mvt-points.paint.circle-radius: Only one zoom-based "step" or "interpolate" subexpression may be used in an expression.
+    at Object.aA [as C] (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:2:12845)
+    at t2 (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:51:76482)
+    at t5._validate (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:51:102653)
+    at t5.addLayer (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:51:91370)
+    at aU.addLayer (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:114778)
+    at https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:185066
+    at Object.p [as current] (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:182249)
+    at aU.<anonymous> (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:182961)
+    at aU.fire (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:1:13066)
+    at aU._render (https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:53:121679) @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8800ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8800ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8800ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8800ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8826ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8826ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8826ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8826ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8961ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0
+[    8961ms] [ERROR] Error @ https://one.octavo.press/_next/static/chunks/43s_6w42ek-n7.js:0

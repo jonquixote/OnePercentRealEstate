@@ -62,6 +62,8 @@ NEXT_PUBLIC key now bakes correctly (fixed in map overhaul D5); nobody has verif
 ### Task 1.3: Decide + wire ONE paid gate
 Candidates already built: compare (>2 items), table view, rent-band confidence filter, two.octavo.press terminal access. Pick with the user; wire the check server-side (not CSS-hidden).
 - [x] **DECISION (2026-07-11): Compare (>2 items) is the paid gate.** Free accounts limited to comparing ≤2 properties; subscriber check enforced server-side. Table view / confidence filter / terminal remain free for now.
+- [x] **IMPL (2026-07-11):** `useCompare` is tier-aware (`COMPARE_FREE_MAX=2` free, `COMPARE_MAX=4` pro via `useSessionUser`); `add`/`toggle` enforce the cap; `CompareTray` shows `n/limit (free)`. Dashboard map multi-select (`app/page.tsx`) uses the same `compareLimit`. **Server-side** gate in `app/api/properties/route.ts`: `?compare=1` → `402` when a non-pro session requests >2 ids (blocks hand-crafted `/compare?ids=` URLs). `useProperties` accepts `compare?: boolean`; `/compare` passes it and renders an upgrade CTA on the 402. Not CSS-hidden — enforced in the API.
+- [x] Acceptance verified: free account with >2 ids → `402 compare_limit`; pro passes. (Deployed + tested.)
 
 ---
 

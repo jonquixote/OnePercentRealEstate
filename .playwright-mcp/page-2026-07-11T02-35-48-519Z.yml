@@ -1,0 +1,26 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - navigation "Global" [ref=e3]:
+      - link "1% OnePercent" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e6]: 1%
+        - generic [ref=e7]: OnePercent
+      - generic [ref=e10]:
+        - img [ref=e11]
+        - combobox "City or ZIP" [ref=e14]
+        - button "Search" [ref=e15]
+      - generic [ref=e16]:
+        - link "Search" [ref=e17] [cursor=pointer]:
+          - /url: /search
+        - link "Markets" [ref=e18] [cursor=pointer]:
+          - /url: /market
+        - link "Analytics" [ref=e19] [cursor=pointer]:
+          - /url: /analytics
+        - button "Explore" [ref=e21]:
+          - img [ref=e22]
+          - text: Explore
+          - img [ref=e25]
+        - link "Pricing" [ref=e27] [cursor=pointer]:
+          - /url: /pricing
+  - alert [ref=e28]
+  - generic [ref=e30]: Loading...

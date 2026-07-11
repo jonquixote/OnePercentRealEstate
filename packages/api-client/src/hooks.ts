@@ -32,13 +32,14 @@ import {
 /** Fetch a list of properties by id (compare page, etc.). */
 export function useProperties(
   ids: string[],
-  options?: Partial<UseQueryOptions<PropertyListItem[]>>,
+  options?: Partial<UseQueryOptions<PropertyListItem[]>> & { compare?: boolean },
 ) {
+  const compare = options?.compare;
   return useQuery({
-    queryKey: ["properties", { ids: ids.join(",") }],
+    queryKey: ["properties", { ids: ids.join(","), compare: !!compare }],
     queryFn: ({ signal }) =>
       fetchJson<PropertyListItem[]>(
-        `/api/properties?ids=${encodeURIComponent(ids.join(","))}`,
+        `/api/properties?ids=${encodeURIComponent(ids.join(","))}${compare ? "&compare=1" : ""}`,
         { signal, schema: PropertyListResponseSchema },
       ),
     enabled: ids.length > 0,

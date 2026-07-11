@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { getSessionUser } from '@/lib/auth';
 import { withSpan } from '@/lib/tracing';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_IDS = 100;
+// Growth 1.3: Compare(>2) is the paid gate. Free accounts compare at most
+// COMPARE_FREE_MAX; subscribers get the wider COMPARE_MAX table.
+const COMPARE_FREE_MAX = 2;
+const COMPARE_PRO_MAX = 4;
 
 export async function GET(req: Request) {
   try {
@@ -20,6 +25,25 @@ export async function GET(req: Request) {
       .slice(0, MAX_IDS);
 
     if (idArray.length === 0) return NextResponse.json([]);
+
+    // Server-side compare gate: enforced regardless of client cap, so a free
+    // user cannot bypass it via a hand-crafted /compare?ids=... URL.
+    if (searchParams.get('compare') === '1') {
+      const user = await getSessionUser();
+      const isPro = user?.tier === 'pro';
+      const limit = isPro ? COMPARE_PRO_MAX : COMPARE_FREE_MAX;
+      if (idArray.length > limit) {
+        return NextResponse.json(
+          {
+            error: 'compare_limit',
+            limit,
+            pro: isPro,
+            message: `Free accounts can compare up to ${limit} properties. Upgrade to compare more.`,
+          },
+          { status: 402 },
+        );
+      }
+    }
 
     const placeholders = idArray.map((_, i) => `$${i + 1}`).join(', ');
 

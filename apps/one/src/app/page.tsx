@@ -18,6 +18,8 @@ import { useToast } from '@/components/ui/toast';
 import { SavedSearches } from '@/components/SavedSearches';
 import { HomeHero } from '@/components/home/HomeHero';
 import { FeaturedDeals } from '@/components/home/FeaturedDeals';
+import { useSessionUser } from '@/lib/useSessionUser';
+import { COMPARE_FREE_MAX, COMPARE_MAX } from '@/components/compare/useCompare';
 import { ReducedRail } from '@/components/home/ReducedRail';
 import { MarketPulse } from '@/components/home/MarketPulse';
 import { asStrategy, STRATEGY_BY_ID } from '@/lib/strategies';
@@ -109,19 +111,24 @@ export default function Dashboard() {
 
   const handleLoadMore = () => loadProperties(page + 1);
 
+  const sessionUser = useSessionUser();
+  const compareLimit = sessionUser?.tier === 'pro' ? COMPARE_MAX : COMPARE_FREE_MAX;
   const toggleSelection = useCallback(
     (id: string) => {
       setSelectedProperties((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
         else {
-          if (next.size >= 3) { showToast('You can compare up to 3 properties at a time.'); return prev; }
+          if (next.size >= compareLimit) {
+            showToast(`You can compare up to ${compareLimit} properties at a time${sessionUser?.tier === 'pro' ? '' : ' — upgrade to compare more'}.`);
+            return prev;
+          }
           next.add(id);
         }
         return next;
       });
     },
-    [showToast]
+    [showToast, compareLimit, sessionUser?.tier]
   );
 
   const filteredProperties = useMemo(
