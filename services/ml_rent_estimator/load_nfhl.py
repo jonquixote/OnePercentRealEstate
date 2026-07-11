@@ -50,10 +50,12 @@ NFHL_REST_URL = os.environ.get(
     "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer",
 )
 NFHL_FLOOD_LAYER = int(os.environ.get("NFHL_FLOOD_LAYER", "28"))
-# The service's maxRecordCount is 2000, but flood-zone geometries are large —
-# a 2000-feature GeoJSON page (~40 MB) makes the server 500. 1000 works (~21 MB);
-# we start here and shrink adaptively on failure.
-NFHL_PAGE_SIZE = int(os.environ.get("NFHL_PAGE_SIZE", "1000"))
+# Server-side geometry generalization (degrees in the output SRS). Flood-zone
+# polygons are enormous; without this a 2000-feature page is ~40 MB and the
+# server 500s. ~0.0001 deg (~11 m) cuts a page to ~9 MB while staying accurate
+# enough for a flood-risk overlay / point-in-polygon lookup. Set to 0 to disable.
+NFHL_SIMPLIFY = float(os.environ.get("NFHL_SIMPLIFY", "0.0001"))
+NFHL_PAGE_SIZE = int(os.environ.get("NFHL_PAGE_SIZE", "2000"))
 NFHL_MIN_PAGE_SIZE = int(os.environ.get("NFHL_MIN_PAGE_SIZE", "100"))
 # High-risk (SFHA) zone codes we retain when SFHA_TF isn't explicitly 'T'.
 SFHA_ZONES = {"A", "AE", "AH", "AO", "AR", "A99", "V", "VE"}
@@ -292,7 +294,7 @@ def _load_state_arcgis(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
         offset = 0
         while offset < total:
             try:
-                data = _arcgis_get({
+                params = {
                     "where": f"DFIRM_ID LIKE '{state_fips}%'",
                     "outFields": "DFIRM_ID,FLD_ZONE,SFHA_TF",
                     "returnGeometry": "true",
@@ -301,7 +303,10 @@ def _load_state_arcgis(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
                     "resultOffset": str(offset),
                     "resultRecordCount": str(page_size),
                     "f": "geojson",
-                }, retries=3)
+                }
+                if NFHL_SIMPLIFY > 0:
+                    params["maxAllowableOffset"] = str(NFHL_SIMPLIFY)
+                data = _arcgis_get(params, retries=3)
             except RuntimeError:
                 # Page too large for the server (500) — shrink and retry same offset.
                 if page_size > NFHL_MIN_PAGE_SIZE:
