@@ -1,0 +1,6 @@
+[Unit]
+Description=Notify OPS webhook on backup failure
+
+[Service]
+Type=oneshot
+ExecStart=/opt/onepercent/ops/systemd/notify-ops.sh "ALERT: OnePercent Postgres nightly backup FAILED on $(hostname) — check oper-backup.service / verify-backup.sh"

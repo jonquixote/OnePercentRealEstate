@@ -1,0 +1,11 @@
+[Unit]
+Description=OnePercent Postgres backup restore-drill (weekly)
+After=network-online.target oper-postgres.service
+Requires=oper-postgres.service
+
+[Service]
+Type=oneshot
+Nice=10
+IOSchedulingClass=idle
+ExecStart=/opt/onepercent/ops/systemd/verify-backup.sh
+OnFailure=oper-backup-failure.service

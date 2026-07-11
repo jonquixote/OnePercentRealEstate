@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly Postgres backup restore-drill timer
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+Persistent=true
+Unit=oper-backup-verify.service
+[Install]
+WantedBy=timers.target

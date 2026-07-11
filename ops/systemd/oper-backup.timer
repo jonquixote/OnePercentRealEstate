@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Postgres backup timer (local + R2 off-box)
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+Unit=oper-backup.service
+# Weekly restore-drill timer triggers verify-backup.sh (also alerts on failure).
+[Install]
+WantedBy=timers.target
