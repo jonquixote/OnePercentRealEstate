@@ -28,6 +28,7 @@ import {
   propertyFilterParsers,
   toFilterState,
 } from '@/components/PropertyFilters';
+import { useSessionUser } from '@/lib/useSessionUser';
 
 const USER_ID_STORAGE_KEY = 'oper:user_id';
 
@@ -48,24 +49,24 @@ function generateUuid(): string {
 }
 
 function useLocalUserId(): string | null {
-  const [userId, setUserId] = useState<string | null>(null);
-  useEffect(() => {
+  // Prefer the real account id when a session exists; fall back to the
+  // anonymous localStorage UUID otherwise. This is what makes saved searches
+  // claimed on login instantly visible to the same browser.
+  const session = useSessionUser();
+  const [anonId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY);
-      if (existing) {
-        setUserId(existing);
-        return;
-      }
+      if (existing) return existing;
       const fresh = generateUuid();
       window.localStorage.setItem(USER_ID_STORAGE_KEY, fresh);
-      setUserId(fresh);
+      return fresh;
     } catch {
-      // Private browsing / storage disabled — fall back to ephemeral id so
-      // the UI still works for the session.
-      setUserId(generateUuid());
+      // Private browsing / storage disabled — ephemeral id so the UI works.
+      return generateUuid();
     }
-  }, []);
-  return userId;
+  });
+  return session?.id ?? anonId;
 }
 
 /** Best-effort count of "non-default" filters in a saved params blob. */

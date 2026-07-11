@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { notifyAuthChanged } from '@/lib/useSessionUser';
 
 // Wave 5: real credentials auth against /api/auth/{login,signup}.
 export default function LoginPage() {
@@ -19,16 +20,25 @@ export default function LoginPage() {
         setLoading(true);
         setMessage(null);
         try {
+            const anonUserId =
+                typeof window !== 'undefined'
+                    ? window.localStorage.getItem('oper:user_id')
+                    : null;
             const res = await fetch(`/api/auth/${mode}`, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({
+                    email,
+                    password,
+                    anon_user_id: anonUserId ?? undefined,
+                }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 setMessage({ type: 'error', text: data.error ?? 'Something went wrong' });
                 return;
             }
+            notifyAuthChanged();
             setMessage({ type: 'success', text: mode === 'signup' ? 'Account created — welcome.' : 'Welcome back.' });
             router.push('/');
             router.refresh();

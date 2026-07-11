@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Too many attempts, try again later' }, { status: 429 });
     }
 
-    const { email, password } = await request.json().catch(() => ({}));
+    const { email, password, anon_user_id } = await request.json().catch(() => ({}));
     if (typeof email !== 'string' || typeof password !== 'string') {
       return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
     }
@@ -37,6 +37,16 @@ export async function POST(request: NextRequest) {
       const token = await issueSession(user);
       if (!token) {
         return NextResponse.json({ error: 'Auth not configured (AUTH_SECRET missing)' }, { status: 503 });
+      }
+      // Claim any anonymous (localStorage UUID) saved searches for this account.
+      const anonId = typeof anon_user_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(anon_user_id) ? anon_user_id : null;
+      if (anonId) {
+        try {
+          await client.query('SELECT claim_anon_identity($1, $2)', [user.id, anonId]);
+        } catch (claimErr) {
+          // Non-fatal: a failed claim must never break login.
+          console.error('identity claim failed (non-fatal):', claimErr);
+        }
       }
       const resp = NextResponse.json({ user });
       resp.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
