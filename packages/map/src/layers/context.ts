@@ -40,7 +40,7 @@ export function floodLayer(tileBase = _defaultTileBase()): LayerDef {
           id: FILL,
           type: 'fill',
           source: SRC,
-          'source-layer': 'flood_zones',
+          'source-layer': 'public.flood_zones',
           minzoom: 10,
           paint: {
             'fill-color': ['case', ['==', ['get', 'sfha'], true], '#b0532f', '#c9a35c'] as unknown as maplibregl.ExpressionSpecification,
@@ -88,7 +88,7 @@ export function transitLayer(tileBase = _defaultTileBase()): LayerDef {
         id: CIRCLE,
         type: 'circle',
         source: SRC,
-        'source-layer': 'transit_stops',
+        'source-layer': 'public.transit_stops',
         minzoom: 11,
         paint: {
           // route_types is an int[]; rail types (0,1,2) render larger + accent.
@@ -142,7 +142,7 @@ export function schoolsLayer(tileBase = _defaultTileBase()): LayerDef {
         id: CIRCLE,
         type: 'circle',
         source: SRC,
-        'source-layer': 'schools',
+        'source-layer': 'public.schools',
         minzoom: 12,
         paint: {
           'circle-color': '#7c5cbf',
@@ -156,7 +156,7 @@ export function schoolsLayer(tileBase = _defaultTileBase()): LayerDef {
         id: LABEL,
         type: 'symbol',
         source: SRC,
-        'source-layer': 'schools',
+        'source-layer': 'public.schools',
         minzoom: 14,
         layout: {
           'text-field': ['get', 'name'],

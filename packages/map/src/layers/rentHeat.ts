@@ -48,7 +48,7 @@ export function rentHeatLayer(tileBase = _defaultTileBase()): LayerDef {
           id: LAYER,
           type: 'fill',
           source: SRC,
-          'source-layer': 'rent_heat',
+          'source-layer': 'public.rent_heat',
           minzoom: 9,
           paint: {
             'fill-color': [
