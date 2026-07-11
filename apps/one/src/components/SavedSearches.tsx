@@ -21,6 +21,7 @@ import {
   useDeleteSavedSearch,
   useSaveSearch,
   useSavedSearches,
+  useToggleDigest,
   type SavedSearch,
 } from '@oper/api-client';
 import { Button } from '@/components/ui/button';
@@ -134,6 +135,9 @@ export function SavedSearches() {
   } = useSavedSearches(userId);
   const saveMutation = useSaveSearch();
   const deleteMutation = useDeleteSavedSearch();
+  const toggleDigestMutation = useToggleDigest();
+  const session = useSessionUser();
+  const sessionEmail = session?.email ?? null;
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -276,6 +280,26 @@ export function SavedSearches() {
                           ? 'no filters applied'
                           : `${active} filter${active === 1 ? '' : 's'} applied`}
                       </p>
+                      {sessionEmail && (
+                        <label className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-600">
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3 accent-blue-600"
+                            checked={Boolean(search.email_digest)}
+                            disabled={toggleDigestMutation.isPending}
+                            onChange={(e) =>
+                              toggleDigestMutation.mutate({
+                                id: search.id,
+                                user_id: userId ?? '',
+                                email_digest: e.target.checked,
+                                email: sessionEmail,
+                              })
+                            }
+                            aria-label={`Email daily new matches for ${search.name}`}
+                          />
+                          Email me daily new matches
+                        </label>
+                      )}
                     </div>
                     <button
                       type="button"

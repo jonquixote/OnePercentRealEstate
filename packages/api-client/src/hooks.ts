@@ -213,6 +213,37 @@ export function useDeleteSavedSearch() {
   });
 }
 
+export interface ToggleDigestInput {
+  id: number | string;
+  user_id: string;
+  email_digest: boolean;
+  email?: string;
+}
+
+/**
+ * Tasks 2.1 & 2.2 — toggle the email digest opt-in for a saved search. Also
+ * carries the session email so the worker can reach the recipient (stored in
+ * user_alert_prefs on the server). PATCHes /api/saved-searches.
+ */
+export function useToggleDigest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ToggleDigestInput) =>
+      fetchJson<{ success: true }>("/api/saved-searches", {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: String(input.id),
+          user_id: input.user_id,
+          email_digest: input.email_digest,
+          email: input.email,
+        }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["saved-searches", vars.user_id] });
+    },
+  });
+}
+
 /**
  * Run a SQL-like filter expression through the terminal's `/api/properties/query`
  * endpoint. The expression is parsed + compiled server-side; the client

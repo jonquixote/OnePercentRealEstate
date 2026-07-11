@@ -33,6 +33,9 @@ export interface WorkerEnv {
   readonly RESEND_API_KEY: string;
   readonly WATCHLIST_TICK_MS: number;
   readonly WATCHLIST_FROM_EMAIL: string;
+  // Tasks 2.1 & 2.2 — saved-search daily digest + weekly ZIP market brief
+  readonly UNSUBSCRIBE_SECRET: string;
+  readonly DIGEST_PUBLIC_URL: string;
 }
 
 function readString(name: string, fallback?: string): string {
@@ -101,5 +104,14 @@ export function loadEnv(): WorkerEnv {
     RESEND_API_KEY: readString('RESEND_API_KEY', 'dummy_key_for_dev'),
     WATCHLIST_TICK_MS: readInt('WATCHLIST_TICK_MS', 15 * 60 * 1000), // 15 minutes default
     WATCHLIST_FROM_EMAIL: readString('WATCHLIST_FROM_EMAIL', 'alerts@octavo.press'),
+    // Tasks 2.1 & 2.2 — HMAC key for one-click unsubscribe tokens and the
+    // public base URL used to build those links. Required in production; a
+    // dev-only fallback keeps local runs from crashing (tokens won't verify
+    // across processes with a mismatched secret, but that's fine for dev).
+    UNSUBSCRIBE_SECRET: readString(
+      'UNSUBSCRIBE_SECRET',
+      process.env.NODE_ENV !== 'production' ? 'dev-unsub-secret-change-me' : undefined,
+    ),
+    DIGEST_PUBLIC_URL: readString('DIGEST_PUBLIC_URL', 'https://octavo.press'),
   };
 }

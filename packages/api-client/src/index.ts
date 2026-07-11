@@ -10,6 +10,7 @@ export {
   useSavedSearches,
   useSaveSearch,
   useDeleteSavedSearch,
+  useToggleDigest,
   useFilteredListings,
   useStats,
   useFeatured,
@@ -19,6 +20,7 @@ export type {
   InfiniteListingsFilters,
   SaveSearchInput,
   DeleteSavedSearchInput,
+  ToggleDigestInput,
 } from "./hooks";
 export type { StatsResponse, FeaturedItem, FeaturedResponse } from "./schemas";
 export * from "./schemas";

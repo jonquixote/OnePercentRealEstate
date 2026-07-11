@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     // approximation is fine and keeps this one indexed query per row.
     const result = await pool.query(
       `SELECT s.id, s.user_id, s.name, s.params, s.created_at, s.last_viewed_at,
+              s.email_digest,
               (SELECT count(*)::int FROM listings l
                 WHERE l.created_at > s.last_viewed_at
                   AND l.listing_type = 'for_sale'
@@ -152,7 +153,9 @@ export async function POST(request: NextRequest) {
 }
 
 // D3: stamp last_viewed_at when the user opens a saved search — clears the
-// new-matches badge.
+// new-matches badge. Also (Tasks 2.1 & 2.2) accepts an optional JSON body to
+// toggle the email digest opt-in and record the recipient email in
+// user_alert_prefs so the worker can reach them.
 export async function PATCH(request: NextRequest) {
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
@@ -171,16 +174,45 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const result = await pool.query(
-      'UPDATE saved_searches SET last_viewed_at = now() WHERE id = $1 AND user_id = $2 RETURNING id',
-      [id, userId]
-    );
-    if (result.rowCount === 0) {
-      return NextResponse.json(
-        { error: 'Saved search not found or access denied' },
-        { status: 404 }
+    // Optional body: { email_digest?: boolean, email?: string }
+    const body = await request.json().catch(() => ({} as Record<string, unknown>));
+
+    if (body.email_digest !== undefined) {
+      if (typeof body.email_digest !== 'boolean') {
+        return NextResponse.json(
+          { error: 'email_digest must be a boolean' },
+          { status: 400 }
+        );
+      }
+      const upd = await pool.query(
+        'UPDATE saved_searches SET email_digest = $1 WHERE id = $2 AND user_id = $3 RETURNING id',
+        [body.email_digest, id, userId]
+      );
+      if (upd.rowCount === 0) {
+        return NextResponse.json(
+          { error: 'Saved search not found or access denied' },
+          { status: 404 }
+        );
+      }
+    }
+
+    // Persist the recipient email (from the session) so the digest worker can
+    // send. Reuses the Wave 6 user_alert_prefs table. Only trusted when the
+    // user is authenticated; anon/legacy callers can't set it.
+    if (sessionUser?.email) {
+      await pool.query(
+        `INSERT INTO user_alert_prefs (user_id, email) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email`,
+        [userId, sessionUser.email]
       );
     }
+
+    // Always stamp last_viewed_at (clears the badge on open).
+    await pool.query(
+      'UPDATE saved_searches SET last_viewed_at = now() WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('PATCH /api/saved-searches error:', error);

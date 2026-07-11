@@ -482,6 +482,39 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Tasks 2.1 & 2.2: saved-search daily digest (14:00 UTC) + weekly ZIP
+  # market brief (Mon 14:00 UTC). Hourly tick gated internally; deduped via
+  # the digest_runs table. Reads RESEND_API_KEY + UNSUBSCRIBE_SECRET from .env.
+  worker-digest:
+    build:
+      context: ../
+      dockerfile: apps/worker/Dockerfile
+    restart: always
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      - WATCHLIST_FROM_EMAIL=alerts@octavo.press
+      - DIGEST_PUBLIC_URL=https://octavo.press
+      - LOG_LEVEL=info
+    command: ["node", "apps/worker/dist/digest.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: '0.25'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   pg_tileserv:
     image: pramsey/pg_tileserv:latest
     restart: always

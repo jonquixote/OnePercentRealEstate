@@ -118,6 +118,8 @@ export const SavedSearchSchema = z.object({
   // older API responses stay valid.
   last_viewed_at: z.string().optional(),
   new_matches: z.number().optional(),
+  // Tasks 2.1 & 2.2 — user opt-in for the daily digest / weekly brief emails.
+  email_digest: z.boolean().optional(),
 });
 export type SavedSearch = z.infer<typeof SavedSearchSchema>;
 
