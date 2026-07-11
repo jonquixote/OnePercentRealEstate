@@ -2,11 +2,11 @@
 Description=OnePercent nightly Postgres backup (local + R2 off-box)
 After=network-online.target oper-postgres.service
 Requires=oper-postgres.service
+OnFailure=oper-backup-failure.service
 
 [Service]
 Type=oneshot
 Nice=10
 IOSchedulingClass=idle
 ExecStart=/opt/onepercent/ops/systemd/backup-postgres.sh
-OnFailure=oper-backup-failure.service
 # Alert via OPS webhook on failure (oper-backup-failure.service)
