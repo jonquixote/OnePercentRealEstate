@@ -1,0 +1,73 @@
+# =============================================================================
+# External uptime probe for https://one.octavo.press
+# -----------------------------------------------------------------------------
+# Why: the internal Prometheus runs inside our infra and cannot detect edge /
+#      DNS / TLS failures or a total host outage. This workflow runs on GitHub's
+#      public runners (outside our network) and pings the public health endpoint,
+#      so it sees the site the way a real visitor does.
+#
+# Cadence: every 5 minutes (UTC) via cron, plus manual `workflow_dispatch`.
+#
+# Alerting: on FAILURE we POST a JSON {"text": "..."} alert to the OPS_WEBHOOK_URL
+#   repo secret (Settings -> Secrets and variables -> Actions). The webhook may be
+#   a Slack / Discord / Teams incoming webhook (Slack-compatible payload).
+#   We only alert on FAILURE, not on success, to avoid noisy per-run "ok" spam.
+#   Recovery is therefore handled by the *receiving* system: most webhook
+#   receivers (Slack/Discord/Teams) show the run as green again once probing
+#   succeeds, effectively resolving the alert. The workflow alerts on every
+#   failed run (i.e. every 5 min while the site is down), which is acceptable.
+#
+# REQUIRED SECRET: OPS_WEBHOOK_URL  (repo secret; never hardcoded)
+#   Set it at: GitHub repo -> Settings -> Secrets and variables -> Actions -> New.
+#
+# Acceptance (from the plan): a simulated outage (stop oper-app 60s) should
+#   produce an alert while down; recovery visibility depends on the webhook
+#   receiver. Add the OPS_WEBHOOK_URL secret before relying on this workflow.
+# =============================================================================
+
+name: uptime-probe
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe health endpoint
+        id: probe
+        run: |
+          set +e
+          STATUS=$(curl -fsS --max-time 15 -o /dev/null -w '%{http_code}' \
+            https://one.octavo.press/api/healthz)
+          CURL_EXIT=$?
+          echo "http_status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "curl_exit=$CURL_EXIT" >> "$GITHUB_OUTPUT"
+          echo "Probe HTTP status: $STATUS (curl exit: $CURL_EXIT)"
+
+      - name: Alert on failure
+        if: steps.probe.outputs.http_status != '200'
+        env:
+          WEBHOOK_URL: ${{ secrets.OPS_WEBHOOK_URL }}
+          STATUS: ${{ steps.probe.outputs.http_status }}
+          CURL_EXIT: ${{ steps.probe.outputs.curl_exit }}
+        run: |
+          TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::error::OPS_WEBHOOK_URL secret is not set; cannot send alert."
+          else
+            MESSAGE="🚨 one.octavo.press healthz DOWN — HTTP ${STATUS:-unknown} (curl exit ${CURL_EXIT}) at ${TIME}"
+            echo "Posting alert: $MESSAGE"
+            curl -fsS -X POST \
+              -H 'content-type: application/json' \
+              -d "{\"text\":\"${MESSAGE}\"}" \
+              "$WEBHOOK_URL"
+          fi
+          echo "::error::Health probe failed (status ${STATUS:-unknown}); failing run."
+          exit 1
