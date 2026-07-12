@@ -43,35 +43,53 @@ export function ColumnPicker({ open, onClose, columnIds, onChange }: ColumnPicke
     [onChange],
   );
 
-  const toggle = React.useCallback(
-    (id: string) => {
-      setVisible((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        emit(items, next);
-        return next;
-      });
-    },
-    [items, emit],
-  );
+  // Mirror the working state into refs so persistence fires with the settled
+  // values rather than the closure captured at drag/event start.
+  const itemsRef = React.useRef(items);
+  const visibleRef = React.useRef(visible);
+  React.useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+  React.useEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
 
-  const reorder = React.useCallback(
-    (from: string, to: string) => {
-      if (from === to) return;
-      setItems((prev) => {
-        const next = [...prev];
-        const fromIdx = next.indexOf(from);
-        const toIdx = next.indexOf(to);
-        if (fromIdx === -1 || toIdx === -1) return prev;
-        next.splice(fromIdx, 1);
-        next.splice(toIdx, 0, from);
-        emit(next, visible);
-        return next;
-      });
-    },
-    [visible, emit],
-  );
+  // Persist ONLY on a discrete commit (drag end / modal close) — never for
+  // every intermediate pointer move, and never inside a setState updater
+  // (which StrictMode double-fires). Local state still updates instantly so
+  // the UI stays responsive.
+  const commit = React.useCallback(() => {
+    emit(itemsRef.current, visibleRef.current);
+  }, [emit]);
+
+  const toggle = React.useCallback((id: string) => {
+    setVisible((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const reorder = React.useCallback((from: string, to: string) => {
+    if (from === to) return;
+    setItems((prev) => {
+      const next = [...prev];
+      const fromIdx = next.indexOf(from);
+      const toIdx = next.indexOf(to);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, from);
+      return next;
+    });
+  }, []);
+
+  // Persist the layout and close. Every close path (backdrop, X, Esc) routes
+  // through here so toggles made without a drag are still saved.
+  const handleClose = React.useCallback(() => {
+    commit();
+    onClose();
+  }, [commit, onClose]);
 
   // Escape to close.
   React.useEffect(() => {
@@ -79,19 +97,19 @@ export function ColumnPicker({ open, onClose, columnIds, onChange }: ColumnPicke
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, onClose]);
+  }, [open, handleClose]);
 
   if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-24"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="w-80 rounded-sm border border-zinc-800 bg-zinc-950 shadow-2xl"
@@ -104,7 +122,7 @@ export function ColumnPicker({ open, onClose, columnIds, onChange }: ColumnPicke
           <button
             type="button"
             aria-label="Close column picker"
-            onClick={onClose}
+            onClick={handleClose}
             className="text-zinc-500 hover:text-zinc-200"
           >
             <X className="h-3.5 w-3.5" />
@@ -128,6 +146,7 @@ export function ColumnPicker({ open, onClose, columnIds, onChange }: ColumnPicke
                 }}
                 onDragEnd={() => {
                   dragId.current = null;
+                  commit();
                 }}
                 className={cn(
                   "flex cursor-grab items-center gap-2 px-3 py-1.5 font-mono text-[12px] hover:bg-zinc-900/60",

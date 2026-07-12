@@ -355,6 +355,7 @@ export default function TerminalPage() {
           <ScreenTabs
             expression={expression}
             sort={liveSort}
+            columnIds={columnIds}
             onApply={applyScreen}
           />
           <StatBar rows={rows} />

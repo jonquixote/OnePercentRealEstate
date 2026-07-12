@@ -15,6 +15,8 @@ interface ScreenTabsProps {
   expression: string;
   /** Live sort of the grid. */
   sort: ScreenSort | null;
+  /** Live ordered, visible column ids (from the picker/layout, not stale state). */
+  columnIds: string[];
   /** Apply a screen's expression + sort + columns to the page. */
   onApply: (s: {
     id: string;
@@ -30,7 +32,7 @@ function sameSort(a: ScreenSort | null, b: ScreenSort | null): boolean {
   return a.col === b.col && a.dir === b.dir;
 }
 
-export function ScreenTabs({ expression, sort, onApply }: ScreenTabsProps) {
+export function ScreenTabs({ expression, sort, columnIds, onApply }: ScreenTabsProps) {
   const session = useSessionUser();
   const isPro = session?.tier === "pro";
 
@@ -114,7 +116,7 @@ export function ScreenTabs({ expression, sort, onApply }: ScreenTabsProps) {
           body: JSON.stringify({
             expression: expression.trim(),
             sort,
-            columns: active.columns,
+            columns: columnIds,
           }),
         });
         if (!res.ok) {
@@ -150,7 +152,7 @@ export function ScreenTabs({ expression, sort, onApply }: ScreenTabsProps) {
     } catch {
       flash("Save failed");
     }
-  }, [active, expression, sort, isPro, flash, loadScreens]);
+  }, [active, expression, sort, columnIds, isPro, flash, loadScreens]);
 
   const newScreen = React.useCallback(async () => {
     if (!isPro) {
