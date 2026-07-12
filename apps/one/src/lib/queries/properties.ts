@@ -51,6 +51,10 @@ export function parsePolygonParam(raw?: string): string | null {
   const [fx, fy] = ring[0];
   const [lx, ly] = ring[ring.length - 1];
   if (fx !== lx || fy !== ly) ring.push([fx, fy]); // close the ring
+  // PostGIS rejects a polygon whose ring has fewer than 4 points (i.e. fewer
+  // than 3 distinct vertices). A 3-point *already-closed* ring (e.g. "0,0;0,1;0,0")
+  // yields only 3 ring points and is invalid — reject it before it ever hits SQL.
+  if (ring.length < 4) return null;
   return `POLYGON((${ring.map(([x, y]) => `${x} ${y}`).join(', ')}))`;
 }
 

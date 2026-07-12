@@ -116,7 +116,10 @@ export const PropertyCard = React.memo(function PropertyCard({ property, isSelec
         onSelect?.(property.id);
     }, [onSelect, property.id]);
 
-    const primaryPhoto: string | null = Array.isArray(property.images) && property.images.length > 0 ? property.images[0] : null;
+    const primaryPhoto: string | null =
+      Array.isArray(property.images) && property.images.length > 0 && typeof property.images[0] === 'string'
+        ? property.images[0]
+        : null;
     const media = { primary_photo: primaryPhoto, media_blur: property.media_blur ?? null };
 
     const beds = financial_snapshot?.bedrooms;

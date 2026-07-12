@@ -12,7 +12,7 @@
 --   oper_ro  (group): SELECT + EXECUTE only.
 --   oper_app      IN oper_rw   — Next.js app
 --   oper_worker   IN oper_rw   — all TS workers
---   oper_ml       IN oper_rw + CREATE on schema (loaders CREATE TABLE IF NOT EXISTS)
+--   oper_ml       IN oper_rw   — ML service (INSERT/UPDATE only; no DDL)
 --   oper_tileserv IN oper_ro   — pg_tileserv (tiles are read-only by definition)
 --
 -- Migrations/backups continue to run as postgres.
@@ -53,10 +53,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   GRANT EXECUTE ON FUNCTIONS TO oper_ro;
 
--- ML loaders create tables directly (CREATE TABLE IF NOT EXISTS pattern);
--- objects they create must also be readable by the other tiers.
-GRANT CREATE ON SCHEMA public TO oper_ml;
-ALTER DEFAULT PRIVILEGES FOR ROLE oper_ml IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO oper_rw;
-ALTER DEFAULT PRIVILEGES FOR ROLE oper_ml IN SCHEMA public
-  GRANT SELECT ON TABLES TO oper_ro;
+-- Note: oper_ml gets NO CREATE. It only writes to pre-existing tables
+-- (rent_predictions, rent_models) created by migrations run as postgres.
+-- One-off seed/migration scripts (seed_counties.py, migrate_phase6.py) run
+-- as postgres, never as oper_ml, so least-privilege holds end-to-end.

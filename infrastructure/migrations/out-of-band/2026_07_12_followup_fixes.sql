@@ -82,3 +82,10 @@ ALTER TABLE mv_cluster_tiles SET (
   autovacuum_vacuum_scale_factor = 0.02,
   autovacuum_analyze_scale_factor = 0.02
 );
+
+-- 4) Least-privilege tighten (review finding): oper_ml must NOT hold CREATE
+--    on schema public. The ML service only INSERT/UPDATEs pre-existing tables
+--    (rent_predictions, rent_models); one-off seed/migration scripts run as
+--    postgres. The roles migration originally granted CREATE by mistake.
+REVOKE CREATE ON SCHEMA public FROM oper_ml;
+

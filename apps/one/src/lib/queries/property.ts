@@ -90,7 +90,9 @@ export function shapePropertyRow(row: any) {
           : [];
       images.push(...alts);
     }
-    images = images.map((url) => url.trim()).filter((url) => url.length > 0);
+    images = images
+      .filter((url: any) => typeof url === 'string' && url.length > 0)
+      .map((url: string) => url.trim());
   }
 
   let rent = Number(row.estimated_rent);

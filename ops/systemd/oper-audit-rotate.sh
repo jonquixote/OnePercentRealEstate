@@ -25,10 +25,11 @@ mkdir -p "$ARCHIVE_DIR"
 
 # 1) ensure current + next 3 months exist (idempotent; a failure here aborts
 #    via set -e so OnFailure alerts instead of silently sinking to DEFAULT).
+base_month=$(date -u +%Y-%m-01)
 for i in 0 1 2 3; do
-  m=$(date -u -d "+${i} month" +%Y-%m-01)
-  pname="${AUDIT}_p$(date -u -d "+${i} month" +%Y_%m)"
-  if [ -z "$($PG -c "SELECT 1 FROM pg_class WHERE relname='$pname'" 2>/dev/null)" ]; then
+  m=$(date -u -d "$base_month +${i} month" +%Y-%m-01)
+  pname="${AUDIT}_p$(date -u -d "$base_month +${i} month" +%Y_%m)"
+  if [ -z "$($PG -c "SELECT 1 FROM pg_catalog.pg_class WHERE relname='$pname'" 2>/dev/null)" ]; then
     to=$(date -u -d "$m +1 month" +%Y-%m-01)
     echo "creating partition $pname [$m -> $to]"
     $PG -c "CREATE TABLE IF NOT EXISTS $pname PARTITION OF $AUDIT FOR VALUES FROM ('$m') TO ('$to')"
@@ -38,7 +39,7 @@ done
 # 2) archive + drop months fully older than retention.
 now_minus_ret=$(date -u -d "-${RETENTION_DAYS} days" +%Y-%m-%d)
 
-for pname in $($PG -c "SELECT inhrelid::regclass::text FROM pg_inherits WHERE inhparent='$AUDIT'::regclass" 2>/dev/null | grep -E "_p[0-9]{4}_[0-9]{2}$" || true); do
+for pname in $($PG -c "SELECT c.relname FROM pg_catalog.pg_inherits i JOIN pg_catalog.pg_class c ON c.oid = i.inhrelid WHERE i.inhparent='$AUDIT'::regclass" 2>/dev/null | grep -E "_p[0-9]{4}_[0-9]{2}$" || true); do
   ym=${pname#"${AUDIT}_p"}
   y=${ym:0:4}; mo=${ym:5:2}
   month_end=$(date -u -d "${y}-${mo}-01 +1 month" +%Y-%m-%d)

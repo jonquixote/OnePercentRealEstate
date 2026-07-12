@@ -16,8 +16,13 @@ export function apiError(
   code: string,
   message: string,
   extra?: Record<string, unknown>,
+  headers?: Record<string, string>,
 ): NextResponse {
-  return NextResponse.json({ error: { code, message }, ...extra }, { status });
+  const res = NextResponse.json({ error: { code, message }, ...extra }, { status });
+  if (headers) {
+    for (const [k, v] of Object.entries(headers)) res.headers.set(k, v);
+  }
+  return res;
 }
 
 export type ParsedQuery<T> = { ok: true; data: T } | { ok: false; response: NextResponse };
