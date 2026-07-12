@@ -8,6 +8,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/onepercent
 EnvironmentFile=/etc/oper.env
+EnvironmentFile=-/etc/oper-role-worker.env
 ExecStart=/usr/bin/node apps/worker/dist/watchlist-alerts.js
 Restart=on-failure
 RestartSec=5

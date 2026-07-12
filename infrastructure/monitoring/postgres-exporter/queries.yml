@@ -65,14 +65,21 @@ rental_ingest_by_source:
 # See ops/systemd/postgres-tuning.md. Restart postgres-exporter after editing.
 
 pg_stat_statements_top:
+  # Aggregate by queryid: the same normalized query runs under multiple
+  # roles (oper_app/worker/postgres → same queryid, different userid), so a
+  # bare SELECT yields duplicate (queryid) label sets and the exporter fails
+  # the WHOLE scrape with 500 "collected before". GROUP BY makes queryid
+  # unique; mean is call-weighted across roles.
   query: |
     SELECT
       queryid::text AS queryid,
-      round(mean_exec_time)::float AS mean_exec_ms,
-      calls::float AS calls,
-      rows::float AS rows
+      round(sum(mean_exec_time * calls) / NULLIF(sum(calls), 0))::float AS mean_exec_ms,
+      sum(calls)::float AS calls,
+      sum(rows)::float AS rows
     FROM pg_stat_statements
-    ORDER BY mean_exec_time DESC
+    WHERE queryid IS NOT NULL
+    GROUP BY queryid
+    ORDER BY sum(mean_exec_time * calls) / NULLIF(sum(calls), 0) DESC
     LIMIT 10
   master: true
   metrics:

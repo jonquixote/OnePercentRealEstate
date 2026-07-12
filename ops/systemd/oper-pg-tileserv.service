@@ -7,6 +7,7 @@ Requires=oper-postgres.service
 Type=simple
 User=root
 EnvironmentFile=/etc/oper.env
+EnvironmentFile=-/etc/oper-role-tileserv.env
 WorkingDirectory=/usr/local/share/pg_tileserv
 ExecStart=/usr/local/bin/pg_tileserv
 Restart=on-failure

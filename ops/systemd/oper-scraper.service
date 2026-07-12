@@ -8,6 +8,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/onepercent
 EnvironmentFile=/etc/oper.env
+EnvironmentFile=-/etc/oper-role-worker.env
 Environment="PYTHONPATH=/opt/onepercent/services/scraper_service:/opt/onepercent/services"
 ExecStart=/opt/onepercent/services/ml/.venv/bin/uvicorn \
     services.scraper_service.main:app \

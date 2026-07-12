@@ -612,7 +612,9 @@ services:
     restart: always
     network_mode: host
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres?sslmode=disable"
+      # Least-privilege (A3): pg_monitor role, not superuser. Falls back to
+      # postgres only if OPER_EXPORTER_DB_PASSWORD is unset.
+      DATA_SOURCE_NAME: "postgresql://oper_exporter:${OPER_EXPORTER_DB_PASSWORD:-${POSTGRES_PASSWORD}}@127.0.0.1:5432/postgres?sslmode=disable"
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
     command:
       - "--web.listen-address=127.0.0.1:9187"
