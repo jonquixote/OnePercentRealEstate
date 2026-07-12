@@ -1,11 +1,18 @@
--- Terminal screens (W1) re-key on login/signup alongside saved_searches.
+-- Terminal screens (W1) re-key on login/signup alongside saved_searches, PLUS
+-- the screen_alerts re-key from AL1.
 --
 -- Append-only: the DB is treated as already-migrated, so we cannot edit
--- 2026_07_12_identity_claim.sql in place. We re-define claim_anon_identity
--- here with the SAME body plus a terminal_screens re-key block that mirrors
--- the saved_searches pattern (skip any (user_id, name) that would collide
--- with an existing account screen, leaving the older anon row in place).
--- Idempotent: a second call finds no rows owned by the anon id.
+-- 2026_07_12_identity_claim.sql in place. This file sorts AFTER
+-- 2026_07_12_screen_alerts_claim.sql, so its CREATE OR REPLACE is the LAST one
+-- applied and must contain the FULL function body (saved_searches +
+-- terminal_screens + screen_alerts). If a later claim migration is added it
+-- must also carry all three re-key blocks so the final applied definition is
+-- complete.
+--
+-- Each re-key mirrors the saved_searches pattern: skip any (user_id, name) /
+-- (user_id, screen_id) that would collide with an existing account row,
+-- leaving the older anon row in place. Idempotent: a second call finds no
+-- rows owned by the anon id.
 
 CREATE OR REPLACE FUNCTION claim_anon_identity(p_account text, p_anon text)
 RETURNS int LANGUAGE plpgsql AS $$
@@ -32,8 +39,17 @@ BEGIN
        SELECT 1 FROM terminal_screens t2
         WHERE t2.user_id = p_account AND t2.name = t.name
      );
-
   GET DIAGNOSTICS n = n + ROW_COUNT;
+
+  UPDATE screen_alerts sa
+     SET user_id = p_account
+   WHERE sa.user_id = p_anon
+     AND NOT EXISTS (
+       SELECT 1 FROM screen_alerts sa2
+        WHERE sa2.user_id = p_account AND sa2.screen_id = sa.screen_id
+     );
+  GET DIAGNOSTICS n = n + ROW_COUNT;
+
   RETURN n;
 END;
 $$;
