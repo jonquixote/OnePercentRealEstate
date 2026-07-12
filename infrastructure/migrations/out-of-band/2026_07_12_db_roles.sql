@@ -12,7 +12,7 @@
 --   oper_ro  (group): SELECT + EXECUTE only.
 --   oper_app      IN oper_rw   — Next.js app
 --   oper_worker   IN oper_rw   — all TS workers
---   oper_ml       IN oper_rw   — ML service (INSERT/UPDATE only; no DDL)
+--   oper_ml       IN oper_rw   — ML service (CRUD via oper_rw; no CREATE/DDL)
 --   oper_tileserv IN oper_ro   — pg_tileserv (tiles are read-only by definition)
 --
 -- Migrations/backups continue to run as postgres.

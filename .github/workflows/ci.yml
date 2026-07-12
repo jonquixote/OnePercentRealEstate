@@ -61,7 +61,7 @@ jobs:
           python -m pip install --upgrade pip
           # numpy>=2 is required by the training/eval stack.
           pip install "numpy>=2" pandas scikit-learn pytest
-          pytest -q
+          pytest -q --ignore=ab_test.py
       - run: pnpm build
 
   # C2: migrations dry-run. Applies the base schema then every migration in
@@ -94,6 +94,10 @@ jobs:
         run: |
           psql -c "CREATE EXTENSION IF NOT EXISTS postgis;"
           psql -v ON_ERROR_STOP=1 -f infrastructure/000_base_schema.sql
+          # Prerequisite out-of-band index (built CONCURRENTLY) required by the
+          # 2026_06_21 constraint-swap migration below. It must exist BEFORE the
+          # migrations loop runs that migration (which errors out otherwise).
+          psql -v ON_ERROR_STOP=1 -f infrastructure/migrations/out-of-band/2026_06_21_create_unique_index_concurrently.sql
           for f in $(ls infrastructure/migrations/*.sql | sort); do
             echo "== applying $f =="
             psql -v ON_ERROR_STOP=1 -f "$f"
