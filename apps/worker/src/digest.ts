@@ -215,6 +215,12 @@ async function runScreenAlertQuery(
   const saleTypeDefault = compiled.usedColumns.includes('sale_type')
     ? ''
     : `sale_type = 'standard' AND`;
+  // Re-base the compiled `$N` placeholders by +1 so they don't collide with
+  // the `$1` we use for `created_at > $1` (lastRunAt). query-lang's compile()
+  // emits its own $1-based placeholders, so without this shift `price_cut_pct
+  // > $1` would bind to lastRunAt (a timestamptz) instead of the expression
+  // value, causing a type error that silently killed the alert query.
+  const whereSql = compiled.whereSql.replace(/\$(\d+)/g, (_, n) => `$${Number(n) + 1}`);
   try {
     await client.query('BEGIN');
     await client.query('SET LOCAL statement_timeout = 5000');
@@ -226,7 +232,7 @@ async function runScreenAlertQuery(
                primary_photo
         FROM listings
         WHERE listing_type = 'for_sale'
-          AND ${saleTypeDefault} (${compiled.whereSql})
+          AND ${saleTypeDefault} (${whereSql})
           AND created_at > $1
         ORDER BY created_at DESC
         LIMIT 20
