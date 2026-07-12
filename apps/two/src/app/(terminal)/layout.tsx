@@ -16,6 +16,7 @@ import {
   useHotkey,
 } from "@oper/primitives";
 import { SelectionProvider } from "@/lib/selection";
+import { useSessionUser } from "@/lib/useSessionUser";
 import { FilterRail } from "@/components/FilterRail";
 import { PropertyInspector } from "@/components/PropertyInspector";
 import { FilterExpression } from "@/components/FilterExpression";
@@ -36,6 +37,8 @@ export default function TerminalLayout({
   const [filterValue, setFilterValue] = React.useState("");
   const pathname = usePathname();
   const portfolioActive = pathname?.startsWith("/portfolio") ?? false;
+  const session = useSessionUser();
+  const isPro = session?.tier === "pro";
 
   // Lightweight layout persistence. v4 of react-resizable-panels dropped the
   // single-prop `autoSaveId`; the recommended replacement (`useDefaultLayout`)
@@ -101,18 +104,32 @@ export default function TerminalLayout({
           </nav>
 
           <div className="mx-auto w-full max-w-xl">
-            <FilterExpression
-              value={filterValue}
-              onChange={setFilterValue}
-              onValidChange={(expr) => {
-                // Notify the page beneath; it owns the data fetch.
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(
-                    new CustomEvent("two:filter-change", { detail: expr }),
-                  );
-                }
-              }}
-            />
+            {isPro ? (
+              <FilterExpression
+                value={filterValue}
+                onChange={setFilterValue}
+                onValidChange={(expr) => {
+                  // Notify the page beneath; it owns the data fetch.
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("two:filter-change", { detail: expr }),
+                    );
+                  }
+                }}
+              />
+            ) : (
+              <div className="flex items-center gap-2 rounded-md border border-amber-700/60 bg-amber-500/15 px-3 py-1.5 font-mono text-[12px] text-amber-200">
+                <span className="truncate">
+                  Custom filters are a Pro feature
+                </span>
+                <Link
+                  href="/pricing"
+                  className="shrink-0 underline underline-offset-2 hover:text-amber-50"
+                >
+                  See pricing →
+                </Link>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
