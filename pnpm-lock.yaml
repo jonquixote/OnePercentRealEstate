@@ -283,6 +283,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@oper/query-lang':
+        specifier: workspace:*
+        version: link:../../packages/query-lang
       ioredis:
         specifier: ^5.11.0
         version: 5.11.0

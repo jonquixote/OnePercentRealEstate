@@ -41,6 +41,10 @@ export function ScreenTabs({ expression, sort, columnIds, onApply }: ScreenTabsP
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [renameValue, setRenameValue] = React.useState("");
   const [toast, setToast] = React.useState<string | null>(null);
+  // screen_id -> alert state for the "Alert me" toggle.
+  const [alertsById, setAlertsById] = React.useState<
+    Record<string, { enabled: boolean; last_run_at: string | null }>
+  >({});
 
   const tabs: ScreenLike[] = React.useMemo(
     () => [
@@ -61,9 +65,28 @@ export function ScreenTabs({ expression, sort, columnIds, onApply }: ScreenTabsP
     }
   }, []);
 
+  const loadAlerts = React.useCallback(async () => {
+    if (!session) return; // alerts require a logged-in user
+    try {
+      const res = await fetch("/api/screen-alerts", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as Array<{
+        screen_id: number;
+        enabled: boolean;
+        last_run_at: string | null;
+      }>;
+      const map: Record<string, { enabled: boolean; last_run_at: string | null }> = {};
+      for (const a of data) map[String(a.screen_id)] = { enabled: a.enabled, last_run_at: a.last_run_at };
+      setAlertsById(map);
+    } catch {
+      /* non-fatal */
+    }
+  }, [session]);
+
   React.useEffect(() => {
     void loadScreens();
-  }, [loadScreens]);
+    void loadAlerts();
+  }, [loadScreens, loadAlerts]);
 
   const flash = React.useCallback((msg: string) => {
     setToast(msg);
@@ -228,6 +251,37 @@ export function ScreenTabs({ expression, sort, columnIds, onApply }: ScreenTabsP
     [renameValue, loadScreens, flash],
   );
 
+  const toggleAlert = React.useCallback(
+    async (screenId: number, enabled: boolean) => {
+      if (!isPro) {
+        flash("Alert me is a Terminal Pro feature");
+        return;
+      }
+      try {
+        const res = await fetch("/api/screen-alerts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ screen_id: screenId, enabled }),
+        });
+        if (!res.ok) {
+          flash("Could not update alert");
+          return;
+        }
+        setAlertsById((prev) => ({
+          ...prev,
+          [String(screenId)]: {
+            enabled,
+            last_run_at: prev[String(screenId)]?.last_run_at ?? null,
+          },
+        }));
+        flash(enabled ? "Alerts on — we'll email new matches" : "Alerts off");
+      } catch {
+        flash("Could not update alert");
+      }
+    },
+    [isPro, flash],
+  );
+
   // ---- Hotkeys --------------------------------------------------------------
   useHotkey("cmd+s", () => void save(), {
     description: "Save current state into active screen",
@@ -327,6 +381,31 @@ export function ScreenTabs({ expression, sort, columnIds, onApply }: ScreenTabsP
           <span className="text-amber-400">Upgrade to Pro</span> to save custom
           scans.
         </div>
+      ) : null}
+
+      {active && active.kind === "user" ? (
+        isPro ? (
+          <div className="flex items-center gap-2 border-t border-zinc-800/60 bg-zinc-900/40 px-3 py-1 font-mono text-[10px] text-zinc-400">
+            <input
+              type="checkbox"
+              aria-label="Alert me about new matches"
+              checked={alertsById[String(active.id)]?.enabled ?? false}
+              onChange={(e) => void toggleAlert(Number(active.id), e.target.checked)}
+              className="accent-amber-400"
+            />
+            <span>
+              Alert me — email new matches for this screen (daily, max 6).
+              {alertsById[String(active.id)]?.last_run_at
+                ? ` Last sent ${new Date(alertsById[String(active.id)]!.last_run_at!).toLocaleDateString()}.`
+                : ""}
+            </span>
+          </div>
+        ) : (
+          <div className="border-t border-zinc-800/60 bg-zinc-900/40 px-3 py-1 font-mono text-[10px] text-zinc-400">
+            <span className="text-amber-400">Alert me</span> is a Terminal Pro
+            feature. Upgrade to get daily email alerts on your screens.
+          </div>
+        )
       ) : null}
 
       {toast ? (
