@@ -223,6 +223,7 @@ export function TerminalClient({
     const ctrl = new AbortController();
     queryAbort.current = ctrl;
     setQueryState('loading');
+    setLatencyMs(null);
     const t0 = performance.now();
     const serverKey = serverSortKey(sort?.col);
     const orderBy = serverKey && sort ? { col: serverKey, dir: sort.dir } : undefined;
@@ -335,18 +336,6 @@ export function TerminalClient({
       document.getElementById("terminal-table")?.focus();
     },
     { description: "Focus table", group: "Panes" },
-  );
-
-  // ---- Search focus (/) --------------------------------------------------
-  useHotkey(
-    "/",
-    () => {
-      const input = document.getElementById("terminal-search");
-      if (input instanceof HTMLInputElement) {
-        input.focus();
-      }
-    },
-    { description: "Focus search", group: "Navigation", preventDefault: true },
   );
 
   // ---- Portfolio navigation (g p) ----------------------------------------

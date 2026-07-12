@@ -57,7 +57,7 @@ export const StatBar = React.memo(function StatBar({
           {screenName ? (
             <span className="text-zinc-400">⟨{screenName}⟩</span>
           ) : null}
-          {latencyMs != null ? <span className="text-zinc-500">⌚{latencyMs}ms</span> : null}
+          {latencyMs != null ? <span className="text-zinc-500">~{latencyMs}ms</span> : null}
           <span>live · 60s ttl</span>
         </span>
       </div>
