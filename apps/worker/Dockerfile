@@ -33,11 +33,13 @@ COPY --from=deps /app/apps/worker/node_modules ./apps/worker/node_modules
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json tsconfig.base.json ./
 COPY apps/worker ./apps/worker
 COPY packages/query-lang ./packages/query-lang
-# The digest worker (AL1 screen alerts) imports @oper/query-lang, a TS-only
-# workspace package with no compiled dist. We run the digest worker via tsx
-# (a worker devDependency, present in node_modules) so it can transpile the TS
-# on the fly; query-lang's source is therefore copied above for the symlink
-# target. The other worker services keep running their compiled dist output.
+# The digest worker (AL1 screen alerts) imports @oper/query-lang, which — like
+# the other @oper/* workspace packages — is published as TypeScript SOURCE
+# (its package.json `exports` points at ./src/index.ts; Next consumes it the
+# same way in dev). The digest worker therefore runs via the `tsx` binary
+# (a production dependency of @oper/worker) so it can transpile the TS at
+# runtime; query-lang's source is copied above to satisfy the workspace symlink.
+# The other worker services keep running their compiled `dist` output.
 RUN pnpm --filter=@oper/worker build
 
 # ---------------------------------------------------------------------------
@@ -56,8 +58,9 @@ COPY --from=builder --chown=worker:nodejs /app/apps/worker/dist ./apps/worker/di
 COPY --from=builder --chown=worker:nodejs /app/apps/worker/package.json ./apps/worker/
 COPY --from=builder --chown=worker:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=worker:nodejs /app/apps/worker/node_modules ./apps/worker/node_modules
-# @oper/query-lang is a workspace symlink into packages/query-lang; include its
-# built dist (the `default` export target) in the runner image.
+# @oper/query-lang is a workspace symlink into packages/query-lang; the digest
+# worker's `tsx` runtime resolves `@oper/query-lang` to its ./src/index.ts
+# source, so we ship the whole package (source + built worker dist).
 COPY --from=builder --chown=worker:nodejs /app/packages/query-lang ./packages/query-lang
 
 USER worker
