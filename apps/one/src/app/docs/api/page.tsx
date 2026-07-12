@@ -10,11 +10,11 @@ const EXAMPLES: { title: string; prose: string; code: string }[] = [
     title: '1. Create an API key (Pro only)',
     prose:
       'Keys are created from an authenticated session. Save the cookie from login, then POST to /api/v1/keys. The plaintext key is returned exactly once — store it somewhere safe.',
-    code: `curl -c cookiejar.txt -X POST https://octavo.press/api/auth/login \\
+    code: `curl -c cookiejar.txt -X POST https://one.octavo.press/api/auth/login \\
   -H 'Content-Type: application/json' \\
   -d '{"email":"you@example.com","password":"..."}'
 
-curl -b cookiejar.txt -X POST https://octavo.press/api/v1/keys \\
+curl -b cookiejar.txt -X POST https://one.octavo.press/api/v1/keys \\
   -H 'Content-Type: application/json' \\
   -d '{"name":"my-partner-app"}'
 # => { "id": 1, "name": "my-partner-app", "key": "opk_...", "created_at": "..." }`,
@@ -24,21 +24,21 @@ curl -b cookiejar.txt -X POST https://octavo.press/api/v1/keys \\
     prose:
       'Pass the key as a Bearer token. The filter language is the same query language used in the terminal.',
     code: `curl -H 'Authorization: Bearer opk_...' \\
-  'https://octavo.press/api/v1/listings?filter=rent_price_ratio >= 0.01'`,
+  'https://one.octavo.press/api/v1/listings?filter=rent_price_ratio >= 0.01'`,
   },
   {
     title: '3. A more complex filter',
     prose:
       'Combine predicates with AND / OR. The filter is re-compiled server-side and parameterized — never interpolated as raw SQL.',
     code: `curl -H 'Authorization: Bearer opk_...' \\
-  'https://octavo.press/api/v1/listings?filter=price_cut_pct > 0.05 AND rent_price_ratio >= 0.01'`,
+  'https://one.octavo.press/api/v1/listings?filter=price_cut_pct > 0.05 AND rent_price_ratio >= 0.01'`,
   },
   {
     title: '4. Non-Pro owner → 403',
     prose:
       'API keys are Pro-only. If the key belongs to a free-tier account the endpoint returns PRO_REQUIRED.',
     code: `curl -i -H 'Authorization: Bearer opk_free_tier_key' \\
-  'https://octavo.press/api/v1/listings?filter=rent_price_ratio >= 0.01'
+  'https://one.octavo.press/api/v1/listings?filter=rent_price_ratio >= 0.01'
 # => 403 {"error":"PRO_REQUIRED"}`,
   },
   {
@@ -46,7 +46,7 @@ curl -b cookiejar.txt -X POST https://octavo.press/api/v1/keys \\
     prose:
       'A revoked key — or any key that does not match a stored hash — is rejected with 401. Rotate keys from /api/v1/keys (DELETE ?id=).',
     code: `curl -i -H 'Authorization: Bearer opk_revoked_or_bogus' \\
-  'https://octavo.press/api/v1/listings?filter=rent_price_ratio >= 0.01'
+  'https://one.octavo.press/api/v1/listings?filter=rent_price_ratio >= 0.01'
 # => 401 {"error":"invalid or revoked API key"}`,
   },
 ];

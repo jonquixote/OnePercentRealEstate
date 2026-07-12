@@ -62,7 +62,6 @@ export function TerminalClient({
   isPro,
 }: {
   isPro: boolean;
-  tier: "free" | "pro" | null;
 }) {
   const { data, isLoading, isError, error } = useViewport(VIEWPORT);
   const { selected, setSelected } = useSelection();
@@ -176,9 +175,15 @@ export function TerminalClient({
       sort: ScreenSort | null;
       columns: string[];
     }) => {
-      setExpression(s.expression.trim());
+      const expr = s.expression.trim();
+      setExpression(expr);
       setSort(s.sort ?? DEFAULT_SORT);
       setActiveScreen({ id: s.id, kind: s.kind, name: s.name });
+      // Keep the top filter bar in sync with the applied screen by routing
+      // through the same `two:filter-change` channel the bar emits on edit.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("two:filter-change", { detail: expr }));
+      }
       // Prefer a localStorage override (last user edit for this screen), then
       // the screen's stored columns, then the default set.
       let ids = s.columns.filter(Boolean);
