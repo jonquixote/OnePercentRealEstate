@@ -42,6 +42,8 @@ const ALLOWED_COLUMNS = new Set([
   'rent_low',
   'rent_high',
   'hoa_fee',
+  // Wave 4 (W1 pro terminal): 1%-rule screen needs the generated rent/price ratio
+  'rent_price_ratio',
 ]);
 
 export interface CompileResult {

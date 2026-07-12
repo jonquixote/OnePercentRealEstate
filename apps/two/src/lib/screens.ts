@@ -44,7 +44,7 @@ export const BUILTIN_SCREENS: BuiltinScreen[] = [
   {
     id: 'builtin:clears',
     name: 'Clears the line',
-    expression: 'ratio >= target',
+    expression: 'rent_price_ratio >= 0.01',
     columns: [...BUILTIN_COLUMNS],
     sort: DEFAULT_SORT,
   },
@@ -58,14 +58,14 @@ export const BUILTIN_SCREENS: BuiltinScreen[] = [
   {
     id: 'builtin:stale-motivated',
     name: 'Stale + motivated',
-    expression: 'dom > 90 and motivated_score > 50',
+    expression: 'days_on_market > 90 AND price_cut_pct > 0',
     columns: [...BUILTIN_COLUMNS],
     sort: { col: 'dom', dir: 'desc' },
   },
   {
     id: 'builtin:fresh-today',
     name: 'Fresh today',
-    expression: 'dom <= 1',
+    expression: 'days_on_market <= 1',
     columns: [...BUILTIN_COLUMNS],
     sort: { col: 'dom', dir: 'asc' },
   },
