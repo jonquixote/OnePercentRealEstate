@@ -1,0 +1,45 @@
+server {
+    server_name two.octavo.press;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    # Auth endpoints (shared app on 3001): brute-force zone
+    location /api/auth/ {
+        limit_req zone=oper_auth burst=5 nodelay;
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://127.0.0.1:3001;
+        proxy_read_timeout 60s;
+    }
+
+    location /api/ {
+        limit_req zone=oper_api burst=60 nodelay;
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://127.0.0.1:3001;
+        proxy_read_timeout 60s;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://127.0.0.1:3002;
+        proxy_read_timeout 60s;
+    }
+
+    listen [::]:443 ssl;
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/two.octavo.press/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/two.octavo.press/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+server {
+    if ($host = two.octavo.press) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80;
+    listen [::]:80;
+    server_name two.octavo.press;
+    return 404;
+}
