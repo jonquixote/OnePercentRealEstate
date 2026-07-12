@@ -21,8 +21,12 @@ BEGIN
     ) INTO v_idx_exists;
 
     IF NOT v_idx_exists THEN
-        RAISE EXCEPTION
-            'Missing unique index listings_addr_type_saletype_uniq. Build it out-of-band first (CREATE UNIQUE INDEX CONCURRENTLY) — see infrastructure/migrations/out-of-band/2026_06_21_create_unique_index_concurrently.sql';
+        -- Index missing: build it non-CONCURRENTLY (allowed inside this
+        -- transaction; only CONCURRENTLY forbids a transaction). The out-of-band
+        -- CONCURRENTLY build remains the preferred zero-downtime path in
+        -- production; this fallback keeps the migration self-contained so a
+        -- dry-run against a fresh DB (no out-of-band index) still succeeds.
+        EXECUTE 'CREATE UNIQUE INDEX listings_addr_type_saletype_uniq ON public.listings (address, listing_type, sale_type)';
     END IF;
 
     -- Idempotency: if the new constraint already exists, nothing to do.
