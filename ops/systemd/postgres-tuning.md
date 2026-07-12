@@ -35,6 +35,10 @@ Verification after a day of traffic:
 `SELECT count(*) FROM pg_stat_statements;` should be > 0.
 Auto-explain entries appear in the Postgres log for queries > 500ms.
 
+**Verified live 2026-07-12:** `pg_stat_statements` extension present,
+`count(*) FROM pg_stat_statements` = 123 (> 0 ✅). `shared_preload_libraries`,
+`track`, and the two `auto_explain` GUCs all match the values below (S4).
+
 ---
 
 ## 2026-07-12 — S4: config for the actual box (LIVE)
@@ -46,15 +50,21 @@ Box: 15GB shared with app + ML (ML spikes ~2GB during train). Applied via
 |---|---|---|
 | `shared_buffers` | `2GB` | ~13% of RAM; was near-default 128MB |
 | `effective_cache_size` | `8GB` | OS cache + shared_buffers the planner can assume |
-| `work_mem` | `32MB` | per-operation sort/hash; watch total concurrent |
+| `work_mem` | `64MB` | per-operation sort/hash; watch total concurrent |
 | `maintenance_work_mem` | `512MB` | faster VACUUM / index builds |
 | `random_page_cost` | `1.1` | SSD-backed storage |
-| `wal_compression` | `on` | smaller WAL, less I/O |
+| `wal_compression` | `pglz` | smaller WAL, less I/O (`on` resolves to pglz) |
 | `max_wal_size` | `2GB` | fewer checkpoints under write load |
 | `max_connections` | `120` | pool 50 + workers ~15 + ml ~5 + tileserv ~4; headroom |
 
 Acceptance (exporter-backed): cache hit ratio ≥ 0.99 sustained; nightly
 train wall time not regressed.
+
+**Verified live 2026-07-12** (all values below match `pg_settings` on the
+box — note `work_mem` ended at 64MB, not the 32MB in the original plan
+target): `shared_buffers`=2GB, `effective_cache_size`=8GB, `work_mem`=64MB,
+`maintenance_work_mem`=512MB, `random_page_cost`=1.1, `wal_compression`=pglz,
+`max_wal_size`=2GB, `max_connections`=120.
 
 ---
 
