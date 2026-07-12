@@ -31,8 +31,8 @@ Scope: top statements by `total_exec_time`, `pg_stat_statements` excluded.
    `media_last_checked` and has `idx_scan = 0` — the planner cannot use it to satisfy
    the `media_url_status` filter, so it seq-scans. Rank 3 (full histogram) is
    inherently unindexable.
-   - Action (S1): replace `idx_listings_media_recheck` with
-     `idx_listings_media_pending (media_url_status, media_last_checked) WHERE media_url_status = 0 OR media_url_status >= 500`. Leading column = the filter column, so the worker's OR becomes a bitmap scan of ~%rows that actually need work.
+    - Action (S1): replace `idx_listings_media_recheck` with
+      `idx_listings_media_pending (media_last_checked NULLS FIRST) WHERE media_url_status = 0 OR media_url_status >= 500`. It must lead with `media_last_checked NULLS FIRST` so the planner can satisfy the worker's `ORDER BY media_last_checked NULLS FIRST LIMIT 1000` as a plain Index Scan (a `media_url_status`-led or `NULLS LAST` index is ignored). EXPLAIN proof: Parallel Seq Scan 186K buffers / ~499ms → Index Scan 182 buffers / ~1.1ms.
    - Action (follow-up, app-side, out of this DB task): (a) have the worker also require
      `primary_photo IS NOT NULL` so it reuses the existing `idx_listings_media_health`;
      (b) cache the rank-3 histogram instead of recomputing it every cycle.
@@ -55,10 +55,16 @@ Scope: top statements by `total_exec_time`, `pg_stat_statements` excluded.
 ## Index audit (S1) — see `infrastructure/migrations/out-of-band/2026_07_12_indexes.sql`
 
 Added:
-- `idx_listings_media_pending` (replaces unused `idx_listings_media_recheck`)
+- `idx_listings_media_pending (media_last_checked NULLS FIRST) WHERE media_url_status = 0 OR >= 500` (replaces unused `idx_listings_media_recheck`)
 - `idx_listings_type_sale_price_geom` (listing_type, sale_type, price) WHERE geom IS NOT NULL
 - `idx_listings_zip_created` (zip_code, created_at DESC)
 - `idx_rental_source_date` (source, listing_date DESC)
+
+Kept pending ≥3-day re-triage (idx_scan = 0 at ~4h; the stats window post-O1
+reset misses nightly jobs, so dropping now is premature):
+- `idx_listings_type_sale_price_geom` — search filters on these columns but the
+  viewport path uses the geom gist; `idx_listings_zip_created` IS used by the
+  digest / saved-search freshness queries (`zip_code + created_at`), so keep.
 
 Dropped (non-unique, `idx_scan = 0` over observed window):
 - `idx_listings_broker_name`, `idx_listings_census_tract`, `idx_listings_mls_id`,

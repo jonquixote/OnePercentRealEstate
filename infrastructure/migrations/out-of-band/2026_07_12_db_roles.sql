@@ -23,8 +23,14 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'oper_app') THEN CREATE ROLE oper_app LOGIN IN ROLE oper_rw; END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'oper_worker') THEN CREATE ROLE oper_worker LOGIN IN ROLE oper_rw; END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'oper_ml') THEN CREATE ROLE oper_ml LOGIN IN ROLE oper_rw; END IF;
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'oper_tileserv') THEN CREATE ROLE oper_tileserv LOGIN IN ROLE oper_ro; END IF;
+   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'oper_tileserv') THEN CREATE ROLE oper_tileserv LOGIN IN ROLE oper_ro; END IF;
+   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'oper_exporter') THEN CREATE ROLE oper_exporter LOGIN IN ROLE oper_ro; END IF;
 END $$;
+
+-- oper_exporter reads cluster-wide stats for postgres-exporter (pg_stat_statements,
+-- pg_stat_*, replication). It must NOT write. pg_monitor grants the read privileges
+-- it needs; it is also a member of oper_ro for table reads.
+GRANT pg_monitor TO oper_exporter;
 
 GRANT USAGE ON SCHEMA public TO oper_rw, oper_ro;
 

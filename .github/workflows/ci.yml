@@ -90,11 +90,23 @@ jobs:
       PGDATABASE: postgres
     steps:
       - uses: actions/checkout@v4
-      - name: Apply base schema + all migrations in filename order
+      - name: Apply base schema + all migrations + hardening out-of-band files
         run: |
           psql -c "CREATE EXTENSION IF NOT EXISTS postgis;"
           psql -v ON_ERROR_STOP=1 -f infrastructure/000_base_schema.sql
           for f in $(ls infrastructure/migrations/*.sql | sort); do
+            echo "== applying $f =="
+            psql -v ON_ERROR_STOP=1 -f "$f"
+          done
+          # C2: also dry-run the backend-db-hardening out-of-band migrations
+          # (roles, index audit, audit partitioning) — the riskiest SQL was not
+          # previously exercised. These run after the base migrations so their
+          # tables exist; the S2 swap's DO-block guard makes re-runs a no-op.
+          for f in \
+            infrastructure/migrations/out-of-band/2026_07_12_db_roles.sql \
+            infrastructure/migrations/out-of-band/2026_07_12_indexes.sql \
+            infrastructure/migrations/out-of-band/2026_07_12_audit_partition.sql \
+            infrastructure/migrations/out-of-band/2026_07_12_followup_fixes.sql; do
             echo "== applying $f =="
             psql -v ON_ERROR_STOP=1 -f "$f"
           done

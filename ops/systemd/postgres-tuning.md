@@ -88,9 +88,13 @@ every few minutes.
 
 | Table | scale_factor | Trigger (dead rows) |
 |---|---|---|
-| mv_cluster_tiles | 0.05 (+analyze 0.05) | ~85K instead of ~338K |
+| mv_cluster_tiles | 0.02 (+analyze 0.02) | ~34K instead of ~338K |
 | listings | 0.05 | ~50K instead of ~200K |
 | rental_listings | 0.05 | ~20K instead of ~78K |
+
+Note: `mv_cluster_tiles` was initially set to 0.05 in the live change, then
+tightened to 0.02 (plan S3 target) by `2026_07_12_followup_fixes.sql`; the
+settings are also reproduced by `infrastructure/migrations/2026_07_12_autovacuum.sql`.
 
 Backlog reaped once with `VACUUM (ANALYZE) mv_cluster_tiles` (180K → 0) so
 the new threshold starts clean. CONCURRENT refresh + unique index
