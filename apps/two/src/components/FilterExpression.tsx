@@ -13,6 +13,13 @@ interface ParsedState {
   whereSql?: string;
 }
 
+/** Grammar/compile errors embed `at position N` in the message. */
+function errorPosition(message?: string): number | null {
+  if (!message) return null;
+  const m = /position (\d+)/.exec(message);
+  return m ? Number(m[1]) : null;
+}
+
 function tryParseCompile(expression: string): ParsedState {
   if (!expression.trim()) {
     return { valid: true, usedColumns: [], whereSql: "" };
@@ -50,6 +57,11 @@ export function FilterExpression({
 }: FilterExpressionProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [state, setState] = React.useState<ParsedState>(() => tryParseCompile(value));
+  // Server-roundtrip parse/compile error (carries a caret position).
+  const [serverError, setServerError] = React.useState<{
+    message: string;
+    position: number | null;
+  } | null>(null);
   const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidRef = React.useRef<string>(value);
 
@@ -88,6 +100,23 @@ export function FilterExpression({
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
   }, [value]);
+
+  // Clear the server error whenever the expression changes — a fresh edit
+  // invalidates the previous round-trip's caret.
+  React.useEffect(() => {
+    setServerError(null);
+  }, [value]);
+
+  // Listen for server-side parse/compile failures bubbled up from the page's
+  // query effect. Renders a caret under the offending token.
+  React.useEffect(() => {
+    const onQueryError = (e: Event) => {
+      const detail = (e as CustomEvent<{ message: string; position: number | null }>).detail;
+      if (detail) setServerError({ message: detail.message, position: detail.position });
+    };
+    window.addEventListener("two:query-error", onQueryError);
+    return () => window.removeEventListener("two:query-error", onQueryError);
+  }, []);
 
   // Hydrate from localStorage exactly once on mount. Gate with a ref so
   // even if React StrictMode double-fires this effect we don't reset
@@ -151,7 +180,11 @@ export function FilterExpression({
       </div>
 
       {state.error && value.trim() && (
-        <div className="text-xs font-mono text-loss">{state.error}</div>
+        <CaretError message={state.error} value={value} />
+      )}
+
+      {serverError && (
+        <CaretError message={serverError.message} value={value} />
       )}
 
       {state.valid && state.usedColumns.length > 0 && (
@@ -175,6 +208,29 @@ export function FilterExpression({
           <div>literals: 300k, $300,000, 0.08, 'TX', ('TX','CA')</div>
         </div>
       </details>
+    </div>
+  );
+}
+
+/**
+ * Render a parse/compile error with a `^` caret under the offending token.
+ * `position` is extracted from the message (`at position N`); when it's
+ * missing or out of range we just show the message.
+ */
+function CaretError({ message, value }: { message: string; value: string }) {
+  const pos = errorPosition(message);
+  const inRange = pos != null && pos >= 0 && pos <= value.length;
+  return (
+    <div className="text-xs font-mono text-loss">
+      <div>{message}</div>
+      {inRange ? (
+        <div className="overflow-x-auto whitespace-pre">
+          {value}
+          {"\n"}
+          {" ".repeat(pos!)}
+          {"^"}
+        </div>
+      ) : null}
     </div>
   );
 }

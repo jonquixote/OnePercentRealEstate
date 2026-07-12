@@ -70,7 +70,7 @@ export default function TerminalLayout({
   // `?` (shift+/) opens keyboard help. Single source of truth for the modal
   // visibility lives here; the toolbar button just toggles the same state.
   useHotkey(
-    "shift+?",
+    "?",
     () => setHelpOpen((v) => !v),
     { description: "Show keyboard shortcuts", group: "Help" },
   );

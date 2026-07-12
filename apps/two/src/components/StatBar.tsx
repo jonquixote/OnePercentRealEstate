@@ -7,6 +7,10 @@ import type { PropertyRow } from "@/lib/types";
 
 interface Props {
   rows: PropertyRow[];
+  /** Last query round-trip latency (ms), or null when unknown. */
+  latencyMs?: number | null;
+  /** Name of the active screen, or a fallback label for ad-hoc/live modes. */
+  screenName?: string | null;
 }
 
 /**
@@ -14,7 +18,11 @@ interface Props {
  * changes (filters, refetches). Kept inline + mono so it reads like a
  * terminal tape rather than a "dashboard".
  */
-export const StatBar = React.memo(function StatBar({ rows }: Props) {
+export const StatBar = React.memo(function StatBar({
+  rows,
+  latencyMs,
+  screenName,
+}: Props) {
   const stats = React.useMemo(() => {
     return {
       count: rows.length,
@@ -45,7 +53,13 @@ export const StatBar = React.memo(function StatBar({ rows }: Props) {
         <Stat label="MED CAP" value={formatPct(stats.medCap, 1)} />
         <Dot />
         <Stat label="MED DOM" value={stats.medDom != null ? Math.round(stats.medDom).toString() : "—"} />
-        <span className="ml-auto text-zinc-600">live · 60s ttl</span>
+        <span className="ml-auto flex items-center gap-3 text-zinc-600">
+          {screenName ? (
+            <span className="text-zinc-400">⟨{screenName}⟩</span>
+          ) : null}
+          {latencyMs != null ? <span className="text-zinc-500">⌚{latencyMs}ms</span> : null}
+          <span>live · 60s ttl</span>
+        </span>
       </div>
 
       {/* IQR row */}

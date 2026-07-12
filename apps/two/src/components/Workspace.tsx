@@ -40,6 +40,10 @@ interface WorkspaceProps {
   selectedZip: string | null;
   /** Active bottom pane, or null when collapsed. Owned by the page. */
   bottomPane: BottomPane;
+  /** Last query round-trip latency (ms), or null when unknown. */
+  latencyMs?: number | null;
+  /** Name of the active screen, or a fallback label for ad-hoc/live modes. */
+  screenName?: string | null;
 }
 
 const SPLIT_KEY = "two:workspace-split";
@@ -55,6 +59,8 @@ export function Workspace({
   onSelect,
   selectedZip,
   bottomPane,
+  latencyMs,
+  screenName,
 }: WorkspaceProps) {
   const [split, setSplit] = React.useState(DEFAULT_SPLIT);
   const splitRef = React.useRef<HTMLDivElement>(null);
@@ -99,7 +105,7 @@ export function Workspace({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <StatBar rows={rows} />
+      <StatBar rows={rows} latencyMs={latencyMs} screenName={screenName} />
       <div ref={splitRef} className="flex min-h-0 flex-1 flex-col">
         {/* Top: the table region. A focusable wrapper so `esc` can return
             keyboard focus here. */}

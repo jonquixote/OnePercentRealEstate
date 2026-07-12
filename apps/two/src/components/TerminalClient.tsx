@@ -77,6 +77,7 @@ export function TerminalClient({
   // ScreenTabs also drives `expression`/`sort`/`columnIds` when a screen is applied.
   const [queryRows, setQueryRows] = React.useState<unknown[] | null>(null);
   const [queryState, setQueryState] = React.useState<'idle' | 'loading' | 'error'>('idle');
+  const [latencyMs, setLatencyMs] = React.useState<number | null>(null);
   const queryAbort = React.useRef<AbortController | null>(null);
 
   const [expression, setExpression] = React.useState('');
@@ -200,6 +201,9 @@ export function TerminalClient({
   React.useEffect(() => {
     const onFilter = (e: Event) => {
       setExpression(String((e as CustomEvent).detail ?? '').trim());
+      // A free-form (ad-hoc) expression means we're no longer on an applied
+      // screen — fall back to "live filter" in the StatBar.
+      setActiveScreen(null);
     };
     window.addEventListener('two:filter-change', onFilter);
     return () => window.removeEventListener('two:filter-change', onFilter);
@@ -219,6 +223,7 @@ export function TerminalClient({
     const ctrl = new AbortController();
     queryAbort.current = ctrl;
     setQueryState('loading');
+    const t0 = performance.now();
     const serverKey = serverSortKey(sort?.col);
     const orderBy = serverKey && sort ? { col: serverKey, dir: sort.dir } : undefined;
     fetch('/api/properties/query', {
@@ -227,9 +232,23 @@ export function TerminalClient({
       body: JSON.stringify({ expression, limit: 500, orderBy }),
       signal: ctrl.signal,
     })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`query ${r.status}`))))
+      .then((r) => {
+        if (r.ok) return r.json();
+        // Non-ok: read the body so we can surface the parser's message +
+        // caret position (backward compatible — the worker only reads
+        // `.message`, which we still emit).
+        return r.json().then((body) => {
+          const message = body?.message ?? body?.error ?? `query ${r.status}`;
+          const position: number | null = body?.position ?? null;
+          window.dispatchEvent(
+            new CustomEvent('two:query-error', { detail: { message, position } }),
+          );
+          return Promise.reject(new Error(message));
+        });
+      })
       .then((d) => {
         setQueryRows(Array.isArray(d?.items) ? d.items : []);
+        setLatencyMs(Math.round(performance.now() - t0));
         setQueryState('idle');
       })
       .catch((err) => {
@@ -239,6 +258,14 @@ export function TerminalClient({
       });
     return () => ctrl.abort();
   }, [expression, sort]);
+
+  // Active screen name for the StatBar: an applied screen wins; otherwise fall
+  // back to "live filter" when an ad-hoc expression is driving the grid, or
+  // "live feed" for the raw viewport tape.
+  const screenName = React.useMemo(() => {
+    if (activeScreen?.name) return activeScreen.name;
+    return expression.trim() ? "live filter" : "live feed";
+  }, [activeScreen, expression]);
 
   // One pass to coerce numeric strings -> numbers and derive 1%/cap/$/sqft.
   // Memoised so the table + StatBar don't recompute on every selection change.
@@ -488,6 +515,8 @@ export function TerminalClient({
             onSelect={setSelected}
             selectedZip={selected?.zip_code ?? null}
             bottomPane={bottomPane}
+            latencyMs={latencyMs}
+            screenName={screenName}
           />
           <ColumnPicker
             open={pickerOpen}

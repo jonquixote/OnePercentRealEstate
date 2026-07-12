@@ -96,10 +96,17 @@ export async function POST(req: NextRequest) {
     const ast = parse(body.expression);
     compiled = compile(ast);
   } catch (err) {
+    const message = (err as Error).message;
+    // Grammar errors embed `at position N` in the message; column-whitelist
+    // errors ("Invalid column name: 'x'") do not. Surface the offset so the
+    // client can point a caret at the offending token.
+    const positionMatch = /position (\d+)/.exec(message);
+    const position = positionMatch ? Number(positionMatch[1]) : null;
     return NextResponse.json(
       {
         error: 'expression parse/compile error',
-        message: (err as Error).message,
+        message,
+        position,
         allowedColumns: ALLOWED_COLUMNS_LIST,
       },
       { status: 400 }
