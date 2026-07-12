@@ -4,8 +4,17 @@ import pool from '@/lib/db';
 import { withSpan } from '@/lib/tracing';
 import { parse, compile, ALLOWED_COLUMNS_LIST } from '@oper/query-lang';
 import { MOTIVATED_SELLER_SCORE_SQL } from '@oper/primitives';
+import { getSessionUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Demo-mode row cap. The terminal is a Pro feature; anonymous + free-tier
+ * sessions are limited to this many rows regardless of the requested limit.
+ * This is the authoritative cap — enforced server-side, not in CSS. Pro
+ * sessions are unaffected and may request up to MAX_LIMIT.
+ */
+const DEMO_ROW_CAP = 50;
 
 const QueryBodySchema = z.object({
   expression: z.string().min(1).max(500),
@@ -99,6 +108,12 @@ export async function POST(req: NextRequest) {
 
   const limit = Math.min(body.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
 
+  // Server-enforced demo cap: anonymous (null) or free-tier sessions are
+  // clamped to DEMO_ROW_CAP. getSessionUser() returns null for anon, and a
+  // `free`-tier user otherwise — only `pro` gets the full row budget.
+  const isPro = (await getSessionUser())?.tier === 'pro';
+  const effectiveLimit = isPro ? limit : Math.min(limit, DEMO_ROW_CAP);
+
   // SQL guarantees:
   //  - WHERE clause is `listing_type='for_sale' AND ({compiled.whereSql})`
   //    where whereSql only references whitelisted columns + $N placeholders.
@@ -137,7 +152,7 @@ export async function POST(req: NextRequest) {
     WHERE listing_type = 'for_sale'
       AND ${saleTypeDefault} (${compiled.whereSql})
     ORDER BY ${orderBySql}
-    LIMIT ${limit}
+    LIMIT ${effectiveLimit}
   `;
 
   try {

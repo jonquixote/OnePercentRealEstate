@@ -38,6 +38,7 @@ const tiers = [
             'PDF Reports & Exports',
             'Watchlist Alerts',
             'Priority Support',
+            'Pro Terminal — saved screens, 20 investor columns, market charts, CSV export, email alerts',
         ],
         cta: 'Upgrade to Pro',
         featured: true,
@@ -195,6 +196,39 @@ export default function PricingPage() {
                                 </ul>
                             </div>
                         ))}
+                    </div>
+
+                    {/* Pro Terminal feature block — no screenshot asset exists yet,
+                        so we link to the live terminal with a short description. */}
+                    <div
+                        className="mt-16 grid items-center gap-8 rounded-[var(--r-panel)] p-8 lg:grid-cols-2"
+                        style={{ background: 'var(--ink-2)', border: '1px solid var(--line)' }}
+                    >
+                        <div>
+                            <p className="prov prov--real mb-3 inline-block">Included in Pro</p>
+                            <h2 className="text-[22px] font-semibold" style={{ color: 'var(--text)' }}>
+                                Pro Terminal
+                            </h2>
+                            <p className="mt-3 text-[15px] leading-7" style={{ color: 'var(--haze)' }}>
+                                A keyboard-driven data terminal for serious investors: saved
+                                screens, 20+ investor columns, market charts, CSV export, and
+                                daily email alerts on your filters. Free accounts get a read-only
+                                50-row demo.
+                            </p>
+                            <Link
+                                href="/terminal"
+                                className="mt-5 inline-block rounded-[var(--r-chip)] px-4 py-2 text-[13px] font-semibold text-white transition-colors"
+                                style={{ background: 'var(--pass)' }}
+                            >
+                                Open the Terminal →
+                            </Link>
+                        </div>
+                        <div
+                            className="hidden min-h-[180px] items-center justify-center rounded-[var(--r-panel)] font-mono text-[12px] lg:flex"
+                            style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)', color: 'var(--mute)' }}
+                        >
+                            $19/mo · full access · free = 50-row demo
+                        </div>
                     </div>
 
                     <div className="mt-16 text-center">
