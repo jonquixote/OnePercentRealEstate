@@ -13,6 +13,8 @@
     "@oper/api-client": "workspace:*",
     "@oper/primitives": "workspace:*",
     "@oper/query-lang": "workspace:*",
+    "jose": "^6.2.3",
+    "pg": "^8.21.0",
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.2",
@@ -26,8 +28,10 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.15.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

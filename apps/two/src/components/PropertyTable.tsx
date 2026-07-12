@@ -27,6 +27,9 @@ interface Props {
   rows: PropertyRow[];
   selectedId: string | null;
   onSelect: (row: PropertyRow) => void;
+  /** Controlled sort (lifted for screens). Omit to manage sort internally. */
+  sorting?: SortingState;
+  onSortingChange?: React.Dispatch<React.SetStateAction<SortingState>>;
 }
 
 const DENSITY_STORAGE_KEY = "two:density";
@@ -40,10 +43,12 @@ const DENSITY_STORAGE_KEY = "two:density";
  * Header is sticky inside the scroll container so column meanings stay put
  * while the user scans the tape.
  */
-export function PropertyTable({ rows, selectedId, onSelect }: Props) {
-  const [sorting, setSorting] = React.useState<SortingState>([
+export function PropertyTable({ rows, selectedId, onSelect, sorting: sortingProp, onSortingChange }: Props) {
+  const [internalSorting, setInternalSorting] = React.useState<SortingState>([
     { id: "onePct", desc: true },
   ]);
+  const sorting = sortingProp ?? internalSorting;
+  const setSorting = onSortingChange ?? setInternalSorting;
   const [density, setDensity] = React.useState<Density>("compact");
 
   // Hydrate density from localStorage once after mount. We don't read in the

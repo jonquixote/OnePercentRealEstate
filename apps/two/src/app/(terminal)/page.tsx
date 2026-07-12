@@ -10,7 +10,10 @@ import type { ViewportResponse } from "@oper/api-client";
 import { useSelection } from "@/lib/selection";
 import { StatBar } from "@/components/StatBar";
 import { PropertyTable } from "@/components/PropertyTable";
+import { ScreenTabs } from "@/components/ScreenTabs";
+import { DEFAULT_SORT, type ScreenSort } from "@/lib/screens";
 import { DENSITY_ROW_HEIGHT } from "@/lib/types";
+import type { SortingState } from "@tanstack/react-table";
 
 /**
  * Eastern/central US bbox at zoom=14 — covers the densest listing regions
@@ -32,46 +35,76 @@ export default function TerminalPage() {
 
   // ---- Wave 6: SQL expression results ------------------------------------
   // The top-bar FilterExpression (layout) broadcasts valid expressions via
-  // the `two:filter-change` CustomEvent. A non-empty expression switches the
-  // grid's data source from the viewport feed to /api/properties/query
+  // the `two:filter-change` CustomEvent, which we funnel into the `expression`
+  // state below (the single source of truth). A non-empty expression switches
+  // the grid's data source from the viewport feed to /api/properties/query
   // (same-origin via nginx; the server re-parses + re-compiles — client
   // output is never trusted). Empty expression -> back to the viewport tape.
+  // ScreenTabs also drives `expression`/`sorting` when a screen is applied.
   const [queryRows, setQueryRows] = React.useState<unknown[] | null>(null);
   const [queryState, setQueryState] = React.useState<'idle' | 'loading' | 'error'>('idle');
   const queryAbort = React.useRef<AbortController | null>(null);
 
+  const [expression, setExpression] = React.useState('');
+  const [sorting, setSorting] = React.useState<SortingState>([
+    { id: DEFAULT_SORT.col, desc: DEFAULT_SORT.dir === 'desc' },
+  ]);
+
+  // Live screen sort derived from the grid sort (first sort column).
+  const liveSort: ScreenSort | null = sorting[0]
+    ? { col: sorting[0].id, dir: sorting[0].desc ? 'desc' : 'asc' }
+    : null;
+
+  // Apply a screen: set the expression + sort and let the effect below run
+  // the query. The FilterExpression bar stays the canonical place to type a
+  // free-form expression; screens just pre-fill it.
+  const applyScreen = React.useCallback(
+    (s: { expression: string; sort: ScreenSort | null }) => {
+      setExpression(s.expression.trim());
+      if (s.sort) {
+        setSorting([{ id: s.sort.col, desc: s.sort.dir === 'desc' }]);
+      }
+    },
+    [],
+  );
+
   React.useEffect(() => {
     const onFilter = (e: Event) => {
-      const expression = String((e as CustomEvent).detail ?? '').trim();
-      queryAbort.current?.abort();
-      if (!expression) {
-        setQueryRows(null);
-        setQueryState('idle');
-        return;
-      }
-      const ctrl = new AbortController();
-      queryAbort.current = ctrl;
-      setQueryState('loading');
-      fetch('/api/properties/query', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ expression, limit: 500 }),
-        signal: ctrl.signal,
-      })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`query ${r.status}`))))
-        .then((d) => {
-          setQueryRows(Array.isArray(d?.items) ? d.items : []);
-          setQueryState('idle');
-        })
-        .catch((err) => {
-          if (err?.name === 'AbortError') return;
-          setQueryRows(null);
-          setQueryState('error');
-        });
+      setExpression(String((e as CustomEvent).detail ?? '').trim());
     };
     window.addEventListener('two:filter-change', onFilter);
     return () => window.removeEventListener('two:filter-change', onFilter);
   }, []);
+
+  // Run the query whenever the live expression changes.
+  React.useEffect(() => {
+    if (!expression) {
+      queryAbort.current?.abort();
+      setQueryRows(null);
+      setQueryState('idle');
+      return;
+    }
+    const ctrl = new AbortController();
+    queryAbort.current = ctrl;
+    setQueryState('loading');
+    fetch('/api/properties/query', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expression, limit: 500 }),
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`query ${r.status}`))))
+      .then((d) => {
+        setQueryRows(Array.isArray(d?.items) ? d.items : []);
+        setQueryState('idle');
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        setQueryRows(null);
+        setQueryState('error');
+      });
+    return () => ctrl.abort();
+  }, [expression]);
 
   // One pass to coerce numeric strings -> numbers and derive 1%/cap/$/sqft.
   // Memoised so the table + StatBar don't recompute on every selection change.
@@ -226,12 +259,19 @@ export default function TerminalPage() {
 
       {!isLoading && !isError ? (
         <>
+          <ScreenTabs
+            expression={expression}
+            sort={liveSort}
+            onApply={applyScreen}
+          />
           <StatBar rows={rows} />
           <div className="flex-1 min-h-0">
             <PropertyTable
               rows={rows}
               selectedId={selected?.id ?? null}
               onSelect={setSelected}
+              sorting={sorting}
+              onSortingChange={setSorting}
             />
           </div>
         </>
