@@ -78,3 +78,21 @@ target): `shared_buffers`=2GB, `effective_cache_size`=8GB, `work_mem`=64MB,
   `listings` (0.05).
 - Future entries go here, newest at the bottom, each dated with the SQL
   applied and the before/after metric.
+
+## 2026-07-12 — per-table autovacuum (S3)
+
+`mv_cluster_tiles` (CONCURRENT-refreshed every CLUSTER_REFRESH_INTERVAL_MS)
+carried ~180K dead tuples (11%). Default `autovacuum_vacuum_scale_factor=0.2`
+only triggers at 20% dead (~338K rows) — too lax for a table rewritten
+every few minutes.
+
+| Table | scale_factor | Trigger (dead rows) |
+|---|---|---|
+| mv_cluster_tiles | 0.05 (+analyze 0.05) | ~85K instead of ~338K |
+| listings | 0.05 | ~50K instead of ~200K |
+| rental_listings | 0.05 | ~20K instead of ~78K |
+
+Backlog reaped once with `VACUUM (ANALYZE) mv_cluster_tiles` (180K → 0) so
+the new threshold starts clean. CONCURRENT refresh + unique index
+`uq_mv_cluster_tiles_zoom_xy` were already in place (2026-06-16 migration) —
+the S3 refresh-lock concern was pre-solved; only autovacuum needed tuning.
