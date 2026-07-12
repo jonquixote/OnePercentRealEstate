@@ -48,24 +48,29 @@ function buildOrderBy(orderBy?: { col: string; dir: 'asc' | 'desc' }): string {
  * Bearer-key auth: hash the token and look it up. The raw key is never stored
  * or compared. Returns the owning user_id, or null for a missing/revoked key.
  */
-async function authenticateKey(authHeader: string | null): Promise<string | null> {
+async function authenticateKey(
+  authHeader: string | null,
+): Promise<{ keyId: string; userId: string } | null> {
   if (!authHeader) return null;
   const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
   if (!match) return null;
   const token = match[1];
   const keyHash = createHash('sha256').update(token).digest('hex');
   const res = await pool.query(
-    `SELECT user_id FROM api_keys WHERE key_hash = $1 AND revoked = false`,
-    [keyHash]
+    `SELECT id, user_id FROM api_keys WHERE key_hash = $1 AND revoked = false`,
+    [keyHash],
   );
-  return res.rows[0]?.user_id ?? null;
+  const row = res.rows[0];
+  if (!row) return null;
+  return { keyId: String(row.id), userId: row.user_id };
 }
 
 export async function GET(req: NextRequest) {
-  const userId = await authenticateKey(req.headers.get('authorization'));
-  if (!userId) {
+  const auth = await authenticateKey(req.headers.get('authorization'));
+  if (!auth) {
     return NextResponse.json({ error: 'invalid or revoked API key' }, { status: 401 });
   }
+  const userId = auth.userId;
 
   // Pro-only: verify the key's owner is on the pro tier.
   let tier: string | null = null;
@@ -83,12 +88,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'PRO_REQUIRED' }, { status: 403 });
   }
 
-  // Best-effort last_used_at stamp — never blocks the request.
+  // Best-effort last_used_at stamp for the matched key — never blocks the request.
   pool
-    .query(
-      `UPDATE api_keys SET last_used_at = now() WHERE user_id = $1 AND revoked = false`,
-      [userId]
-    )
+    .query(`UPDATE api_keys SET last_used_at = now() WHERE id = $1`, [auth.keyId])
     .catch((e) => console.error('last_used_at update failed (non-fatal):', e));
 
   const parsed = FilterSchema.safeParse(
