@@ -48,6 +48,9 @@ export interface PropertyRow {
   year_built: number | null;
   /** Distress/standard sale type. */
   sale_type: string | null;
+  /** 5-digit ZIP — carried from the query feed so the chart pane can pull
+   *  market series for the selected row without a second lookup. */
+  zip_code: string | null;
 }
 
 export type Density = "cozy" | "compact" | "dense";

@@ -92,6 +92,7 @@ export function toRows(data: ViewportResponse | undefined): PropertyRow[] {
       rent_high: n(r.rent_high),
       year_built: n((r as Record<string, number | string | null>).year_built),
       sale_type: typeof r.sale_type === "string" ? r.sale_type : null,
+      zip_code: typeof r.zip_code === "string" ? r.zip_code : null,
     });
   }
   return out;

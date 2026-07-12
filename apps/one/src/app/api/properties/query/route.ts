@@ -131,7 +131,8 @@ export async function POST(req: NextRequest) {
       rent_low,
       rent_high,
       rent_price_ratio,
-      ${MOTIVATED_SELLER_SCORE_SQL} as motivated_score
+      ${MOTIVATED_SELLER_SCORE_SQL} as motivated_score,
+      zip_code
     FROM listings
     WHERE listing_type = 'for_sale'
       AND ${saleTypeDefault} (${compiled.whereSql})

@@ -414,6 +414,7 @@ export default function TerminalPage() {
             onSortChange={onSortChange}
             selectedId={selected?.id ?? null}
             onSelect={setSelected}
+            selectedZip={selected?.zip_code ?? null}
             bottomPane={bottomPane}
           />
           <ColumnPicker

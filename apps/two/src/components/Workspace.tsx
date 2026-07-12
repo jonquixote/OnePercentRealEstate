@@ -25,6 +25,7 @@ import type { ColumnDef } from "@/lib/columns";
 import type { PropertyRow } from "@/lib/types";
 import { PropertyTable } from "@/components/PropertyTable";
 import { StatBar } from "@/components/StatBar";
+import { ChartPane } from "@/components/ChartPane";
 
 export type BottomPane = "map" | "chart" | null;
 
@@ -35,6 +36,8 @@ interface WorkspaceProps {
   onSortChange: (colId: string) => void;
   selectedId: string | null;
   onSelect: (row: PropertyRow) => void;
+  /** 5-digit ZIP of the selected row — feeds the W4 chart pane. */
+  selectedZip: string | null;
   /** Active bottom pane, or null when collapsed. Owned by the page. */
   bottomPane: BottomPane;
 }
@@ -50,6 +53,7 @@ export function Workspace({
   onSortChange,
   selectedId,
   onSelect,
+  selectedZip,
   bottomPane,
 }: WorkspaceProps) {
   const [split, setSplit] = React.useState(DEFAULT_SPLIT);
@@ -128,7 +132,7 @@ export function Workspace({
                   {bottomPane === "map" ? (
                     <MapPane rows={rows} selectedId={selectedId} onSelect={onSelect} />
                   ) : (
-                    <ChartPane />
+                    <ChartPane zip={selectedZip} />
                   )}
                 </div>
               </div>
@@ -165,26 +169,9 @@ function PaneTabs({ bottomPane }: { bottomPane: Exclude<BottomPane, null> }) {
 }
 
 /**
- * Chart placeholder. W4 will replace the body with a real metrics chart; the
- * stable `id` / `data-chart-slot` hooks let W4 mount without touching this
- * shell.
+ * Chart slot — see apps/two/src/components/ChartPane.tsx (W4). The stable
+ * `id="terminal-chart"` / `data-chart-slot` hooks are now owned by ChartPane.
  */
-function ChartPane() {
-  return (
-    <div
-      id="terminal-chart"
-      data-chart-slot
-      className="flex h-full w-full flex-col items-center justify-center bg-zinc-950 text-center"
-    >
-      <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-400">
-        Chart
-      </p>
-      <p className="mt-1 font-mono text-[10px] text-zinc-600">
-        W4 — metrics chart slot
-      </p>
-    </div>
-  );
-}
 
 /**
  * Terminal map pane. Renders ONLY the rows the table already has (lat/lon from
