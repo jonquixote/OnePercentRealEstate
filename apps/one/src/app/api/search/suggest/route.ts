@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getSuggestions } from '@/lib/search-suggestions';
+import { parseQuery, numericParam } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
+const SuggestSchema = z.object({
+  q: z.string().max(100, 'query too long').optional().default(''),
+  limit: numericParam(1, 20).optional().default(8),
+});
+
 export async function GET(request: NextRequest) {
-    const q = request.nextUrl.searchParams.get('q') ?? '';
-    const limitParam = parseInt(request.nextUrl.searchParams.get('limit') ?? '8', 10);
-    const limit = isNaN(limitParam) ? 8 : Math.min(Math.max(1, limitParam), 20);
+    const parsed = parseQuery(SuggestSchema, request);
+    if (!parsed.ok) return parsed.response;
+
+    const { q, limit } = parsed.data;
 
     if (!q.trim()) {
         return NextResponse.json({ suggestions: [] });
