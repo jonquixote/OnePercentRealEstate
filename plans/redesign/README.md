@@ -1,33 +1,32 @@
-# apps/one Redesign — "Private Bank for Property"
+# apps/one — IA & Redesign Sketches (2026-07-12)
 
-Design artifacts for the Cycle-3 frontend overhaul. Every file here is a
-SELF-CONTAINED, non-wired example (mock data inline) meant for visual review
-and then adoption per the coder spec
-(`docs/superpowers/specs/2026-07-07-frontend-overhaul-design.md`).
+Replaces the Cycle-3 "Private Bank" artifacts. That cycle's *visual* system
+shipped (the live eggshell "line" tokens); what was never designed as a
+whole is the **information architecture** — 16 routes accreted wave by wave,
+market pages orphaned from nav, four overlapping tool pages, "Portfolio"
+naming things it doesn't do.
 
-## Design thesis
+**Start with `IA.md`.** It defines the four-destination model
+(Search · Markets · Shelf · Playbook), the consolidations, the five core
+journeys, state rules, and the auth-tier surface map. The sketches render
+it:
 
-The current dark "line" system is right in spirit — one memorable motif (the
-1% rule line), ink surfaces, emerald pass / brass caution. What it lacks is
-*restraint and hierarchy*: everything currently speaks at the same volume.
-The redesign keeps the brand and adds the discipline of a private-bank
-statement: editorial serif display over quiet ink, hairline rules instead of
-boxes, one accent per view, numbers set like typography (tabular, weighted by
-importance), photography in dark mats, and data-viz that looks engraved
-rather than dashboard-y.
+| File | Journey | Shows |
+|---|---|---|
+| `example-nav.tsx` | — | Header (active-line indicator, both auth states), footer, mobile sheet, breadcrumbs |
+| `example-home.tsx` | J1 | The 30-second pitch: thesis over the literal line, a real listing worked through the math, rent-heat teaser, markets grid |
+| `example-search.tsx` | J2 | The workbench: toolbar diet, hover-sync cards⇄pins, coach mark, mobile List\|Map thumb control |
+| `example-property-detail.tsx` | J3 | Verdict-first dossier: ratio gauge as the drawn line, banded rent, sticky rail → mobile bottom bar |
+| `example-market.tsx` | J4 | ZIP dossier: sourced stat strip, HPI sparkline, honest "nothing clears here" state, scoped-search handoff, adjacent-ZIP loop |
+| `tokens.css` | — | Mirror of the LIVE palette + the three NEW tokens the sketches add |
 
-Rules:
-1. **Serif display, sans data.** Fraunces (or Playfair) for headlines only;
-   Geist for UI; JetBrains Mono for figures where alignment matters.
-2. **Hairlines, not cards-in-boxes.** 1px `--line` rules + whitespace carry
-   structure; panels reserved for interactive surfaces.
-3. **One accent per view.** Emerald = passes/positive. Brass = seller
-   opportunity (cuts, motivation). Never both shouting on one component.
-4. **Confidence is a first-class visual.** Every model number renders with
-   its band (the p10–p90 range bar) and its provenance chip. No naked
-   estimates anywhere.
-5. **Photography in mats.** Images sit inside 1px-ruled dark mats with
-   generous padding — gallery, not listing-site.
+Every sketch: self-contained, `'use client'`, inline mock data, live tokens
+only, no imports beyond React. Paste into a scratch route to preview.
 
-Files: tokens.css · example-home.tsx · example-property-detail.tsx ·
-example-search.tsx · example-market.tsx
+Adoption path: `docs/superpowers/plans/2026-07-12-frontend-form-function.md`
+(Phases N + F implement IA.md §2-3; the sketches are the visual acceptance
+criteria for those tasks).
+
+Design grammar the sketches enforce (IA.md §5): the line is structural, one
+verdict per viewport, numbers are typography with provenance, serif speaks
+twice per page, photography matted.
