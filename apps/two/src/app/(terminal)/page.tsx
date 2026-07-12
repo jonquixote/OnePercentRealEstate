@@ -62,6 +62,7 @@ export default function TerminalPage() {
   const [activeScreen, setActiveScreen] = React.useState<{
     id: string;
     kind: 'builtin' | 'user';
+    name: string;
   } | null>(null);
 
   // ---- W3: bottom pane (map | chart) --------------------------------
@@ -139,13 +140,14 @@ export default function TerminalPage() {
     (s: {
       id: string;
       kind: 'builtin' | 'user';
+      name: string;
       expression: string;
       sort: ScreenSort | null;
       columns: string[];
     }) => {
       setExpression(s.expression.trim());
       setSort(s.sort ?? DEFAULT_SORT);
-      setActiveScreen({ id: s.id, kind: s.kind });
+      setActiveScreen({ id: s.id, kind: s.kind, name: s.name });
       // Prefer a localStorage override (last user edit for this screen), then
       // the screen's stored columns, then the default set.
       let ids = s.columns.filter(Boolean);
@@ -355,34 +357,71 @@ export default function TerminalPage() {
     return `${rows.length.toLocaleString()} listings · zoom ${VIEWPORT.zoom}`;
   }, [isLoading, isError, rows.length, queryState, queryRows]);
 
-  // ---- Wave 6: CSV export (e) --------------------------------------------
-  useHotkey(
-    "e",
-    () => {
-      if (rows.length === 0) return;
-      const cols = ["id", "address", "price", "bedrooms", "bathrooms", "sqft", "estimated_rent"] as const;
-      const esc = (v: unknown) => {
-        let s = v == null ? "" : String(v);
-        // CSV formula-injection guard: cell values are scraped external data
-        // (addresses etc.); a leading = + - @ or tab/CR would execute as a
-        // formula in Excel/Sheets. Neutralize with a leading apostrophe.
-        if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  // ---- X1: pro CSV export (⌘E) ------------------------------------------
+  // Server-generated, streamed CSV of the CURRENT screen's full result set
+  // (same compiled query as the grid, LIMIT 10K). Pro-gated: the server 402s
+  // free users and we surface the upsell. Saved user screens export by id (the
+  // server reloads their stored expression + columns); built-in / free-form
+  // expressions ship the live expression + visible columns, which the server
+  // re-compiles. Row set therefore matches what the table/StatBar show.
+  const exportCsv = React.useCallback(async () => {
+    const serverKey = serverSortKey(sort?.col);
+    const orderBy = serverKey && sort ? { col: serverKey, dir: sort.dir } : undefined;
+
+    let payload: Record<string, unknown>;
+    if (activeScreen?.kind === 'user') {
+      payload = { screenId: Number(activeScreen.id), orderBy };
+    } else if (expression.trim()) {
+      payload = {
+        expression: expression.trim(),
+        columns: columnIds,
+        orderBy,
+        name: activeScreen?.name,
       };
-      const csv = [cols.join(",")]
-        .concat(rows.map((r) => cols.map((c) => esc((r as unknown as Record<string, unknown>)[c])).join(",")))
-        .join("\n");
-      const blob = new Blob([csv], { type: "text/csv" });
-      const a = document.createElement("a");
+    } else {
+      showErrorToast('Apply a screen or filter to export');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/properties/export', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 402) {
+        showUpsellToast();
+        return;
+      }
+      if (!res.ok) {
+        showErrorToast('Export failed');
+        return;
+      }
+      const blob = await res.blob();
+      // Prefer the server-authored filename (proper screen slug); fall back to
+      // a generic dated name.
+      const cd = res.headers.get('content-disposition') ?? '';
+      const match = /filename="([^"]+)"/.exec(cd);
+      const filename =
+        match?.[1] ?? `oper-screen-${new Date().toISOString().slice(0, 10)}.csv`;
+      const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `octavo-terminal-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = filename;
       a.click();
       // Deferred revoke: synchronous revocation can cancel the download in
-      // some browsers (PR #9 review).
+      // some browsers.
       setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-    },
-    { description: "Export current rows to CSV", group: "Data" },
-  );
+    } catch {
+      showErrorToast('Export failed');
+    }
+  }, [activeScreen, expression, columnIds, sort]);
+
+  useHotkey("cmd+e", () => void exportCsv(), {
+    description: "Export current screen to CSV (Pro)",
+    group: "Data",
+    preventDefault: true,
+  });
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-zinc-950">
@@ -406,6 +445,7 @@ export default function TerminalPage() {
             sort={liveSort}
             columnIds={columnIds}
             onApply={applyScreen}
+            onExport={() => void exportCsv()}
           />
           <Workspace
             rows={rows}
@@ -452,6 +492,10 @@ function showCopiedToast() {
 
 function showErrorToast(message: string) {
   showTransientToast(message, "bg-red-600");
+}
+
+function showUpsellToast() {
+  showTransientToast("CSV export is a Terminal Pro feature — upgrade to export", "bg-amber-600");
 }
 
 /**

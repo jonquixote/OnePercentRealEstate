@@ -21,10 +21,13 @@ interface ScreenTabsProps {
   onApply: (s: {
     id: string;
     kind: "builtin" | "user";
+    name: string;
     expression: string;
     sort: ScreenSort | null;
     columns: string[];
   }) => void;
+  /** Export the current screen to CSV (⌘E). Pro-gated server-side. */
+  onExport: () => void;
 }
 
 function sameSort(a: ScreenSort | null, b: ScreenSort | null): boolean {
@@ -32,7 +35,7 @@ function sameSort(a: ScreenSort | null, b: ScreenSort | null): boolean {
   return a.col === b.col && a.dir === b.dir;
 }
 
-export function ScreenTabs({ expression, sort, columnIds, onApply }: ScreenTabsProps) {
+export function ScreenTabs({ expression, sort, columnIds, onApply, onExport }: ScreenTabsProps) {
   const session = useSessionUser();
   const isPro = session?.tier === "pro";
 
@@ -99,6 +102,7 @@ export function ScreenTabs({ expression, sort, columnIds, onApply }: ScreenTabsP
       onApply({
         id: String(tab.id),
         kind: tab.kind,
+        name: tab.name,
         expression: tab.expression,
         sort: tab.sort,
         columns: Array.isArray(tab.columns) ? tab.columns : [],
@@ -373,6 +377,15 @@ export function ScreenTabs({ expression, sort, columnIds, onApply }: ScreenTabsP
             + screen
           </button>
         ) : null}
+
+        <button
+          type="button"
+          onClick={onExport}
+          className="ml-auto shrink-0 px-2.5 py-1.5 text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-200"
+          title="Export current screen to CSV (⌘E) — Pro"
+        >
+          ⤓ CSV
+        </button>
       </div>
 
       {!isPro ? (
