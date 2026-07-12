@@ -61,4 +61,81 @@ rental_ingest_by_source:
         usage: "GAUGE"
         description: "Number of rental listings ingested in the last 24 hours from this source"
 
+# --- Added 2026-07-12 for Phase O observability (pg_stat_statements + auto_explain) ---
+# See ops/systemd/postgres-tuning.md. Restart postgres-exporter after editing.
+
+pg_stat_statements_top:
+  query: |
+    SELECT
+      queryid::text AS queryid,
+      round(mean_exec_time)::float AS mean_exec_ms,
+      calls::float AS calls,
+      rows::float AS rows
+    FROM pg_stat_statements
+    ORDER BY mean_exec_time DESC
+    LIMIT 10
+  master: true
+  metrics:
+    - queryid:
+        usage: "LABEL"
+        description: "pg_stat_statements queryid (top 10 by mean execution time)"
+    - mean_exec_ms:
+        usage: "GAUGE"
+        description: "Mean execution time in ms for the query"
+    - calls:
+        usage: "GAUGE"
+        description: "Number of times the query was executed"
+    - rows:
+        usage: "GAUGE"
+        description: "Total rows retrieved or affected by the query"
+
+cache_hit_ratio:
+  query: |
+    SELECT
+      CASE
+        WHEN sum(blks_hit) + sum(blks_read) = 0 THEN 1.0
+        ELSE sum(blks_hit) / (sum(blks_hit) + sum(blks_read))
+      END AS ratio
+    FROM pg_stat_database
+    WHERE datname = current_database()
+  master: true
+  metrics:
+    - ratio:
+        usage: "GAUGE"
+        description: "Buffer cache hit ratio (0-1) for the current database"
+
+connections_by_state:
+  query: |
+    SELECT
+      COALESCE(state, 'idle') AS state,
+      COUNT(*)::float AS count
+    FROM pg_stat_activity
+    WHERE backend_type = 'client backend'
+    GROUP BY state
+  master: true
+  metrics:
+    - state:
+        usage: "LABEL"
+        description: "Client backend connection state (active|idle|idle in transaction|etc.)"
+    - count:
+        usage: "GAUGE"
+        description: "Number of connections in that state"
+
+table_dead_tuple_ratio:
+  query: |
+    SELECT
+      relname,
+      CASE WHEN (n_live_tup + n_dead_tup) = 0 THEN 0.0
+           ELSE n_dead_tup::float / (n_live_tup + n_dead_tup)
+      END AS dead_ratio
+    FROM pg_stat_user_tables
+  master: true
+  metrics:
+    - relname:
+        usage: "LABEL"
+        description: "User table name"
+    - dead_ratio:
+        usage: "GAUGE"
+        description: "Fraction of dead tuples (0-1) — proxy for table bloat / vacuum lag"
+
 
