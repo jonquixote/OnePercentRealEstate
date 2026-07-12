@@ -95,7 +95,7 @@ export default function PricingPage() {
 
       if (!response.ok) {
         if (response.status === 401 || data.error === 'Unauthorized') {
-          router.push('/login?returnUrl=/pricing');
+          router.push('/login?returnUrl=/terminal');
           return;
         }
         throw new Error(data.error || 'Checkout failed');

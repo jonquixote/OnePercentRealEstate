@@ -14,6 +14,10 @@ const FilterSchema = z.object({
 
 const PRO_LIMIT = 1000;
 const STATEMENT_TIMEOUT_MS = 5_000;
+// Throttle the best-effort last_used_at stamp so a polling client doesn't
+// write to api_keys on every single request.
+const LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
+const lastUsedStamps = new Map<string, number>();
 
 /**
  * ORDER BY whitelist — same server-controlled expressions as the query route.
@@ -88,10 +92,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'PRO_REQUIRED' }, { status: 403 });
   }
 
-  // Best-effort last_used_at stamp for the matched key — never blocks the request.
-  pool
-    .query(`UPDATE api_keys SET last_used_at = now() WHERE id = $1`, [auth.keyId])
-    .catch((e) => console.error('last_used_at update failed (non-fatal):', e));
+  // Best-effort last_used_at stamp for the matched key — never blocks the
+  // request. Throttled to once per key per LAST_USED_THROTTLE_MS.
+  const now = Date.now();
+  const last = lastUsedStamps.get(auth.keyId) ?? 0;
+  if (now - last > LAST_USED_THROTTLE_MS) {
+    lastUsedStamps.set(auth.keyId, now);
+    pool
+      .query(`UPDATE api_keys SET last_used_at = now() WHERE id = $1`, [auth.keyId])
+      .catch((e) => console.error('last_used_at update failed (non-fatal):', e));
+  }
 
   const parsed = FilterSchema.safeParse(
     Object.fromEntries(req.nextUrl.searchParams)

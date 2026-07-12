@@ -164,7 +164,7 @@ export function ScreenTabs({ expression, sort, columnIds, onApply, onExport }: S
             name,
             expression: expression.trim(),
             sort,
-            columns: [],
+            columns: columnIds,
           }),
         });
         if (!res.ok) {
@@ -194,7 +194,7 @@ export function ScreenTabs({ expression, sort, columnIds, onApply, onExport }: S
           name: "New screen",
           expression: expression.trim(),
           sort,
-          columns: [],
+          columns: columnIds,
         }),
       });
       if (!res.ok) {

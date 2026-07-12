@@ -41,14 +41,23 @@ BEGIN
      );
   GET DIAGNOSTICS n = n + ROW_COUNT;
 
-  UPDATE screen_alerts sa
-     SET user_id = p_account
-   WHERE sa.user_id = p_anon
-     AND NOT EXISTS (
-       SELECT 1 FROM screen_alerts sa2
-        WHERE sa2.user_id = p_account AND sa2.screen_id = sa.screen_id
-     );
-  GET DIAGNOSTICS n = n + ROW_COUNT;
+   -- Only re-key alerts whose screen actually transferred to the account
+   -- (terminal_screens re-key, above, leaves an anon screen in place when the
+   -- account already owns one by name). Re-keying an alert whose screen is
+   -- still anon-owned would orphan it onto an account that doesn't own the
+   -- screen, so we gate on the screen_id now belonging to p_account.
+   UPDATE screen_alerts sa
+      SET user_id = p_account
+    WHERE sa.user_id = p_anon
+      AND EXISTS (
+        SELECT 1 FROM terminal_screens t
+         WHERE t.id = sa.screen_id AND t.user_id = p_account
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM screen_alerts sa2
+         WHERE sa2.user_id = p_account AND sa2.screen_id = sa.screen_id
+      );
+   GET DIAGNOSTICS n = n + ROW_COUNT;
 
   RETURN n;
 END;

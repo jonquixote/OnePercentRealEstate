@@ -16,17 +16,26 @@ export interface SessionUser {
 
 let cached: SessionUser | null | undefined = undefined;
 const listeners = new Set<() => void>();
+let inflight: Promise<SessionUser | null> | null = null;
 
 async function load(): Promise<SessionUser | null> {
+  if (inflight) return inflight;
+  inflight = (async () => {
+    try {
+      const res = await fetch('/api/auth/me', { cache: 'no-store' });
+      const data = await res.json();
+      cached = data?.user ?? null;
+    } catch {
+      cached = null;
+    }
+    listeners.forEach((l) => l());
+    return cached ?? null;
+  })();
   try {
-    const res = await fetch('/api/auth/me', { cache: 'no-store' });
-    const data = await res.json();
-    cached = data?.user ?? null;
-  } catch {
-    cached = null;
+    return await inflight;
+  } finally {
+    inflight = null;
   }
-  listeners.forEach((l) => l());
-  return cached ?? null;
 }
 
 export function useSessionUser(): SessionUser | null {

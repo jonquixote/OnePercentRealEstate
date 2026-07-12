@@ -181,8 +181,15 @@ export function TerminalClient({
       setActiveScreen({ id: s.id, kind: s.kind, name: s.name });
       // Keep the top filter bar in sync with the applied screen by routing
       // through the same `two:filter-change` channel the bar emits on edit.
+      // Tagged `source: "screen"` so the page's own `two:filter-change`
+      // handler (which clears the active screen on ad-hoc edits) leaves the
+      // applied screen in place.
       if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("two:filter-change", { detail: expr }));
+        window.dispatchEvent(
+          new CustomEvent("two:filter-change", {
+            detail: { expression: expr, source: "screen" },
+          }),
+        );
       }
       // Prefer a localStorage override (last user edit for this screen), then
       // the screen's stored columns, then the default set.
@@ -205,10 +212,19 @@ export function TerminalClient({
 
   React.useEffect(() => {
     const onFilter = (e: Event) => {
-      setExpression(String((e as CustomEvent).detail ?? '').trim());
+      const detail = (e as CustomEvent).detail;
+      const expr =
+        typeof detail === 'string'
+          ? String(detail ?? '')
+          : String(detail?.expression ?? '');
+      setExpression(expr.trim());
       // A free-form (ad-hoc) expression means we're no longer on an applied
-      // screen — fall back to "live filter" in the StatBar.
-      setActiveScreen(null);
+      // screen — fall back to "live filter" in the StatBar. Screens applied
+      // from the tab bar emit the same event but tagged `source: "screen"`,
+      // which must NOT clear the active screen.
+      if (!(typeof detail === 'object' && detail && detail.source === 'screen')) {
+        setActiveScreen(null);
+      }
     };
     window.addEventListener('two:filter-change', onFilter);
     return () => window.removeEventListener('two:filter-change', onFilter);

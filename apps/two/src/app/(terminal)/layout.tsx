@@ -42,7 +42,12 @@ export default function TerminalLayout({
   // which set the expression outside the bar's own onChange path.
   React.useEffect(() => {
     const onFilter = (e: Event) => {
-      setFilterValue(String((e as CustomEvent).detail ?? ""));
+      const detail = (e as CustomEvent).detail;
+      const expr =
+        typeof detail === 'string'
+          ? String(detail ?? '')
+          : String(detail?.expression ?? '');
+      setFilterValue(expr);
     };
     window.addEventListener("two:filter-change", onFilter);
     return () => window.removeEventListener("two:filter-change", onFilter);

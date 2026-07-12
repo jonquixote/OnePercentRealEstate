@@ -53,8 +53,10 @@ const QuerySchema = z.object({
 
 // Single-instance in-memory TTL cache keyed by `${zip}:${seriesKey}`, value {
 // data, expiresAt }. Acceptable for a single-instance deploy; NOT a redis
-// dependency (per the W4 spec).
+// dependency (per the W4 spec). Bounded to MAX_ENTRIES — when exceeded we
+// evict the oldest half so a hot ZIP can't grow the map unbounded.
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
+const MAX_ENTRIES = 512;
 const cache = new Map<string, { expiresAt: number; data: unknown }>();
 
 interface Point {
@@ -70,6 +72,14 @@ function getCached(key: string): unknown | undefined {
 }
 
 function setCached(key: string, data: unknown) {
+  // Bound the map: if we're over the cap, drop the oldest half (insertion
+  // order is preserved by Map, so keys() yields oldest-first).
+  if (cache.size >= MAX_ENTRIES) {
+    for (const k of cache.keys()) {
+      cache.delete(k);
+      if (cache.size <= MAX_ENTRIES / 2) break;
+    }
+  }
   cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, data });
 }
 
@@ -184,7 +194,7 @@ export async function GET(req: NextRequest) {
     { zip, series: seriesOut },
     {
       headers: {
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "no-store",
       },
     },
   );

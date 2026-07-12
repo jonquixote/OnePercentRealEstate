@@ -218,8 +218,13 @@ export const DEFAULT_EXPORT_COLUMN_IDS = [
  */
 export function csvEscape(value: string | number): string {
   let s = value == null ? '' : String(value);
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  // Neutralize spreadsheet formula injection (a leading = + - @ or tab/CR/LF
+  // would execute as a formula in Excel/Sheets — cell values include scraped
+  // external data like addresses).
+  if (/^[=+\-@\t\r\n]/.test(s)) s = "'" + s;
+  // Quote when the value contains a comma, quote, newline, or carriage return.
+  // A bare CR (or CRLF) inside a field must be quoted or it splits the row.
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 /**

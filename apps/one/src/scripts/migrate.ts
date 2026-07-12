@@ -81,6 +81,32 @@ async function runMigrations(): Promise<void> {
       return;
     }
 
+    // Warn when the same function is redefined across multiple migrations.
+    // `CREATE OR REPLACE FUNCTION` is order-sensitive: the LAST file (by
+    // sorted filename) wins. A FK table must also sort after its referenced
+    // table. Collations differ (glibc vs macOS en-US), so names must be
+    // collation-invariant — this guard surfaces accidental ordering traps.
+    const fnOwners = new Map<string, string[]>();
+    const fnRe = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+([a-zA-Z_][\w.]*)/gi;
+    for (const file of files) {
+      const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+      let m: RegExpExecArray | null;
+      while ((m = fnRe.exec(sql)) !== null) {
+        const name = m[1].toLowerCase();
+        if (!fnOwners.has(name)) fnOwners.set(name, []);
+        fnOwners.get(name)!.push(file);
+      }
+    }
+    for (const [name, owners] of fnOwners) {
+      if (owners.length > 1) {
+        console.warn(
+          `  ⚠ function ${name} defined in ${owners.length} migrations ` +
+            `(${owners.join(', ')}); the LAST by sorted filename wins ` +
+            `(${owners[owners.length - 1]}). Ensure it carries the full body.`,
+        );
+      }
+    }
+
     for (const file of files) {
       const version = file.replace(/\.sql$/, '');
       if (applied.has(version)) {

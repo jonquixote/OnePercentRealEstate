@@ -328,7 +328,9 @@ function MapPane({
   }, [onStyleLoad, toFeatures]);
 
   // Refresh the source when the row set changes (new query/filter), then
-  // re-apply the current selection so the highlight survives the swap.
+  // re-apply the current selection so the highlight survives the swap. When
+  // the new result set is non-empty we also re-frame the map (fitBounds) so
+  // pins for a freshly applied screen aren't lost at country zoom.
   React.useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !map.isStyleLoaded()) return;
@@ -336,8 +338,17 @@ function MapPane({
       | maplibregl.GeoJSONSource
       | undefined;
     if (!src) return;
-    src.setData(toFeatures(rows));
+    const fc = toFeatures(rows);
+    src.setData(fc);
     applySelection(map, selectedId);
+    if (fc.features.length > 0) {
+      const bounds = new maplibregl.LngLatBounds();
+      for (const f of fc.features) {
+        const c = (f.geometry as GeoJSON.Point).coordinates;
+        bounds.extend(c as [number, number]);
+      }
+      map.fitBounds(bounds, { padding: 48, maxZoom: 12, duration: 0 });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, ready]);
 

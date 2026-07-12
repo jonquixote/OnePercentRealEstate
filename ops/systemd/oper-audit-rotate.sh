@@ -22,6 +22,9 @@ R2="oper-r2:onepercent-pg-backups/audit"
 RETENTION_DAYS=90
 
 mkdir -p "$ARCHIVE_DIR"
+# Ensure the R2 destination prefix exists (rclone copy into a missing bucket
+# path can fail depending on the remote); create it best-effort.
+rclone mkdir "$R2" >/dev/null 2>&1 || true
 
 # 1) ensure current + next 3 months exist (idempotent; a failure here aborts
 #    via set -e so OnFailure alerts instead of silently sinking to DEFAULT).
