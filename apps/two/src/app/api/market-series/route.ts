@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 /**
  * W4 — market time-series for the selected ZIP's chart pane.
  *
- * Returns three series (HPI, county unemployment, rent $/sqft proxy), each a
+ * Returns three series (HPI, county unemployment, gross rent yield ratio), each a
  * list of { t, v } points where `t` is a *numeric year* (float for monthly
  * unemployment, derived from the DATE period) so a single shared x-axis can
  * span all three. Series with no matching rows come back as empty arrays
@@ -22,11 +22,13 @@ export const dynamic = "force-dynamic";
  *                    intended source was h3_market_stats, but listings has NO
  *                    h3_8 column and there is NO Postgres h3 extension, so
  *                    h3_market_stats CANNOT be SQL-joined to a ZIP. We therefore
- *                    derive a rent $/sqft proxy from the available
+ *                    derive a gross rent-to-value YIELD RATIO from the available
  *                    zcta_demographics signal:
- *                    median_gross_rent * 12 / NULLIF(median_home_value, 0);
- *                    if median_home_value is null we fall back to
- *                    median_gross_rent. acs_year points form the yearly series.
+ *                    median_gross_rent * 12 / median_home_value (annualized
+ *                    gross rent over home value). When median_home_value is null
+ *                    or <= 0 the ratio is undefined, so that year's point is
+ *                    OMITTED (we never fall back to a different-unit value).
+ *                    acs_year points form the yearly series.
  */
 
 const SERIES = ["hpi", "unemployment", "rent_psf"] as const;
@@ -120,13 +122,13 @@ async function rentPsfSeries(zip: string): Promise<Point[]> {
   for (const row of r.rows) {
     const rent = row.median_gross_rent;
     const value = row.median_home_value;
+    // Gross rent-to-value yield ratio: annualized gross rent over home value.
+    // When home value is missing/null/<=0 the ratio is undefined, so we SKIP
+    // that year rather than fall back to a different-unit value (which would
+    // mix dimensionless ratios with raw monthly dollars and break the scale).
     if (rent == null || !Number.isFinite(Number(rent))) continue;
-    // Rent $/sqft proxy: annualized gross rent over home value, guarding
-    // divide-by-zero. Fall back to median_gross_rent when value is missing.
-    const v =
-      value != null && Number(value) > 0
-        ? (Number(rent) * 12) / Number(value)
-        : Number(rent);
+    if (value == null || !Number.isFinite(Number(value)) || Number(value) <= 0) continue;
+    const v = (Number(rent) * 12) / Number(value);
     out.push({ t: Number(row.acs_year), v: Number(v.toFixed(6)) });
   }
   return out;

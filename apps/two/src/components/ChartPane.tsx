@@ -36,9 +36,9 @@ const META: Record<SeriesKey, { label: string; color: string; fmt: (v: number) =
     fmt: (v) => `${v.toFixed(2)}%`,
   },
   rent_psf: {
-    label: "Rent $/sqft",
+    label: "Gross Rent Yield",
     color: "#1f9d6e",
-    fmt: (v) => `$${v.toFixed(4)}`,
+    fmt: (v) => `${(v * 100).toFixed(2)}%`,
   },
 };
 
@@ -175,6 +175,13 @@ export function ChartPane({ zip }: { zip: string | null }) {
 
   function bandScale(pts: Pt[], bandTop: number) {
     const ys = pts.map((p) => p.v);
+    // Guard empty series: Math.min(...[]) is Infinity and Math.max(...[]) is
+    // -Infinity, which would render "Infinity"/"-Infinity" y-labels. Return a
+    // safe neutral range and let the band draw a "no data" note instead.
+    if (pts.length === 0) {
+      const yOf = () => bandTop + bandH / 2;
+      return { yOf, lo: 0, hi: 1 };
+    }
     const lo = Math.min(...ys);
     const hi = Math.max(...ys);
     const span = hi - lo || 1;
@@ -248,12 +255,20 @@ export function ChartPane({ zip }: { zip: string | null }) {
                     <line x1={padL} x2={w - padR} y1={bandTop} y2={bandTop} stroke="#27272a" strokeWidth={1} />
                   ) : null}
                   {/* y range labels */}
-                  <text x={padL - 6} y={bandTop + 10} textAnchor="end" className="fill-zinc-500" style={{ fontSize: 9 }} fontFamily="monospace">
-                    {META[k].fmt(hi)}
-                  </text>
-                  <text x={padL - 6} y={bandTop + bandH - 4} textAnchor="end" className="fill-zinc-500" style={{ fontSize: 9 }} fontFamily="monospace">
-                    {META[k].fmt(lo)}
-                  </text>
+                  {pts.length > 0 ? (
+                    <>
+                      <text x={padL - 6} y={bandTop + 10} textAnchor="end" className="fill-zinc-500" style={{ fontSize: 9 }} fontFamily="monospace">
+                        {META[k].fmt(hi)}
+                      </text>
+                      <text x={padL - 6} y={bandTop + bandH - 4} textAnchor="end" className="fill-zinc-500" style={{ fontSize: 9 }} fontFamily="monospace">
+                        {META[k].fmt(lo)}
+                      </text>
+                    </>
+                  ) : (
+                    <text x={padL + 4} y={bandTop + bandH / 2 + 3} className="fill-zinc-600" style={{ fontSize: 9 }} fontFamily="monospace">
+                      no data
+                    </text>
+                  )}
                   {/* baseline */}
                   <line x1={padL} x2={w - padR} y1={bandTop + bandH - 4} y2={bandTop + bandH - 4} stroke="#18181b" strokeWidth={1} />
                   {xy.length > 0 ? (
