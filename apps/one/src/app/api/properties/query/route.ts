@@ -3,17 +3,66 @@ import { z } from 'zod';
 import pool from '@/lib/db';
 import { withSpan } from '@/lib/tracing';
 import { parse, compile, ALLOWED_COLUMNS_LIST } from '@oper/query-lang';
+import { MOTIVATED_SELLER_SCORE_SQL } from '@oper/primitives';
 
 export const dynamic = 'force-dynamic';
 
 const QueryBodySchema = z.object({
   expression: z.string().min(1).max(500),
   limit: z.number().int().min(1).max(1000).optional(),
+  // Server-side sort. `col` is a logical id translated through ORDER_BY_WHITELIST
+  // below (never interpolated). Unknown ids fall back to the default ORDER BY.
+  orderBy: z
+    .object({
+      col: z.string().max(64),
+      dir: z.enum(['asc', 'desc']),
+    })
+    .optional(),
 });
 
 const MAX_LIMIT = 1000;
 const DEFAULT_LIMIT = 200;
 const STATEMENT_TIMEOUT_MS = 5_000;
+
+/**
+ * TRUST BOUNDARY: the client only ever ships a column *id*. This map is the
+ * exclusive source of ORDER BY SQL — the value is a fixed, hand-authored SQL
+ * expression, never the client string. Every id here must correspond to a
+ * column in the SELECT below so the sort is meaningful. Anything not in this
+ * map is rejected (server falls back to `id DESC`).
+ */
+const ORDER_BY_WHITELIST: Record<string, string> = {
+  id: 'id',
+  address: 'address',
+  price: 'price',
+  estimated_rent: 'estimated_rent',
+  sqft: 'sqft',
+  bedrooms: 'bedrooms',
+  bathrooms: 'bathrooms',
+  year_built: 'year_built',
+  days_on_market: 'days_on_market',
+  price_cut_pct: 'price_cut_pct',
+  rent_price_ratio: 'rent_price_ratio',
+  // motivated_score is a computed SELECT expression; sort on the same formula.
+  motivated_score: MOTIVATED_SELLER_SCORE_SQL,
+};
+
+/**
+ * Build the ORDER BY clause from the whitelist. Returns `id DESC` when no valid
+ * sort is requested. `dir` is constrained to ASC/DESC by zod, so both the
+ * expression and the direction are server-controlled — no interpolation of
+ * client text. A stable `id DESC` tiebreaker keeps virtualized paging steady,
+ * and NULLS LAST keeps missing values off the top of a DESC sort (so the parity
+ * check — "top row has the true max" — holds).
+ */
+function buildOrderBy(orderBy?: { col: string; dir: 'asc' | 'desc' }): string {
+  if (!orderBy) return 'id DESC';
+  const expr = ORDER_BY_WHITELIST[orderBy.col];
+  if (!expr) return 'id DESC';
+  const dir = orderBy.dir === 'asc' ? 'ASC' : 'DESC';
+  if (orderBy.col === 'id') return `id ${dir}`;
+  return `${expr} ${dir} NULLS LAST, id DESC`;
+}
 
 export async function POST(req: NextRequest) {
   let body: z.infer<typeof QueryBodySchema>;
@@ -61,6 +110,7 @@ export async function POST(req: NextRequest) {
   const saleTypeDefault = compiled.usedColumns.includes('sale_type')
     ? ''
     : `sale_type = 'standard' AND`;
+  const orderBySql = buildOrderBy(body.orderBy);
   const sql = `
     SELECT
       id::text AS id,
@@ -77,11 +127,13 @@ export async function POST(req: NextRequest) {
       days_on_market,
       price_cut_pct,
       rent_low,
-      rent_high
+      rent_high,
+      rent_price_ratio,
+      ${MOTIVATED_SELLER_SCORE_SQL} as motivated_score
     FROM listings
     WHERE listing_type = 'for_sale'
       AND ${saleTypeDefault} (${compiled.whereSql})
-    ORDER BY id DESC
+    ORDER BY ${orderBySql}
     LIMIT ${limit}
   `;
 

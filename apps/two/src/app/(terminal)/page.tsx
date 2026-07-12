@@ -11,9 +11,14 @@ import { useSelection } from "@/lib/selection";
 import { StatBar } from "@/components/StatBar";
 import { PropertyTable } from "@/components/PropertyTable";
 import { ScreenTabs } from "@/components/ScreenTabs";
+import { ColumnPicker } from "@/components/ColumnPicker";
 import { DEFAULT_SORT, type ScreenSort } from "@/lib/screens";
+import {
+  DEFAULT_COLUMN_IDS,
+  resolveColumns,
+  serverSortKey,
+} from "@/lib/columns";
 import { DENSITY_ROW_HEIGHT } from "@/lib/types";
-import type { SortingState } from "@tanstack/react-table";
 
 /**
  * Eastern/central US bbox at zoom=14 — covers the densest listing regions
@@ -40,30 +45,102 @@ export default function TerminalPage() {
   // the grid's data source from the viewport feed to /api/properties/query
   // (same-origin via nginx; the server re-parses + re-compiles — client
   // output is never trusted). Empty expression -> back to the viewport tape.
-  // ScreenTabs also drives `expression`/`sorting` when a screen is applied.
+  // ScreenTabs also drives `expression`/`sort`/`columnIds` when a screen is applied.
   const [queryRows, setQueryRows] = React.useState<unknown[] | null>(null);
   const [queryState, setQueryState] = React.useState<'idle' | 'loading' | 'error'>('idle');
   const queryAbort = React.useRef<AbortController | null>(null);
 
   const [expression, setExpression] = React.useState('');
-  const [sorting, setSorting] = React.useState<SortingState>([
-    { id: DEFAULT_SORT.col, desc: DEFAULT_SORT.dir === 'desc' },
-  ]);
+  const [sort, setSort] = React.useState<ScreenSort | null>(DEFAULT_SORT);
 
-  // Live screen sort derived from the grid sort (first sort column).
-  const liveSort: ScreenSort | null = sorting[0]
-    ? { col: sorting[0].id, dir: sorting[0].desc ? 'desc' : 'asc' }
-    : null;
+  // ---- W2: column layout (per screen) ------------------------------------
+  // Visible column ids in render order. Screens carry their own `columns`
+  // JSONB; user edits persist back to the active user screen (PATCH) and to
+  // localStorage keyed by screen id (so built-in / anon layouts survive a
+  // reload too).
+  const [columnIds, setColumnIds] = React.useState<string[]>(DEFAULT_COLUMN_IDS);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [activeScreen, setActiveScreen] = React.useState<{
+    id: string;
+    kind: 'builtin' | 'user';
+  } | null>(null);
 
-  // Apply a screen: set the expression + sort and let the effect below run
-  // the query. The FilterExpression bar stays the canonical place to type a
-  // free-form expression; screens just pre-fill it.
-  const applyScreen = React.useCallback(
-    (s: { expression: string; sort: ScreenSort | null }) => {
-      setExpression(s.expression.trim());
-      if (s.sort) {
-        setSorting([{ id: s.sort.col, desc: s.sort.dir === 'desc' }]);
+  const columns = React.useMemo(() => resolveColumns(columnIds), [columnIds]);
+
+  // Live screen sort surfaced to ScreenTabs (dirty tracking).
+  const liveSort: ScreenSort | null = sort;
+
+  // Toggle server-side sort on a column id. Same column flips direction;
+  // a new column starts descending (metrics read high→low by default).
+  const onSortChange = React.useCallback((colId: string) => {
+    setSort((prev) =>
+      prev && prev.col === colId
+        ? { col: colId, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
+        : { col: colId, dir: 'desc' },
+    );
+  }, []);
+
+  // Persist a column layout: PATCH the active user screen's `columns` JSONB and
+  // mirror to localStorage (covers built-in + anonymous screens, whose layout
+  // can't live server-side).
+  const persistColumns = React.useCallback(
+    (ids: string[], screen: { id: string; kind: 'builtin' | 'user' } | null) => {
+      const key = `two:columns:${screen?.id ?? 'default'}`;
+      try {
+        window.localStorage.setItem(key, JSON.stringify(ids));
+      } catch {
+        /* ignore */
       }
+      if (screen?.kind === 'user') {
+        void fetch(`/api/screens?id=${screen.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ columns: ids }),
+        }).catch(() => {
+          /* non-fatal: localStorage still holds the layout */
+        });
+      }
+    },
+    [],
+  );
+
+  const onColumnsChange = React.useCallback(
+    (ids: string[]) => {
+      setColumnIds(ids.length > 0 ? ids : DEFAULT_COLUMN_IDS);
+      persistColumns(ids, activeScreen);
+    },
+    [activeScreen, persistColumns],
+  );
+
+  // Apply a screen: set the expression + sort + columns and let the effect
+  // below run the query. The FilterExpression bar stays the canonical place to
+  // type a free-form expression; screens just pre-fill it.
+  const applyScreen = React.useCallback(
+    (s: {
+      id: string;
+      kind: 'builtin' | 'user';
+      expression: string;
+      sort: ScreenSort | null;
+      columns: string[];
+    }) => {
+      setExpression(s.expression.trim());
+      setSort(s.sort ?? DEFAULT_SORT);
+      setActiveScreen({ id: s.id, kind: s.kind });
+      // Prefer a localStorage override (last user edit for this screen), then
+      // the screen's stored columns, then the default set.
+      let ids = s.columns.filter(Boolean);
+      try {
+        const stored = window.localStorage.getItem(`two:columns:${s.id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+            ids = parsed;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      setColumnIds(ids.length > 0 ? ids : DEFAULT_COLUMN_IDS);
     },
     [],
   );
@@ -76,7 +153,10 @@ export default function TerminalPage() {
     return () => window.removeEventListener('two:filter-change', onFilter);
   }, []);
 
-  // Run the query whenever the live expression changes.
+  // Run the query whenever the live expression or sort changes. Sort is
+  // server-side: we translate the column id to a whitelisted ORDER BY id
+  // (serverSortKey) and ship only that — the server re-validates it against its
+  // own whitelist, so an unmapped id is harmless (falls back to id DESC).
   React.useEffect(() => {
     if (!expression) {
       queryAbort.current?.abort();
@@ -87,10 +167,12 @@ export default function TerminalPage() {
     const ctrl = new AbortController();
     queryAbort.current = ctrl;
     setQueryState('loading');
+    const serverKey = serverSortKey(sort?.col);
+    const orderBy = serverKey && sort ? { col: serverKey, dir: sort.dir } : undefined;
     fetch('/api/properties/query', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expression, limit: 500 }),
+      body: JSON.stringify({ expression, limit: 500, orderBy }),
       signal: ctrl.signal,
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`query ${r.status}`))))
@@ -104,7 +186,7 @@ export default function TerminalPage() {
         setQueryState('error');
       });
     return () => ctrl.abort();
-  }, [expression]);
+  }, [expression, sort]);
 
   // One pass to coerce numeric strings -> numbers and derive 1%/cap/$/sqft.
   // Memoised so the table + StatBar don't recompute on every selection change.
@@ -182,9 +264,11 @@ export default function TerminalPage() {
     { description: "Toggle watchlist for selected row", group: "Actions" },
   );
 
-  // ---- Copy address to clipboard (c) --------------------------------------
+  // ---- Copy address to clipboard (y = yank) ------------------------------
+  // `c` is reassigned to the W2 column picker below, so copy moves to the
+  // vim-idiomatic yank key.
   useHotkey(
-    "c",
+    "y",
     () => {
       if (selected?.address) {
         navigator.clipboard
@@ -197,7 +281,16 @@ export default function TerminalPage() {
           });
       }
     },
-    { description: "Copy selected row address to clipboard", group: "Actions" },
+    { description: "Copy (yank) selected row address to clipboard", group: "Actions" },
+  );
+
+  // ---- Column picker (c) --------------------------------------------------
+  useHotkey(
+    "c",
+    () => {
+      setPickerOpen((v) => !v);
+    },
+    { description: "Toggle column picker", group: "Data" },
   );
 
   // ---- Top-bar status portal ------------------------------------------
@@ -268,12 +361,19 @@ export default function TerminalPage() {
           <div className="flex-1 min-h-0">
             <PropertyTable
               rows={rows}
+              columns={columns}
               selectedId={selected?.id ?? null}
               onSelect={setSelected}
-              sorting={sorting}
-              onSortingChange={setSorting}
+              sort={sort}
+              onSortChange={onSortChange}
             />
           </div>
+          <ColumnPicker
+            open={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            columnIds={columnIds}
+            onChange={onColumnsChange}
+          />
         </>
       ) : null}
     </div>

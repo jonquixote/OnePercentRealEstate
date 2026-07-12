@@ -32,6 +32,22 @@ export interface PropertyRow {
   onePct: number | null;
   /** Gross cap rate % — (rent * 12 / price) * 100. */
   cap: number | null;
+  // ---- W2: investor-math source fields (nullable; absent on the viewport
+  // tape, populated by /api/properties/query). The column registry
+  // (lib/columns.tsx) derives cap/CoC/gross-yield/band-spread from these.
+  /** Generated `estimated_rent / price` fraction (server column). */
+  rent_price_ratio: number | null;
+  /** Fractional price cut (e.g. 0.05 = 5% off). */
+  price_cut_pct: number | null;
+  /** 0–100 motivated-seller heuristic (server-computed, parity-tested). */
+  motivated_score: number | null;
+  /** Rent estimate confidence band low/high (monthly $). */
+  rent_low: number | null;
+  rent_high: number | null;
+  /** Year built. */
+  year_built: number | null;
+  /** Distress/standard sale type. */
+  sale_type: string | null;
 }
 
 export type Density = "cozy" | "compact" | "dense";

@@ -15,8 +15,14 @@ interface ScreenTabsProps {
   expression: string;
   /** Live sort of the grid. */
   sort: ScreenSort | null;
-  /** Apply a screen's expression + sort to the page. */
-  onApply: (s: { expression: string; sort: ScreenSort | null }) => void;
+  /** Apply a screen's expression + sort + columns to the page. */
+  onApply: (s: {
+    id: string;
+    kind: "builtin" | "user";
+    expression: string;
+    sort: ScreenSort | null;
+    columns: string[];
+  }) => void;
 }
 
 function sameSort(a: ScreenSort | null, b: ScreenSort | null): boolean {
@@ -65,7 +71,13 @@ export function ScreenTabs({ expression, sort, onApply }: ScreenTabsProps) {
   const pick = React.useCallback(
     (tab: ScreenLike) => {
       setActiveId(String(tab.id));
-      onApply({ expression: tab.expression, sort: tab.sort });
+      onApply({
+        id: String(tab.id),
+        kind: tab.kind,
+        expression: tab.expression,
+        sort: tab.sort,
+        columns: Array.isArray(tab.columns) ? tab.columns : [],
+      });
     },
     [onApply],
   );
