@@ -115,6 +115,8 @@ export async function POST(req: NextRequest) {
     SELECT
       id::text AS id,
       address,
+      latitude,
+      longitude,
       price,
       bedrooms,
       bathrooms,

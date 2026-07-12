@@ -8,8 +8,7 @@ import { useHotkey } from "@oper/primitives";
 import { toRows } from "@/lib/coerce";
 import type { ViewportResponse } from "@oper/api-client";
 import { useSelection } from "@/lib/selection";
-import { StatBar } from "@/components/StatBar";
-import { PropertyTable } from "@/components/PropertyTable";
+import { Workspace, type BottomPane } from "@/components/Workspace";
 import { ScreenTabs } from "@/components/ScreenTabs";
 import { ColumnPicker } from "@/components/ColumnPicker";
 import { DEFAULT_SORT, type ScreenSort } from "@/lib/screens";
@@ -64,6 +63,27 @@ export default function TerminalPage() {
     id: string;
     kind: 'builtin' | 'user';
   } | null>(null);
+
+  // ---- W3: bottom pane (map | chart) --------------------------------
+  // m toggles map, x toggles chart, esc returns focus to the table. The
+  // active pane (or null = collapsed) is persisted so the layout survives a
+  // reload. Hydrated after mount to stay SSR-safe.
+  const [bottomPane, setBottomPane] = React.useState<BottomPane>(null);
+  React.useEffect(() => {
+    try {
+      const v = window.localStorage.getItem('two:bottom-pane');
+      if (v === 'map' || v === 'chart') setBottomPane(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem('two:bottom-pane', bottomPane ?? '');
+    } catch {
+      /* ignore */
+    }
+  }, [bottomPane]);
 
   const columns = React.useMemo(() => resolveColumns(columnIds), [columnIds]);
 
@@ -229,6 +249,35 @@ export default function TerminalPage() {
     group: "Navigation",
   });
 
+  // ---- W3: pane toggles + focus moves -------------------------------
+  // `m` shows the map pane (toggle off if already open), `x` the chart pane.
+  useHotkey(
+    "m",
+    () => setBottomPane((p) => (p === "map" ? null : "map")),
+    { description: "Toggle map pane", group: "Panes" },
+  );
+  useHotkey(
+    "x",
+    () => setBottomPane((p) => (p === "chart" ? null : "chart")),
+    { description: "Toggle chart pane", group: "Panes" },
+  );
+  // `enter` moves keyboard focus to the inspector (right pane).
+  useHotkey(
+    "enter",
+    () => {
+      document.getElementById("terminal-inspector")?.focus();
+    },
+    { description: "Focus inspector", group: "Panes" },
+  );
+  // `esc` returns focus to the table.
+  useHotkey(
+    "escape",
+    () => {
+      document.getElementById("terminal-table")?.focus();
+    },
+    { description: "Focus table", group: "Panes" },
+  );
+
   // ---- Search focus (/) --------------------------------------------------
   useHotkey(
     "/",
@@ -358,17 +407,15 @@ export default function TerminalPage() {
             columnIds={columnIds}
             onApply={applyScreen}
           />
-          <StatBar rows={rows} />
-          <div className="flex-1 min-h-0">
-            <PropertyTable
-              rows={rows}
-              columns={columns}
-              selectedId={selected?.id ?? null}
-              onSelect={setSelected}
-              sort={sort}
-              onSortChange={onSortChange}
-            />
-          </div>
+          <Workspace
+            rows={rows}
+            columns={columns}
+            sort={sort}
+            onSortChange={onSortChange}
+            selectedId={selected?.id ?? null}
+            onSelect={setSelected}
+            bottomPane={bottomPane}
+          />
           <ColumnPicker
             open={pickerOpen}
             onClose={() => setPickerOpen(false)}
