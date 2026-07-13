@@ -22,6 +22,8 @@ import { useSessionUser } from '@/lib/useSessionUser';
 import { COMPARE_FREE_MAX, COMPARE_MAX } from '@/components/compare/useCompare';
 import { ReducedRail } from '@/components/home/ReducedRail';
 import { MarketPulse } from '@/components/home/MarketPulse';
+import { RentHeatTeaser } from '@/components/home/RentHeatTeaser';
+import { MarketsGrid } from '@/components/home/MarketsGrid';
 import { asStrategy, STRATEGY_BY_ID } from '@/lib/strategies';
 
 interface Property {
@@ -154,6 +156,9 @@ export default function Dashboard() {
           medianRatioPct={stats.medianRatioPct}
         />
       )}
+
+      <RentHeatTeaser />
+      <MarketsGrid />
 
       {/* Opportunities — the tool itself. Anchored target for hero CTA. */}
       <section id="opportunities" ref={opportunitiesRef} aria-labelledby="opp-headline" className="border-t border-line bg-ink-panel/30">
