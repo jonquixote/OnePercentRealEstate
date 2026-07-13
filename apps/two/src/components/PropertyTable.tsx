@@ -1,49 +1,41 @@
 "use client";
 
 import * as React from "react";
-import {
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type ColumnDef,
-  type SortingState,
-} from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronUp, ChevronDown, ChevronsUpDown, Rows3 } from "lucide-react";
 import { cn } from "@oper/primitives";
-import {
-  formatBeds,
-  formatInt,
-  formatPct,
-  formatPpsf,
-  formatPrice,
-  onePctColor,
-  statusStyle,
-} from "@/lib/format";
+import type { ColumnDef } from "@/lib/columns";
+import type { ScreenSort } from "@/lib/screens";
 import { DENSITY_ROW_HEIGHT, type Density, type PropertyRow } from "@/lib/types";
 
 interface Props {
   rows: PropertyRow[];
+  /** Ordered, visible column defs (already resolved from the active screen). */
+  columns: ColumnDef[];
   selectedId: string | null;
   onSelect: (row: PropertyRow) => void;
+  /** Controlled sort ({col: columnId, dir}); server-side. */
+  sort: ScreenSort | null;
+  /** Toggle sort on a column id. The page maps it to a server ORDER BY. */
+  onSortChange: (colId: string) => void;
 }
 
 const DENSITY_STORAGE_KEY = "two:density";
 
 /**
- * Virtualized property grid. The pattern mirrors the TanStack Table virtual
- * recipe: outer scroll container holds an absolutely-positioned spacer +
- * positioned rows. This is the only way to keep 60fps with 2000 rows at
- * dense row heights.
+ * Virtualized property grid. The pattern mirrors the TanStack virtual recipe:
+ * outer scroll container holds an absolutely-positioned spacer + positioned
+ * rows. This is the only way to keep 60fps with 2000 rows at dense row heights.
+ *
+ * W2: columns now come from the registry (`lib/columns.tsx`) via the `columns`
+ * prop — the grid no longer hardcodes them. Sort is SERVER-SIDE: a header click
+ * calls `onSortChange(colId)`; the page re-runs the query with a whitelisted
+ * ORDER BY. Rows arrive pre-sorted, so the grid does not re-sort locally.
  *
  * Header is sticky inside the scroll container so column meanings stay put
  * while the user scans the tape.
  */
-export function PropertyTable({ rows, selectedId, onSelect }: Props) {
-  const [sorting, setSorting] = React.useState<SortingState>([
-    { id: "onePct", desc: true },
-  ]);
+export function PropertyTable({ rows, columns, selectedId, onSelect, sort, onSortChange }: Props) {
   const [density, setDensity] = React.useState<Density>("compact");
 
   // Hydrate density from localStorage once after mount. We don't read in the
@@ -65,163 +57,11 @@ export function PropertyTable({ rows, selectedId, onSelect }: Props) {
     }
   }, [density]);
 
-  const columns = React.useMemo<ColumnDef<PropertyRow>[]>(
-    () => [
-      {
-        id: "address",
-        header: "Address",
-        accessorFn: (r) => r.address,
-        cell: (info) => (
-          <span className="line-clamp-1 text-zinc-200">
-            {info.getValue<string>()}
-          </span>
-        ),
-        size: 280,
-        enableSorting: true,
-      },
-      {
-        id: "price",
-        header: "Price",
-        accessorFn: (r) => r.price,
-        cell: (info) => (
-          <span className="num text-zinc-100">
-            {formatPrice(info.getValue<number | null>())}
-          </span>
-        ),
-        size: 100,
-      },
-      {
-        id: "ppsf",
-        header: "$/sqft",
-        accessorFn: (r) => r.ppsf,
-        cell: (info) => (
-          <span className="num text-zinc-300">
-            {formatPpsf(info.getValue<number | null>())}
-          </span>
-        ),
-        size: 70,
-      },
-      {
-        id: "beds",
-        header: "Bd",
-        accessorFn: (r) => r.bedrooms,
-        cell: (info) => (
-          <span className="num text-zinc-300">
-            {formatBeds(info.getValue<number | null>())}
-          </span>
-        ),
-        size: 44,
-      },
-      {
-        id: "baths",
-        header: "Ba",
-        accessorFn: (r) => r.bathrooms,
-        cell: (info) => (
-          <span className="num text-zinc-300">
-            {formatBeds(info.getValue<number | null>())}
-          </span>
-        ),
-        size: 44,
-      },
-      {
-        id: "sqft",
-        header: "Sqft",
-        accessorFn: (r) => r.sqft,
-        cell: (info) => (
-          <span className="num text-zinc-300">
-            {formatInt(info.getValue<number | null>())}
-          </span>
-        ),
-        size: 70,
-      },
-      {
-        id: "onePct",
-        header: "1%",
-        accessorFn: (r) => r.onePct,
-        cell: (info) => {
-          const v = info.getValue<number | null>();
-          return (
-            <span className={cn("num font-medium", onePctColor(v))}>
-              {formatPct(v, 2)}
-            </span>
-          );
-        },
-        size: 64,
-      },
-      {
-        id: "estRent",
-        header: "Est. Rent",
-        accessorFn: (r) => r.estimated_rent,
-        cell: (info) => (
-          <span className="num text-zinc-300">
-            {formatPrice(info.getValue<number | null>())}
-          </span>
-        ),
-        size: 90,
-      },
-      {
-        id: "cap",
-        header: "Cap",
-        accessorFn: (r) => r.cap,
-        cell: (info) => (
-          <span className="num text-zinc-300">
-            {formatPct(info.getValue<number | null>(), 1)}
-          </span>
-        ),
-        size: 60,
-      },
-      {
-        id: "dom",
-        header: "DOM",
-        accessorFn: (r) => r.dom,
-        cell: (info) => (
-          <span className="num text-zinc-400">
-            {formatInt(info.getValue<number | null>())}
-          </span>
-        ),
-        size: 52,
-      },
-      {
-        id: "status",
-        header: "Status",
-        accessorFn: (r) => r.status,
-        cell: (info) => {
-          const s = statusStyle(info.getValue<string | null>());
-          return (
-            <span
-              className={cn(
-                "inline-flex items-center rounded-sm px-1.5 py-0.5 font-mono text-[9px] tracking-wider",
-                s.bg,
-                s.text,
-              )}
-            >
-              {s.label}
-            </span>
-          );
-        },
-        size: 78,
-        enableSorting: false,
-      },
-    ],
-    [],
-  );
-
-  const table = useReactTable({
-    data: rows,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getRowId: (row) => row.id,
-  });
-
-  const tableRows = table.getRowModel().rows;
   const parentRef = React.useRef<HTMLDivElement>(null);
   const rowHeight = DENSITY_ROW_HEIGHT[density];
 
   const virtualizer = useVirtualizer({
-    count: tableRows.length,
+    count: rows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => rowHeight,
     overscan: 12,
@@ -233,12 +73,17 @@ export function PropertyTable({ rows, selectedId, onSelect }: Props) {
     virtualizer.measure();
   }, [density, virtualizer]);
 
+  const totalWidth = React.useMemo(
+    () => columns.reduce((acc, c) => acc + c.width, 0),
+    [columns],
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-zinc-950">
       {/* Density toggle strip */}
       <div className="flex items-center justify-between border-b border-zinc-800/60 px-3 py-1 font-mono text-[10px] text-zinc-500">
         <span className="uppercase tracking-widest">
-          {tableRows.length.toLocaleString()} rows
+          {rows.length.toLocaleString()} rows
         </span>
         <div className="flex items-center gap-1">
           <Rows3 className="h-3 w-3" />
@@ -260,69 +105,55 @@ export function PropertyTable({ rows, selectedId, onSelect }: Props) {
         </div>
       </div>
 
-      <div
-        ref={parentRef}
-        className="relative flex-1 overflow-auto"
-        // The grid template + numeric right-align is driven by column meta on
-        // every cell below; keeping this here in case we add CSS-grid mode.
-      >
-        <table className="w-full border-separate border-spacing-0 font-mono text-[12px]">
-          <thead className="sticky top-0 z-10 bg-zinc-950">
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id} className="border-b border-zinc-800/60">
-                {hg.headers.map((header, idx) => {
-                  const canSort = header.column.getCanSort();
-                  const sortDir = header.column.getIsSorted();
-                  const isNum = idx > 0 && header.column.id !== "status";
-                  return (
-                    <th
-                      key={header.id}
-                      style={{ width: header.column.getSize() }}
-                      className={cn(
-                        "select-none border-b border-zinc-800/60 px-2 py-1.5 font-mono text-[10px] font-normal uppercase tracking-widest text-zinc-500",
-                        isNum ? "text-right" : "text-left",
-                        canSort && "cursor-pointer hover:text-zinc-300",
-                      )}
-                      onClick={
-                        canSort ? header.column.getToggleSortingHandler() : undefined
-                      }
-                    >
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1",
-                          isNum && "justify-end w-full",
-                        )}
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                        {canSort ? (
-                          sortDir === "asc" ? (
-                            <ChevronUp className="h-3 w-3 text-primary" />
-                          ) : sortDir === "desc" ? (
-                            <ChevronDown className="h-3 w-3 text-primary" />
-                          ) : (
-                            <ChevronsUpDown className="h-3 w-3 opacity-40" />
-                          )
-                        ) : null}
-                      </span>
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
-          </thead>
-          <tbody style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
-            {virtualizer.getVirtualItems().map((vRow) => {
-              const row = tableRows[vRow.index];
-              const isSelected = row.original.id === selectedId;
+      <div ref={parentRef} className="relative flex-1 overflow-auto">
+        <div style={{ minWidth: totalWidth }}>
+          {/* Sticky header */}
+          <div className="sticky top-0 z-10 flex border-b border-zinc-800/60 bg-zinc-950">
+            {columns.map((col) => {
+              const canSort = Boolean(col.sortKey);
+              const active = sort?.col === col.id;
+              const isNum = col.align === "right";
               return (
-                <tr
+                <div
+                  key={col.id}
+                  style={{ width: col.width }}
+                  className={cn(
+                    "flex shrink-0 select-none items-center gap-1 px-2 py-1.5 font-mono text-[10px] font-normal uppercase tracking-widest text-zinc-500",
+                    isNum ? "justify-end" : "justify-start",
+                    canSort && "cursor-pointer hover:text-zinc-300",
+                  )}
+                  onClick={canSort ? () => onSortChange(col.id) : undefined}
+                >
+                  <span>{col.label}</span>
+                  {canSort ? (
+                    active ? (
+                      sort?.dir === "asc" ? (
+                        <ChevronUp className="h-3 w-3 text-primary" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 text-primary" />
+                      )
+                    ) : (
+                      <ChevronsUpDown className="h-3 w-3 opacity-40" />
+                    )
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Virtualized body */}
+          <div
+            style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
+          >
+            {virtualizer.getVirtualItems().map((vRow) => {
+              const row = rows[vRow.index];
+              const isSelected = row.id === selectedId;
+              return (
+                <div
                   key={row.id}
                   data-index={vRow.index}
                   ref={virtualizer.measureElement}
-                  onClick={() => onSelect(row.original)}
+                  onClick={() => onSelect(row)}
                   style={{
                     position: "absolute",
                     top: 0,
@@ -332,33 +163,27 @@ export function PropertyTable({ rows, selectedId, onSelect }: Props) {
                     height: `${rowHeight}px`,
                   }}
                   className={cn(
-                    "flex cursor-pointer border-b border-zinc-900 hover:bg-zinc-900/50",
+                    "flex cursor-pointer border-b border-zinc-900 font-mono text-[12px] hover:bg-zinc-900/50",
                     isSelected && "border-l-2 border-l-primary bg-primary/5",
                   )}
                 >
-                  {row.getVisibleCells().map((cell, idx) => {
-                    const isNum = idx > 0 && cell.column.id !== "status";
-                    return (
-                      <td
-                        key={cell.id}
-                        style={{
-                          width: cell.column.getSize(),
-                          height: rowHeight,
-                        }}
-                        className={cn(
-                          "flex items-center px-2",
-                          isNum ? "justify-end" : "justify-start",
-                        )}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    );
-                  })}
-                </tr>
+                  {columns.map((col) => (
+                    <div
+                      key={col.id}
+                      style={{ width: col.width, height: rowHeight }}
+                      className={cn(
+                        "flex shrink-0 items-center px-2",
+                        col.align === "right" ? "justify-end" : "justify-start",
+                      )}
+                    >
+                      {col.render(row)}
+                    </div>
+                  ))}
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
     </div>
   );

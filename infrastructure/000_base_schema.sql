@@ -65,9 +65,6 @@ CREATE INDEX IF NOT EXISTS idx_listings_broker_name ON listings(broker_name);
 CREATE INDEX IF NOT EXISTS idx_listings_geom ON listings USING GIST(geom);
 CREATE INDEX IF NOT EXISTS idx_listings_geom_type ON listings USING GIST(geom)
     WHERE listing_type = 'for_sale' AND geom IS NOT NULL;
-CREATE INDEX IF NOT EXISTS listings_rent_price_ratio_idx ON listings (rent_price_ratio DESC)
-    WHERE rent_price_ratio IS NOT NULL;
-
 -- Trigger to keep geom in sync with lat/lon
 CREATE OR REPLACE FUNCTION update_listings_geom()
 RETURNS TRIGGER AS $$
@@ -248,6 +245,10 @@ ALTER TABLE listings
       ELSE NULL
     END
   ) STORED;
+
+-- Index on the generated column (must come after the column is added above).
+CREATE INDEX IF NOT EXISTS listings_rent_price_ratio_idx ON listings (rent_price_ratio DESC)
+    WHERE rent_price_ratio IS NOT NULL;
 
 -- Permissions
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres;

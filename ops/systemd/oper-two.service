@@ -8,6 +8,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/onepercent/apps/two/.next/standalone
 EnvironmentFile=/etc/oper.env
+EnvironmentFile=-/etc/oper-role-app.env
 Environment=PORT=3002
 ExecStart=/usr/bin/node apps/two/server.js
 Restart=on-failure

@@ -63,7 +63,7 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
         className="mat relative aspect-[4/3] transition-colors group-hover:border-[var(--line-hi)]"
         style={highlighted ? { borderColor: 'var(--pass-hi)', boxShadow: '0 0 0 1px var(--pass-hi)' } : undefined}
       >
-        {primary_photo ? (
+        {typeof primary_photo === 'string' && primary_photo.length > 0 ? (
           <div className="h-full w-full overflow-hidden rounded-[6px]">
             <Image
               src={primary_photo}

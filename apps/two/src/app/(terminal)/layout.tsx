@@ -16,6 +16,7 @@ import {
   useHotkey,
 } from "@oper/primitives";
 import { SelectionProvider } from "@/lib/selection";
+import { useSessionUser } from "@/lib/useSessionUser";
 import { FilterRail } from "@/components/FilterRail";
 import { PropertyInspector } from "@/components/PropertyInspector";
 import { FilterExpression } from "@/components/FilterExpression";
@@ -35,7 +36,38 @@ export default function TerminalLayout({
   const [railCollapsed, setRailCollapsed] = React.useState(false);
   const [filterValue, setFilterValue] = React.useState("");
   const pathname = usePathname();
+
+  // Keep the controlled top filter bar (`filterValue`) in sync with every
+  // `two:filter-change` source — including screens applied from the tab bar,
+  // which set the expression outside the bar's own onChange path.
+  React.useEffect(() => {
+    const onFilter = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const expr =
+        typeof detail === 'string'
+          ? String(detail ?? '')
+          : String(detail?.expression ?? '');
+      setFilterValue(expr);
+    };
+    window.addEventListener("two:filter-change", onFilter);
+    return () => window.removeEventListener("two:filter-change", onFilter);
+  }, []);
+
+  // While the keyboard-help overlay is open, swallow other hotkeys so they
+  // don't fire behind the modal. Escape and `?` are let through so the
+  // overlay's own close handlers still work.
+  React.useEffect(() => {
+    if (!helpOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "?") return;
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [helpOpen]);
   const portfolioActive = pathname?.startsWith("/portfolio") ?? false;
+  const session = useSessionUser();
+  const isPro = session?.tier === "pro";
 
   // Lightweight layout persistence. v4 of react-resizable-panels dropped the
   // single-prop `autoSaveId`; the recommended replacement (`useDefaultLayout`)
@@ -67,7 +99,7 @@ export default function TerminalLayout({
   // `?` (shift+/) opens keyboard help. Single source of truth for the modal
   // visibility lives here; the toolbar button just toggles the same state.
   useHotkey(
-    "shift+?",
+    "?",
     () => setHelpOpen((v) => !v),
     { description: "Show keyboard shortcuts", group: "Help" },
   );
@@ -101,18 +133,32 @@ export default function TerminalLayout({
           </nav>
 
           <div className="mx-auto w-full max-w-xl">
-            <FilterExpression
-              value={filterValue}
-              onChange={setFilterValue}
-              onValidChange={(expr) => {
-                // Notify the page beneath; it owns the data fetch.
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(
-                    new CustomEvent("two:filter-change", { detail: expr }),
-                  );
-                }
-              }}
-            />
+            {isPro ? (
+              <FilterExpression
+                value={filterValue}
+                onChange={setFilterValue}
+                onValidChange={(expr) => {
+                  // Notify the page beneath; it owns the data fetch.
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("two:filter-change", { detail: expr }),
+                    );
+                  }
+                }}
+              />
+            ) : (
+              <div className="flex items-center gap-2 rounded-md border border-amber-700/60 bg-amber-500/15 px-3 py-1.5 font-mono text-[12px] text-amber-200">
+                <span className="truncate">
+                  Custom filters are a Pro feature
+                </span>
+                <Link
+                  href="/pricing"
+                  className="shrink-0 underline underline-offset-2 hover:text-amber-50"
+                >
+                  See pricing →
+                </Link>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

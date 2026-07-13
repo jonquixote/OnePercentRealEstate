@@ -485,6 +485,9 @@ services:
   # Tasks 2.1 & 2.2: saved-search daily digest (14:00 UTC) + weekly ZIP
   # market brief (Mon 14:00 UTC). Hourly tick gated internally; deduped via
   # the digest_runs table. Reads RESEND_API_KEY + UNSUBSCRIBE_SECRET from .env.
+  # AL1: the digest now also emails screen alerts, which compile the screen's
+  # query-lang expression via @oper/query-lang (a TS-only workspace package).
+  # It runs via tsx so the TS is transpiled at runtime (no compiled dist).
   worker-digest:
     build:
       context: ../
@@ -498,7 +501,7 @@ services:
       - WATCHLIST_FROM_EMAIL=alerts@octavo.press
       - DIGEST_PUBLIC_URL=https://octavo.press
       - LOG_LEVEL=info
-    command: ["node", "apps/worker/dist/digest.js"]
+    command: ["node", "apps/worker/node_modules/.bin/tsx", "apps/worker/src/digest.ts"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -612,7 +615,9 @@ services:
     restart: always
     network_mode: host
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres?sslmode=disable"
+      # Least-privilege (A3): pg_monitor role, not superuser. Falls back to
+      # postgres only if OPER_EXPORTER_DB_PASSWORD is unset.
+      DATA_SOURCE_NAME: "postgresql://oper_exporter:${OPER_EXPORTER_DB_PASSWORD:-${POSTGRES_PASSWORD}}@127.0.0.1:5432/postgres?sslmode=disable"
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
     command:
       - "--web.listen-address=127.0.0.1:9187"

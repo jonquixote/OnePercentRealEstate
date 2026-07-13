@@ -188,6 +188,7 @@ export async function GET(request: NextRequest) {
           sqft,
           primary_photo,
           listing_type as status,
+          zip_code,
           ST_Y(geom) as latitude,
           ST_X(geom) as longitude
         FROM listings

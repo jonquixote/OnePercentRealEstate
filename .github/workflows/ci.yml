@@ -38,7 +38,6 @@ jobs:
       STRIPE_SECRET_KEY: sk_test_ci
       STRIPE_WEBHOOK_SECRET: whsec_ci
 
-
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -48,5 +47,67 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install
       - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm lint 2>&1 | head -50 || true
+      # C2: run the workspace test suites (apps/one now includes the C1 query
+      # parameterization tests; worker + primitives suites also run here).
+      - run: pnpm -r test
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: pytest (ml_rent_estimator)
+        working-directory: services/ml_rent_estimator
+        run: |
+          python -m pip install --upgrade pip
+          # numpy>=2 is required by the training/eval stack.
+          pip install "numpy>=2" pandas scikit-learn pytest
+          pytest -q --ignore=ab_test.py
       - run: pnpm build
+
+  # C2: migrations dry-run. Applies the base schema then every migration in
+  # filename order against a fresh PostGIS DB. Catches SQL syntax / ordering
+  # rot forever. NOTE: this job is intentionally separate so a migration
+  # regression is reported without blocking the app build.
+  migrations-dry-run:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply base schema + all migrations + hardening out-of-band files
+        run: |
+          psql -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          psql -v ON_ERROR_STOP=1 -f infrastructure/000_base_schema.sql
+          for f in $(ls infrastructure/migrations/*.sql | sort); do
+            echo "== applying $f =="
+            psql -v ON_ERROR_STOP=1 -f "$f"
+          done
+          # C2: also dry-run the backend-db-hardening out-of-band migrations
+          # (roles, index audit, audit partitioning) — the riskiest SQL was not
+          # previously exercised. These run after the base migrations so their
+          # tables exist; the S2 swap's DO-block guard makes re-runs a no-op.
+          for f in \
+            infrastructure/migrations/out-of-band/2026_07_12_db_roles.sql \
+            infrastructure/migrations/out-of-band/2026_07_12_indexes.sql \
+            infrastructure/migrations/out-of-band/2026_07_12_audit_partition.sql \
+            infrastructure/migrations/out-of-band/2026_07_12_followup_fixes.sql; do
+            echo "== applying $f =="
+            psql -v ON_ERROR_STOP=1 -f "$f"
+          done

@@ -55,6 +55,28 @@ export async function GET(request: NextRequest) {
            ON CONFLICT (user_id) DO UPDATE SET email_optout = true`,
           [userId]
         );
+      } else {
+        // AL1: the unsubscribe link may reference a screen alert's screen_id
+        // (the digest reuses the same HMAC token over `${id}|${email}`). Find
+        // the owning user via screen_alerts and flip their global opt-out, plus
+        // disable the specific alert so re-enabling is a deliberate choice.
+        const alertOwner = await pool.query(
+          'SELECT user_id FROM screen_alerts WHERE screen_id = $1',
+          [id]
+        );
+        if (alertOwner.rows.length > 0) {
+          const userId = alertOwner.rows[0].user_id;
+          await pool.query(
+            `INSERT INTO user_alert_prefs (user_id, email_optout)
+             VALUES ($1, true)
+             ON CONFLICT (user_id) DO UPDATE SET email_optout = true`,
+            [userId]
+          );
+          await pool.query(
+            'UPDATE screen_alerts SET enabled = false, updated_at = now() WHERE screen_id = $1 AND user_id = $2',
+            [id, userId]
+          );
+        }
       }
     } catch (err) {
       console.error('Unsubscribe error:', err);

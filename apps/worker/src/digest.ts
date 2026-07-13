@@ -17,6 +17,7 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Pool } from 'pg';
+import { parse, compile } from '@oper/query-lang';
 import { loadEnv } from './env.js';
 import { getLogger, type WorkerLogger } from './logger.js';
 
@@ -182,17 +183,89 @@ function listingRowHtml(listing: DigestListing, base: string): string {
     </tr>`;
 }
 
+// ---------------------------------------------------------------------------
+// Screen-alert compilation (Task AL1) — query-lang on a saved terminal screen
+// ---------------------------------------------------------------------------
+// Screen alerts reuse the EXACT same compile path as /api/properties/query:
+// parse the expression string, then compile to a parameterized WHERE with a
+// strict column whitelist and $N placeholders. No client SQL is interpolated.
+async function compileScreenExpression(expression: string): Promise<{
+  whereSql: string;
+  params: any[];
+  usedColumns: string[];
+}> {
+  const ast = parse(expression);
+  const compiled = compile(ast);
+  return {
+    whereSql: compiled.whereSql,
+    params: compiled.params,
+    usedColumns: compiled.usedColumns,
+  };
+}
+
+// Run a single screen alert's compiled expression, bounded to listings newer
+// than `lastRunAt` and capped at LIMIT 20. Mirrors the /api/properties/query
+// SELECT structure exactly — same columns, same sale_type-default logic, same
+// statement_timeout guard — so digest results match the interactive grid.
+async function runScreenAlertQuery(
+  client: any,
+  compiled: { whereSql: string; params: any[]; usedColumns: string[] },
+  lastRunAt: Date,
+): Promise<DigestListing[]> {
+  const saleTypeDefault = compiled.usedColumns.includes('sale_type')
+    ? ''
+    : `sale_type = 'standard' AND`;
+  // Re-base the compiled `$N` placeholders by +1 so they don't collide with
+  // the `$1` we use for `created_at > $1` (lastRunAt). query-lang's compile()
+  // emits its own $1-based placeholders, so without this shift `price_cut_pct
+  // > $1` would bind to lastRunAt (a timestamptz) instead of the expression
+  // value, causing a type error that silently killed the alert query.
+  const whereSql = compiled.whereSql.replace(/\$(\d+)/g, (_, n) => `$${Number(n) + 1}`);
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL statement_timeout = 5000');
+    const result = await client.query(
+      `
+        SELECT id, address, price, estimated_rent,
+               CASE WHEN price > 0 AND estimated_rent > 0
+                    THEN estimated_rent / price ELSE NULL END AS ratio,
+               primary_photo
+        FROM listings
+        WHERE listing_type = 'for_sale'
+          AND ${saleTypeDefault} (${whereSql})
+          AND created_at > $1
+        ORDER BY created_at DESC
+        LIMIT 20
+      `,
+      [lastRunAt, ...compiled.params]
+    );
+    await client.query('COMMIT');
+    return result.rows as DigestListing[];
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  }
+}
+
 async function runDailyDigest(): Promise<void> {
   const client = await pool.connect();
   try {
-    // Users with at least one enabled search and a reachable email, who have
-    // not globally opted out.
+    // Users with at least one enabled search OR one enabled screen alert,
+    // a reachable email, and who have not globally opted out. Both sources
+    // feed the SAME one-email-per-user-per-day send below.
     const usersRes = await client.query(
       `
         SELECT DISTINCT s.user_id, u.email
         FROM saved_searches s
         JOIN user_alert_prefs u ON u.user_id = s.user_id
         WHERE s.email_digest = true
+          AND u.email IS NOT NULL
+          AND NOT u.email_optout
+        UNION
+        SELECT DISTINCT sa.user_id, u.email
+        FROM screen_alerts sa
+        JOIN user_alert_prefs u ON u.user_id = sa.user_id
+        WHERE sa.enabled = true
           AND u.email IS NOT NULL
           AND NOT u.email_optout
       `
@@ -230,10 +303,20 @@ async function sendDailyDigestForUser(
 
   const listings: DigestListing[] = [];
   const searchIds: bigint[] = [];
+  // Reference id used to build the one-click unsubscribe link. Prefer the
+  // first saved search; fall back to the first screen alert when the user
+  // only has screen alerts (so the link still resolves in the unsub route).
+  let unsubRefId: string | null = null;
+  // Footer notes (e.g. a disabled malformed screen) appended to the email.
+  const footerNotes: string[] = [];
 
   for (const search of searchesRes.rows) {
     if (listings.length >= DAILY_LISTING_CAP) break;
-    const { sql, bind } = compileSavedSearchParams(search.params ?? {});
+    const { sql: rawSql, bind } = compileSavedSearchParams(search.params ?? {});
+    // compileSavedSearchParams numbers its placeholders from $1; the outer
+    // query uses $1 for `cutoff`, so shift the filter placeholders up by one
+    // to avoid a parameter-index collision.
+    const sql = rawSql.replace(/\$(\d+)/g, (_, n) => `$${Number(n) + 1}`);
     const remaining = DAILY_LISTING_CAP - listings.length;
 
     const res = await client.query(
@@ -254,6 +337,7 @@ async function sendDailyDigestForUser(
 
     for (const row of res.rows) listings.push(row);
     searchIds.push(search.id);
+    if (unsubRefId == null) unsubRefId = String(search.id);
   }
 
   // Always stamp last_digest_at so we make forward progress even with 0 matches.
@@ -264,17 +348,90 @@ async function sendDailyDigestForUser(
     );
   }
 
+  // --- Task AL1: screen alerts, merged into the SAME one-email/day send ----
+  // The same DAILY_LISTING_CAP (6) is shared — screen matches fill whatever
+  // room the saved searches left. last_run_at advances regardless of matches
+  // so a quiet screen doesn't re-scan its whole history the next day.
+  const alertRes = await client.query(
+    `
+      SELECT sa.screen_id,
+             COALESCE(sa.last_run_at, now() - interval '1 day') AS cutoff,
+             ts.expression, ts.name
+      FROM screen_alerts sa
+      JOIN terminal_screens ts ON ts.id = sa.screen_id
+      WHERE sa.user_id = $1 AND sa.enabled = true
+      ORDER BY sa.created_at ASC
+    `,
+    [userId]
+  );
+
+  const touchedAlerts: bigint[] = [];
+  for (const alert of alertRes.rows) {
+    if (listings.length >= DAILY_LISTING_CAP) break;
+    touchedAlerts.push(alert.screen_id);
+
+    // An empty expression matches nothing meaningful — skip it (still push
+    // to touchedAlerts below so its cursor advances) rather than compiling.
+    if (!alert.expression || !alert.expression.trim()) {
+      continue;
+    }
+
+    let compiled;
+    try {
+      compiled = await compileScreenExpression(alert.expression);
+    } catch (err) {
+      // Malformed/expensive expression: disable the alert so we don't keep
+      // retrying it, and note it in the email footer.
+      logger.warn({ err, userId, screenId: alert.screen_id }, 'Screen alert expression failed to compile');
+      await client.query(
+        `UPDATE screen_alerts SET enabled = false, updated_at = now() WHERE screen_id = $1 AND user_id = $2`,
+        [alert.screen_id, userId]
+      );
+      footerNotes.push(
+        `Your screen "${String(alert.name ?? 'unknown')}" was turned off — its filter expression is invalid.`
+      );
+      continue;
+    }
+
+    try {
+      const matches = await runScreenAlertQuery(client, compiled, alert.cutoff);
+      for (const row of matches) {
+        if (listings.length >= DAILY_LISTING_CAP) break;
+        listings.push(row);
+      }
+      if (unsubRefId == null) unsubRefId = String(alert.screen_id);
+    } catch (err) {
+      logger.error({ err, userId, screenId: alert.screen_id }, 'Screen alert query failed');
+    }
+  }
+
+  // Advance every touched alert's cursor (compiled or not) so we make progress.
+  if (touchedAlerts.length > 0) {
+    await client.query(
+      `UPDATE screen_alerts SET last_run_at = now(), updated_at = now()
+       WHERE screen_id = ANY($1::bigint[]) AND user_id = $2`,
+      [touchedAlerts, userId]
+    );
+  }
+
   if (listings.length === 0) return;
 
   const base = env.DIGEST_PUBLIC_URL.replace(/\/$/, '');
   const rowsHtml = listings.map((l) => listingRowHtml(l, base)).join('');
-  const unsub = unsubUrl(String(searchIds[0]), email);
+  const unsub = unsubRefId != null
+    ? unsubUrl(unsubRefId, email)
+    : `${base}/api/unsubscribe`;
+
+  const footerHtml = footerNotes.length > 0
+    ? `<p style="color:#b45309;font-size:12px">${footerNotes.map((n) => escHtml(n)).join('<br/>')}</p>`
+    : '';
 
   const html = `
     <h2>Your daily new matches</h2>
-    <p style="color:#374151">${listings.length} new listing${listings.length === 1 ? '' : 's'} matching your saved searches since your last digest.</p>
+    <p style="color:#374151">${listings.length} new listing${listings.length === 1 ? '' : 's'} matching your saved searches and screens since your last digest.</p>
     <table style="border-collapse:collapse;width:100%">${rowsHtml}</table>
     <hr style="margin-top:16px" />
+    ${footerHtml}
     <p style="color:#6b7280;font-size:12px">
       <a href="${escHtml(unsub)}" style="color:#6b7280">Unsubscribe from these digests</a>
     </p>`;

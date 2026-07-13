@@ -12,7 +12,7 @@
     "start:rent-estimator": "node dist/rent-estimator.js",
     "start:media-health": "node dist/media-health.js",
     "start:ml-scheduler": "node dist/ml-scheduler.js",
-    "start:digest": "node dist/digest.js",
+    "start:digest": "tsx src/digest.ts",
     "dev:crawl": "tsx src/crawl.ts",
     "dev:refresh": "tsx src/refresh-clusters.ts",
     "dev:rent-estimator": "tsx src/rent-estimator.ts",
@@ -22,15 +22,16 @@
     "lint": "eslint src --max-warnings=0"
   },
   "dependencies": {
+    "@oper/query-lang": "workspace:*",
     "ioredis": "^5.11.0",
     "pg": "^8.17.2",
-    "pino": "^9.5.0"
+    "pino": "^9.5.0",
+    "tsx": "^4.22.4"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/pg": "^8.16.0",
     "eslint": "^9",
-    "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^3.2.4"
   }

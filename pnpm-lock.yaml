@@ -112,7 +112,7 @@ importers:
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       nuqs:
         specifier: ^2.8.9
-        version: 2.8.9(next@16.2.7(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)
+        version: 2.8.9(next@16.2.7(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)
       pg:
         specifier: ^8.17.2
         version: 8.21.0
@@ -167,7 +167,7 @@ importers:
         version: 9.39.4(jiti@2.7.0)
       eslint-config-next:
         specifier: 16.0.6
-        version: 16.0.6(@typescript-eslint/parser@8.60.1(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
+        version: 16.0.6(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
       prettier:
         specifier: ^3.8.3
         version: 3.8.3
@@ -183,12 +183,18 @@ importers:
       typescript:
         specifier: ^5
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.6(@types/node@20.19.41)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
 
   apps/two:
     dependencies:
       '@oper/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@oper/map':
+        specifier: workspace:*
+        version: link:../../packages/map
       '@oper/primitives':
         specifier: workspace:*
         version: link:../../packages/primitives
@@ -210,12 +216,21 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       lucide-react:
         specifier: ^0.555.0
         version: 0.555.0(react@19.2.7)
+      maplibre-gl:
+        specifier: ^5.24.0
+        version: 5.24.0
       next:
         specifier: ^16.1.1
         version: 16.2.7(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      pg:
+        specifier: ^8.21.0
+        version: 8.21.0
       react:
         specifier: ^19.2.3
         version: 19.2.7
@@ -228,13 +243,25 @@ importers:
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
+      '@eslint/eslintrc':
+        specifier: ^3.3.5
+        version: 3.3.5
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.0
+      '@types/geojson':
+        specifier: ^7946.0.14
+        version: 7946.0.16
       '@types/node':
         specifier: ^20
         version: 20.19.41
+      '@types/pg':
+        specifier: ^8.15.4
+        version: 8.20.0
       '@types/react':
         specifier: ^19
         version: 19.2.16
@@ -246,7 +273,7 @@ importers:
         version: 9.39.4(jiti@2.7.0)
       eslint-config-next:
         specifier: 16.0.6
-        version: 16.0.6(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
+        version: 16.0.6(@typescript-eslint/parser@8.60.1(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
       tailwindcss:
         specifier: ^4
         version: 4.3.0
@@ -256,6 +283,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@oper/query-lang':
+        specifier: workspace:*
+        version: link:../../packages/query-lang
       ioredis:
         specifier: ^5.11.0
         version: 5.11.0
@@ -265,6 +295,9 @@ importers:
       pino:
         specifier: ^9.5.0
         version: 9.14.0
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
     devDependencies:
       '@types/node':
         specifier: ^20
@@ -275,9 +308,6 @@ importers:
       eslint:
         specifier: ^9
         version: 9.39.4(jiti@2.7.0)
-      tsx:
-        specifier: ^4.22.4
-        version: 4.22.4
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -312,6 +342,9 @@ importers:
       typescript:
         specifier: ^5
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.6(@types/node@20.19.41)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
 
   packages/map:
     dependencies:
@@ -6937,7 +6970,7 @@ snapshots:
 
   node-releases@2.0.47: {}
 
-  nuqs@2.8.9(next@16.2.7(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7):
+  nuqs@2.8.9(next@16.2.7(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7):
     dependencies:
       '@standard-schema/spec': 1.0.0
       react: 19.2.7

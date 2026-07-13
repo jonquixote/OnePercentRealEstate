@@ -60,6 +60,13 @@ export function toRows(data: ViewportResponse | undefined): PropertyRow[] {
       estimated_rent != null && price != null && price > 0
         ? ((estimated_rent * 12) / price) * 100
         : null;
+    // W2: carry the investor-math source fields the /api/properties/query
+    // feed provides. The viewport tape omits them, so they coerce to null and
+    // the derived columns render "—".
+    const r = raw as Record<string, number | string | null>;
+    const rent_price_ratio =
+      n(r.rent_price_ratio) ??
+      (estimated_rent != null && price != null && price > 0 ? estimated_rent / price : null);
     out.push({
       id,
       address: raw.address,
@@ -78,6 +85,14 @@ export function toRows(data: ViewportResponse | undefined): PropertyRow[] {
       ppsf,
       onePct,
       cap,
+      rent_price_ratio,
+      price_cut_pct: n(r.price_cut_pct),
+      motivated_score: n(r.motivated_score),
+      rent_low: n(r.rent_low),
+      rent_high: n(r.rent_high),
+      year_built: n((r as Record<string, number | string | null>).year_built),
+      sale_type: typeof r.sale_type === "string" ? r.sale_type : null,
+      zip_code: typeof r.zip_code === "string" ? r.zip_code : null,
     });
   }
   return out;

@@ -1,0 +1,10 @@
+[Unit]
+Description=Timer for rent_predictions_audit partition rotation (daily; archives + drops months >90d old)
+Persistent=true
+
+[Timer]
+OnCalendar=*-*-* 04:17:00
+Unit=oper-audit-rotate.service
+
+[Install]
+WantedBy=timers.target

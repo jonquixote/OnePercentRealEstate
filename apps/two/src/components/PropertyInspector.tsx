@@ -29,7 +29,11 @@ export function PropertyInspector() {
 
   if (!selected) {
     return (
-      <aside className="flex h-full w-full items-center justify-center border-l border-zinc-800/60 bg-zinc-950 px-6 text-center">
+      <aside
+        id="terminal-inspector"
+        tabIndex={-1}
+        className="flex h-full w-full items-center justify-center border-l border-zinc-800/60 bg-zinc-950 px-6 text-center outline-none"
+      >
         <p className="font-mono text-[11px] uppercase tracking-widest text-zinc-500">
           Select a row to inspect
         </p>
@@ -43,7 +47,11 @@ export function PropertyInspector() {
   )}`;
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-zinc-800/60 bg-zinc-950">
+    <aside
+      id="terminal-inspector"
+      tabIndex={-1}
+      className="flex h-full w-full flex-col overflow-y-auto border-l border-zinc-800/60 bg-zinc-950 outline-none"
+    >
       {/* Label strip */}
       <header className="border-b border-zinc-800/60 px-4 py-3">
         <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">

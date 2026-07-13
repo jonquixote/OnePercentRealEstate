@@ -75,6 +75,7 @@ export const ViewportPropertySchema = z.object({
   status: z.string().nullable(),
   latitude: z.number(),
   longitude: z.number(),
+  zip_code: z.string().nullable(),
 });
 
 export const ViewportResponseSchema = z.object({
