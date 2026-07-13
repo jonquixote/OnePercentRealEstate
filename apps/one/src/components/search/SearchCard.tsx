@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { rentToPriceMonthly } from '@oper/primitives';
+import { Photo } from '@/components/Photo';
 import { useCompare } from '@/components/compare/useCompare';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -65,7 +65,7 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
       >
         {typeof primary_photo === 'string' && primary_photo.length > 0 ? (
           <div className="h-full w-full overflow-hidden rounded-[6px]">
-            <Image
+            <Photo
               src={primary_photo}
               alt={address ?? 'Property photo'}
               width={480}

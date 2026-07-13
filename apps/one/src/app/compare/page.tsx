@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useProperties, type PropertyListItem } from '@oper/api-client';
 import { capRate, monthlyMortgage } from '@oper/primitives';
 import { useSessionUser } from '@/lib/useSessionUser';
+import { Photo } from '@/components/Photo';
 import { COMPARE_FREE_MAX } from '@/components/compare/useCompare';
 
 type Property = PropertyListItem;
@@ -90,7 +91,7 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                                     <th key={p.id} className="p-4 text-left min-w-[250px]" style={{ borderLeft: '1px solid var(--line)', background: 'var(--ink-2)' }}>
                                         <div>
                                             {p.images && p.images.length > 0 ? (
-                                                <div className="mat"><img src={p.images[0]} alt={p.address} className="h-32 w-full rounded-[var(--r-mat)] object-cover" style={{ border: '1px solid var(--line)' }} /></div>
+                                                <div className="mat"><Photo src={p.images[0]} alt={p.address} className="h-32 w-full rounded-[var(--r-mat)] object-cover" style={{ border: '1px solid var(--line)' }} /></div>
                                             ) : (
                                                 <div className="mat"><div className="flex h-32 w-full items-center justify-center rounded-[var(--r-mat)]" style={{ background: 'var(--ink-2)', border: '1px solid var(--line)', color: 'var(--mute)' }}>No Image</div></div>
                                             )}

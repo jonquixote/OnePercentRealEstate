@@ -201,7 +201,7 @@ export default function SearchPage() {
             {/* Count + sort + actions */}
             <div className="ml-auto flex items-center gap-2">
               {activeChips.length === 0 && !showFilters && (
-                <span className="hidden sm:inline text-[12px]" style={{ color: 'var(--mute)' }}>
+                <span className="hidden sm:inline text-[12px]" style={{ color: 'var(--mute)' }} aria-live="polite">
                   {loading ? 'Loading…' : `${num.format(properties.length)} properties`}
                 </span>
               )}
