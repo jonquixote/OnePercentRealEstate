@@ -21,6 +21,7 @@ export interface SessionUser {
 let cached: SessionUser | null | undefined = undefined;
 const listeners = new Set<() => void>();
 let inflight: Promise<SessionUser | null> | null = null;
+let loaded = false;
 
 async function load(): Promise<SessionUser | null> {
   if (inflight) return inflight;
@@ -32,6 +33,7 @@ async function load(): Promise<SessionUser | null> {
     } catch {
       cached = null;
     }
+    loaded = true;
     listeners.forEach((l) => l());
     return cached ?? null;
   })();
@@ -62,4 +64,21 @@ export function useSessionUser(): SessionUser | null {
   }, []);
 
   return user;
+}
+
+/** True once the initial /api/auth/me load has settled (success or fail). */
+export function useSessionLoaded(): boolean {
+  const [isLoaded, setIsLoaded] = useState(loaded);
+  useEffect(() => {
+    if (loaded) {
+      setIsLoaded(true);
+      return;
+    }
+    const handler = () => setIsLoaded(true);
+    listeners.add(handler);
+    return () => {
+      listeners.delete(handler);
+    };
+  }, []);
+  return isLoaded;
 }

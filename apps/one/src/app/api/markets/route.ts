@@ -46,8 +46,8 @@ export async function GET() {
       SELECT t.zip_code,
              t.city, t.state,
              t.median_price, t.median_rent,
-             CASE WHEN t.median_price > 0 THEN round(t.median_rent / t.median_price * 100, 2) ELSE NULL END AS ratio,
-             CASE WHEN h.five_ago > 0 THEN round((h.latest - h.five_ago) / h.five_ago * 100, 1) ELSE NULL END AS hpi5y
+              CASE WHEN t.median_price > 0 THEN round((t.median_rent / t.median_price * 100)::numeric, 2) ELSE NULL END AS ratio,
+              CASE WHEN h.five_ago > 0 THEN round(((h.latest - h.five_ago) / h.five_ago * 100)::numeric, 1) ELSE NULL END AS hpi5y
       FROM top t
       LEFT JOIN LATERAL (
         SELECT max(hpi) FILTER (WHERE year = (SELECT max(year) FROM fhfa_zip_hpi WHERE zip5 = t.zip_code)) AS latest,

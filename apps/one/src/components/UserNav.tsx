@@ -4,27 +4,18 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LogOut, User, Settings, Bookmark, TerminalSquare } from 'lucide-react';
+import { useSessionUser, useSessionLoaded, notifyAuthChanged } from '@/lib/useSessionUser';
 
-interface Me { id: string; email: string; tier: 'free' | 'pro' }
-
-// Wave 5: session-aware nav backed by /api/auth/me.
+// Wave 5: session-aware nav backed by the shared auth state (so a login
+// immediately flips the header from "Log in" to the account menu).
 export default function UserNav() {
-  const [user, setUser] = useState<Me | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const user = useSessionUser();
+  const loaded = useSessionLoaded();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    let alive = true;
-    fetch('/api/auth/me')
-      .then((r) => r.json())
-      .then((d) => { if (alive) { setUser(d.user ?? null); setLoaded(true); } })
-      .catch(() => { if (alive) setLoaded(true); });
-    return () => { alive = false; };
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -48,8 +39,8 @@ export default function UserNav() {
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-    setUser(null);
     setOpen(false);
+    notifyAuthChanged();
     router.refresh();
   };
 
@@ -93,9 +84,8 @@ export default function UserNav() {
       {open && (
         <div
           ref={menuRef}
-          role="menu"
           tabIndex={-1}
-          aria-label="Account"
+          aria-label="Account menu"
           className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-line bg-card/95 p-2 shadow-[var(--shadow-pop)] backdrop-blur"
         >
           <p className="truncate px-3 py-2 text-sm text-foreground" title={user.email}>
@@ -114,7 +104,6 @@ export default function UserNav() {
           <button
             type="button"
             onClick={logout}
-            role="menuitem"
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-haze transition-colors hover:bg-ink-2 hover:text-foreground"
           >
             <LogOut className="h-4 w-4" /> Log out
@@ -140,13 +129,13 @@ function MenuLink({
     'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-haze transition-colors hover:bg-ink-2 hover:text-foreground';
   if (external) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" role="menuitem" className={cls}>
+      <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>
         {icon} {children}
       </a>
     );
   }
   return (
-    <Link href={href} role="menuitem" className={cls}>
+    <Link href={href} className={cls}>
       {icon} {children}
     </Link>
   );

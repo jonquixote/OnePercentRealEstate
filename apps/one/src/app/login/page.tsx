@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { notifyAuthChanged } from '@/lib/useSessionUser';
+import { getLocalUserId } from '@/lib/useLocalUserId';
 
 // F3: one-line reasons shown when a gated action sent the user here.
 const INTENT_REASON: Record<string, string> = {
@@ -13,8 +14,16 @@ const INTENT_REASON: Record<string, string> = {
   digest: 'Sign in to opt into deal digests.',
 };
 
+// Reject protocol-relative (//evil.example) and absolute URLs so a crafted
+// ?next= param can't become an open redirect after login.
+function safeNextPath(next: string | null): string {
+  if (!next) return '/';
+  if (next.startsWith('//') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(next)) return '/';
+  return next;
+}
+
 // Wave 5: real credentials auth against /api/auth/{login,signup}.
-export default function LoginPage() {
+function LoginForm() {
     const [mode, setMode] = useState<'login' | 'signup'>('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -33,7 +42,7 @@ export default function LoginPage() {
         try {
             const anonUserId =
                 typeof window !== 'undefined'
-                    ? window.localStorage.getItem('oper:user_id')
+                    ? getLocalUserId()
                     : null;
             const res = await fetch(`/api/auth/${mode}`, {
                 method: 'POST',
@@ -51,7 +60,7 @@ export default function LoginPage() {
             }
             notifyAuthChanged();
             setMessage({ type: 'success', text: mode === 'signup' ? 'Account created — welcome.' : 'Welcome back.' });
-            router.push(next && next.startsWith('/') ? next : '/');
+            router.push(safeNextPath(next));
             router.refresh();
         } catch {
             setMessage({ type: 'error', text: 'Network error — try again' });
@@ -156,5 +165,15 @@ export default function LoginPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+// Wrap in Suspense so useSearchParams() does not de-opt the page to CSR
+// during static generation (Next.js App Router requirement).
+export default function LoginPage() {
+    return (
+        <Suspense fallback={null}>
+            <LoginForm />
+        </Suspense>
     );
 }

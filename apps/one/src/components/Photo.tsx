@@ -9,8 +9,8 @@ import { useState } from "react";
  * when `fill`, otherwise inherits the passed className) so there is no CLS.
  */
 export function Photo(props: ImageProps) {
-  const { alt, className, fill, ...rest } = props;
-  const [errored, setErrored] = useState(false);
+  const { alt, className, fill, src, ...rest } = props;
+  const [errored, setErrored] = useState(!src);
 
   if (errored) {
     return (
@@ -34,6 +34,7 @@ export function Photo(props: ImageProps) {
 
   return (
     <Image
+      src={src}
       alt={alt}
       className={className}
       fill={fill}

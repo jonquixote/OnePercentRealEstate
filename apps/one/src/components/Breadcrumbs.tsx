@@ -10,6 +10,7 @@ export interface Crumb {
  * current page and carries aria-current="page" (IA.md §2, plan N3).
  */
 export default function Breadcrumbs({ items }: { items: Crumb[] }) {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://one.octavo.press';
   const ld = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -17,7 +18,7 @@ export default function Breadcrumbs({ items }: { items: Crumb[] }) {
       '@type': 'ListItem',
       position: i + 1,
       name: it.label,
-      ...(it.href ? { item: it.href } : {}),
+      ...(it.href ? { item: new URL(it.href, baseUrl).href } : {}),
     })),
   };
 

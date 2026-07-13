@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useId } from 'react';
 import { evaluateRules, compositeScore, type PropertyInputs, type RuleConfig } from '@oper/primitives';
 import Link from 'next/link';
 
@@ -58,6 +58,9 @@ export default function CalculatorPage() {
       targetCoc: 0.08,
       arvDiscount: 0.7,
       rehabPerSqft: 40,
+      minFlipRoi: 0.15,
+      refiLtv: 0.75,
+      strTargetCapRate: 0.08,
       strOccupancy: 0.65,
       strAdr: showAdr ? strAdr : undefined,
     };
@@ -88,16 +91,17 @@ export default function CalculatorPage() {
             <NumInput label="Annual insurance" value={insurance} onChange={(v) => setInsurance(v || 0)} prefix="$" />
 
             <div>
-              <p className="text-xs text-haze mb-1">Property tax rate</p>
+              <label htmlFor="tax-rate" className="text-xs text-haze mb-1">Property tax rate</label>
               <div className="flex items-center gap-3">
                 <input
+                  id="tax-rate"
                   type="range"
                   min={0.004}
                   max={0.025}
                   step={0.001}
                   value={taxRate}
                   onChange={(e) => setTaxRate(Number(e.target.value))}
-                  className="flex-1 accent-[#0e7a52]"
+                  className="flex-1 accent-[var(--pass)]"
                 />
                 <span className="figure text-sm tabular-nums w-14 text-right">{fpct(taxRate)}</span>
               </div>
@@ -162,18 +166,22 @@ export default function CalculatorPage() {
 
                   {/* Key metrics */}
                   <div className="space-y-3 text-sm">
-                    <MetricRow label="Cap rate" value={result.ev.metrics.capRate != null ? fpct(result.ev.metrics.capRate) : '\u2014'} positive />
-                    <MetricRow label="Cash-on-cash" value={result.ev.metrics.cashOnCash != null ? fpct(result.ev.metrics.cashOnCash) : '\u2014'} positive />
-                    <MetricRow
-                      label="Monthly cashflow"
-                      value={(() => {
-                        const cf = result.ev.metrics.annualCashflow;
-                        if (cf == null) return '\u2014';
-                        const m = cf / 12;
-                        return `${m >= 0 ? '+' : ''}${usd0.format(Math.abs(Math.round(m)))}`;
-                      })()}
-                      positive={result.ev.metrics.annualCashflow != null ? result.ev.metrics.annualCashflow >= 0 : false}
-                    />
+                    {strategy !== 'str' && (
+                      <>
+                        <MetricRow label="Cap rate" value={result.ev.metrics.capRate != null ? fpct(result.ev.metrics.capRate) : '\u2014'} positive />
+                        <MetricRow label="Cash-on-cash" value={result.ev.metrics.cashOnCash != null ? fpct(result.ev.metrics.cashOnCash) : '\u2014'} positive />
+                        <MetricRow
+                          label="Monthly cashflow"
+                          value={(() => {
+                            const cf = result.ev.metrics.annualCashflow;
+                            if (cf == null) return '\u2014';
+                            const m = cf / 12;
+                            return `${m >= 0 ? '+' : ''}${usd0.format(Math.abs(Math.round(m)))}`;
+                          })()}
+                          positive={result.ev.metrics.annualCashflow != null ? result.ev.metrics.annualCashflow >= 0 : false}
+                        />
+                      </>
+                    )}
                     <MetricRow label="Down payment" value={result.ev.metrics.downPayment != null ? usd0.format(Math.round(result.ev.metrics.downPayment)) : '\u2014'} />
                     <MetricRow label="Closing costs" value={result.ev.metrics.closingCosts != null ? usd0.format(Math.round(result.ev.metrics.closingCosts)) : '\u2014'} />
                     <MetricRow label="Principal & interest" value={result.ev.metrics.monthlyPi != null ? usd0.format(Math.round(result.ev.metrics.monthlyPi)) : '\u2014'} />
@@ -226,12 +234,14 @@ function NumInput({ label, value, onChange, prefix, step }: {
   prefix?: string;
   step?: number;
 }) {
+  const id = useId();
   return (
     <div>
-      <p className="text-xs text-haze mb-1">{label}</p>
+      <label htmlFor={id} className="text-xs text-haze mb-1">{label}</label>
       <div className="relative">
         {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-haze">{prefix}</span>}
         <input
+          id={id}
           type="number"
           value={value}
           onChange={(e) => onChange(Number(e.target.value.replace(/[^0-9.-]/g, '')))}
@@ -253,20 +263,22 @@ function Slider({ label, value, onChange, format, min, max, step }: {
   max: number;
   step: number;
 }) {
+  const id = useId();
   return (
     <div>
       <div className="flex justify-between text-sm mb-1">
-        <span className="text-haze">{label}</span>
+        <label htmlFor={id} className="text-haze">{label}</label>
         <span className="font-mono text-foreground tabular-nums">{format(value)}</span>
       </div>
       <input
+        id={id}
         type="range"
         min={min}
         max={max}
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-[#0e7a52]"
+        className="w-full accent-[var(--pass)]"
       />
     </div>
   );

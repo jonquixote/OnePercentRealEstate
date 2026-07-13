@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'oper:coach:search';
 
@@ -40,11 +40,13 @@ export function FirstRunCoach() {
   // mismatch); localStorage is only touched client-side.
   useEffect(() => {
     try {
-      if (!localStorage.getItem(STORAGE_KEY)) setStep(0);
+      if (!localStorage.getItem(STORAGE_KEY)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setStep(0);
+      }
     } catch {
       /* private mode — skip coaching */
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, []);
 
   const finish = () => {
@@ -73,7 +75,7 @@ export function FirstRunCoach() {
     setPos({ top, left });
   };
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (step === null) return;
     place(step);
     const onScroll = () => place(step);

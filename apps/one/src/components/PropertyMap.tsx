@@ -306,7 +306,10 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover,
       >
         <div ref={containerRef} className="h-full w-full" style={{ minHeight: '400px' }} />
         <p className="sr-only" aria-live="polite">
-          {`Basemap: ${basemap}${toggles.length ? `; active layers: ${toggles.join(', ')}` : ''}`}
+          {(() => {
+            const active = toggles.filter((t) => t.on).map((t) => t.def.id);
+            return `Basemap: ${basemap}${active.length ? `; active layers: ${active.join(', ')}` : ''}`;
+          })()}
         </p>
       {showLayerControls && (
         <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">

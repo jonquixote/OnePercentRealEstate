@@ -27,7 +27,7 @@ export const TOOL_LINKS: NavLink[] = [
 
 export const STRATEGY_LINKS: NavLink[] = [
   { href: '/playbook/buy-hold', label: 'Buy & Hold', group: 'strategy' },
-  { href: '/playbook/brrr', label: 'BRRRR', group: 'strategy' },
+  { href: '/playbook/brrrr', label: 'BRRRR', group: 'strategy' },
   { href: '/playbook/flip', label: 'Buy & Flip', group: 'strategy' },
   { href: '/playbook/str', label: 'Short-Term', group: 'strategy' },
 ];
@@ -61,7 +61,7 @@ export const FOOTER_MARKETS: Array<{ label: string; href: string }> = [
 export const FOOTER_METHOD: NavLink[] = [
   { href: '/playbook', label: 'The 1% rule' },
   { href: '/playbook/buy-hold', label: 'Buy & Hold' },
-  { href: '/playbook/brrr', label: 'BRRRR' },
+  { href: '/playbook/brrrr', label: 'BRRRR' },
   { href: '/playbook/comps', label: 'Comps' },
   { href: '/playbook/calculator', label: 'Deal calculator' },
   { href: '/playbook/model', label: 'How the model works' },

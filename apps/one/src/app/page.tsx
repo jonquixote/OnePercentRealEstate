@@ -171,7 +171,7 @@ export default function Dashboard() {
             {[
               { n: 1, t: 'Take the monthly rent', b: 'What the property actually pulls in — our estimate, triangulated from HUD, scraped comps, and ML.' },
               { n: 2, t: 'Divide by the price', b: 'Monthly rent ÷ purchase price. This is the yield that matters, before any financing.' },
-              { n: 3, t: '≥ 1% clears the line', b: 'If rent is at least 1% of price, the deal cash-flows. Green on every card means it passes.' },
+              { n: 3, t: '≥ 1% clears the line', b: 'If rent is at least 1% of price, the deal passes the first screen. Green on every card means it qualifies — but full underwriting (financing, taxes, insurance, HOA, operating costs) decides real cash flow.' },
             ].map((s) => (
               <div key={s.n} className="rounded-[var(--r-panel)] border p-5" style={{ borderColor: 'var(--line)', background: 'var(--ink-panel)' }}>
                 <span className="figure text-2xl" style={{ color: 'var(--pass)' }}>{s.n}</span>
