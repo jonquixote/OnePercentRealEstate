@@ -246,7 +246,7 @@ export function SavedSearches() {
                         <label className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-600">
                           <input
                             type="checkbox"
-                            className="h-3 w-3 accent-blue-600"
+                            className="h-3 w-3 accent-[var(--pass)]"
                             checked={Boolean(search.email_digest)}
                             disabled={toggleDigestMutation.isPending}
                             onChange={(e) =>
@@ -266,7 +266,7 @@ export function SavedSearches() {
                     <button
                       type="button"
                       onClick={() => handleRestore(search)}
-                      className="rounded p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-700"
+                        className="rounded p-1.5 text-slate-500 hover:bg-[var(--pass-dim)] hover:text-[var(--pass-hi)]"
                       title="Restore filters"
                       aria-label={`Restore filters from ${search.name}`}
                     >
@@ -300,7 +300,7 @@ export function SavedSearches() {
                   if (e.key === 'Enter') void handleSave();
                 }}
                 placeholder="Search name"
-                className="h-8 flex-1 rounded-md border border-slate-200 px-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className="h-8 flex-1 rounded-md border border-slate-200 px-2 text-sm outline-none focus:border-[var(--pass)] focus:ring-1 focus:ring-[var(--pass)]"
                 aria-label="New saved search name"
               />
               <Button

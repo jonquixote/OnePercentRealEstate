@@ -74,6 +74,11 @@ export default function LoginPage() {
                         {reason}
                     </p>
                 )}
+                {reason && (
+                    <p className="mt-1 text-center text-[12px]" style={{ color: 'var(--mute)' }}>
+                        Your saved searches and watches come with you.
+                    </p>
+                )}
             </div>
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">

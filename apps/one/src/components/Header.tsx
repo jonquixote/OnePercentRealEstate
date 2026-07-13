@@ -151,7 +151,7 @@ export default function Header() {
             onClick={closeMobile}
             aria-hidden
           />
-          <div className="absolute inset-y-0 right-0 flex w-[84%] max-w-sm flex-col bg-ink shadow-[0_24px_60px_-20px_rgba(42,37,32,0.30)] border-l border-line">
+          <div className="absolute inset-y-0 right-0 flex w-[84%] max-w-sm flex-col bg-ink shadow-[var(--shadow-pop)] border-l border-line">
             <div className="flex items-center justify-between border-b border-line px-6 py-4">
               <span className="text-[15px] font-semibold text-foreground">OnePercent</span>
               <button

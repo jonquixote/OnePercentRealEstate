@@ -45,6 +45,8 @@ export const metadata: Metadata = {
     description: 'Smart rental property analysis for serious investors.',
   },
   robots: { index: true, follow: true },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "OnePercent" },
+  icons: { icon: "/icon.svg", apple: "/icon.svg" },
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
 };
 

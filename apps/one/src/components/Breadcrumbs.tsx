@@ -32,12 +32,16 @@ export default function Breadcrumbs({ items }: { items: Crumb[] }) {
           const last = i === items.length - 1;
           return (
             <span key={`${it.label}-${i}`} className="flex items-center gap-1.5">
-              {it.href && !last ? (
-                <Link href={it.href} className="hover:underline text-haze">
+              {it.href ? (
+                <Link
+                  href={it.href}
+                  className={last ? 'text-foreground' : 'hover:underline text-haze'}
+                  aria-current={last ? 'page' : undefined}
+                >
                   {it.label}
                 </Link>
               ) : (
-                <span className={last ? 'text-foreground' : 'text-haze'}>{it.label}</span>
+                <span className="text-foreground" aria-current="page">{it.label}</span>
               )}
               {!last && <span aria-hidden className="text-mute">·</span>}
             </span>

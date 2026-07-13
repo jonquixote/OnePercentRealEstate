@@ -117,6 +117,32 @@ const STRATEGIES: Record<string, {
       { heading: 'Optimize for revenue', body: 'Professional photography, competitive pricing, and instant-book are table stakes. Use dynamic pricing tools and review management to maintain Superhost status and lift occupancy.' },
     ],
   },
+  model: {
+    title: 'How the Model Works',
+    subtitle: 'Rent estimates triangulated from government, scraped, and learned sources',
+    icon: Sparkles,
+    color: 'var(--pass)',
+    description: 'Every listing shows an estimated rent we do not take from a single source. We triangulate three independent signals — a government fair-market benchmark, scraped comparable listings, and a machine-learned model — then weight them so no single noisy input swings the number.',
+    principles: [
+      'HUD Small Area Fair Market Rent (SAFMR) as the regulatory floor',
+      'Scraped active + recently-rented comps within the same submarket',
+      'ML model trained on closed-rental history, corrected for beds/baths/sqft',
+      'Outlier comps down-weighted, not dropped',
+      'Estimates refreshed continuously as new listings close',
+    ],
+    metrics: [
+      { label: 'Government Benchmark', target: 'HUD SAFMR', description: 'Area median rent set by HUD each year' },
+      { label: 'Comp Window', target: '≤ 0.5 mi', description: 'Comparable radius for scraped rent comps' },
+      { label: 'Refresh', target: 'Continuous', description: 'Re-estimated as new leases close' },
+      { label: '1% Rule Input', target: 'Est. Rent ÷ Price', description: 'The single figure our deal score is built on' },
+    ],
+    sections: [
+      { heading: 'The government floor', body: 'HUD publishes Small Area Fair Market Rents annually. It is a defensible, regulation-grade baseline — but it lags the market and is coarse at the ZIP level, so we treat it as one input, not the answer.' },
+      { heading: 'Scraped comparables', body: 'We pull active and recently-rented listings in the same submarket and compute a rent-per-square-foot distribution. This captures what tenants are actually paying right now, including amenities and condition.' },
+      { heading: 'The learned model', body: 'A regression model blends beds, baths, square footage, age, and location into a predicted rent, trained on historical closed rentals. It generalizes where comps are thin.' },
+      { heading: 'Weighted, not averaged', body: 'The displayed estimate weights each source by confidence for that property. When comps are dense we lean on them; when a ZIP is sparse we lean on the model and the HUD floor. Outliers are down-weighted so one bad listing cannot distort a deal.' },
+    ],
+  },
 };
 
 // Content is fully static — prerender all four at build time instead of

@@ -160,6 +160,59 @@ export default function Dashboard() {
       <RentHeatTeaser />
       <MarketsGrid />
 
+      {/* How the 1% rule works — 30-second thesis explainer (plan F1). */}
+      <section aria-labelledby="rule-headline" className="border-t border-line">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--mute)' }}>The thesis</p>
+          <h2 id="rule-headline" className="mt-1 font-sans text-2xl font-semibold tracking-[-0.02em] sm:text-3xl" style={{ color: 'var(--text)' }}>
+            The 1% rule, in three steps
+          </h2>
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            {[
+              { n: 1, t: 'Take the monthly rent', b: 'What the property actually pulls in — our estimate, triangulated from HUD, scraped comps, and ML.' },
+              { n: 2, t: 'Divide by the price', b: 'Monthly rent ÷ purchase price. This is the yield that matters, before any financing.' },
+              { n: 3, t: '≥ 1% clears the line', b: 'If rent is at least 1% of price, the deal cash-flows. Green on every card means it passes.' },
+            ].map((s) => (
+              <div key={s.n} className="rounded-[var(--r-panel)] border p-5" style={{ borderColor: 'var(--line)', background: 'var(--ink-panel)' }}>
+                <span className="figure text-2xl" style={{ color: 'var(--pass)' }}>{s.n}</span>
+                <p className="mt-2 text-[15px] font-semibold" style={{ color: 'var(--text)' }}>{s.t}</p>
+                <p className="mt-1 text-[13px] leading-snug" style={{ color: 'var(--haze)' }}>{s.b}</p>
+              </div>
+            ))}
+          </div>
+
+          {(() => {
+            const example = properties[0];
+            if (!example || !(example.listing_price > 0)) return null;
+            const ratio = (example.estimated_rent ?? 0) / example.listing_price;
+            const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+            const pct = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
+            return (
+              <div className="mt-8 flex flex-col items-start gap-4 rounded-[var(--r-panel)] border p-6 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: 'var(--line)', background: 'var(--ink-2)' }}>
+                <div>
+                  <p className="text-[12px] uppercase tracking-wider" style={{ color: 'var(--mute)' }}>Worked example · live listing</p>
+                  <p className="mt-1 text-[15px] font-medium" style={{ color: 'var(--text)' }}>{example.address}</p>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-[11px]" style={{ color: 'var(--mute)' }}>Price</p>
+                    <p className="figure text-[18px]" style={{ color: 'var(--text)' }}>{usd0.format(example.listing_price)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px]" style={{ color: 'var(--mute)' }}>Est. rent</p>
+                    <p className="figure text-[18px]" style={{ color: 'var(--text)' }}>{usd0.format(example.estimated_rent ?? 0)}/mo</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px]" style={{ color: 'var(--mute)' }}>Ratio</p>
+                    <p className="figure text-[18px]" style={{ color: ratio >= 0.01 ? 'var(--pass-hi)' : 'var(--brass-hi)' }}>{pct.format(ratio)}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </section>
+
       {/* Opportunities — the tool itself. Anchored target for hero CTA. */}
       <section id="opportunities" ref={opportunitiesRef} aria-labelledby="opp-headline" className="border-t border-line bg-ink-panel/30">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

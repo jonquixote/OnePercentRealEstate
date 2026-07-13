@@ -31,7 +31,7 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
 
     if (!images || images.length === 0) {
         return (
-            <div className="w-full h-[400px] bg-gray-100 rounded-xl flex items-center justify-center text-gray-400">
+            <div className="w-full h-[400px] bg-[var(--ink-2)] rounded-xl flex items-center justify-center text-[var(--mute)]">
                 <div className="text-center">
                     <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p>No Images Available</p>
@@ -41,7 +41,7 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
     }
 
     return (
-        <div className="relative h-[400px] w-full rounded-xl overflow-hidden bg-gray-100">
+        <div className="relative h-[400px] w-full rounded-xl overflow-hidden bg-[var(--ink-2)]">
             <div className="grid grid-cols-1 md:grid-cols-3 h-full gap-1">
                 {/* Main Large Image */}
                 <div className="md:col-span-2 relative h-full">
@@ -69,7 +69,7 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
                             />
                         </div>
                     ) : (
-                        <div className="bg-gray-200 h-full w-full" />
+                        <div className="bg-[var(--ink-2)] h-full w-full" />
                     )}
 
                     {secondaryImages?.[1] ? (
@@ -95,7 +95,7 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
                             )}
                         </div>
                     ) : (
-                        <div className="bg-gray-200 h-full w-full" />
+                        <div className="bg-[var(--ink-2)] h-full w-full" />
                     )}
                 </div>
             </div>
@@ -119,7 +119,7 @@ export function PropertyHero({ images, address }: PropertyHeroProps) {
                 >
                     <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 p-4" onClick={(e) => e.stopPropagation()}>
                         {images.map((img, idx) => (
-                            <Photo key={idx} src={img} alt={`${address} photo ${idx + 1}`} className="w-full rounded-lg" loading="lazy" decoding="async" />
+                            <Photo key={idx} src={img} alt={`${address} photo ${idx + 1}`} width={800} height={600} className="w-full h-auto rounded-lg" loading="lazy" decoding="async" />
                         ))}
                     </div>
                     <button

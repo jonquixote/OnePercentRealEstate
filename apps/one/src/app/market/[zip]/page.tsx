@@ -2,6 +2,7 @@ import pool from '@/lib/db';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import { Photo } from '@/components/Photo';
 import Breadcrumbs from '@/components/Breadcrumbs';
 
 // ISR: market stats move on the scrape cadence, not per-request. force-dynamic
@@ -504,11 +505,12 @@ export default async function MarketPage({ params }: { params: Promise<{ zip: st
                                     >
                                         <div className="aspect-[4/3] w-full overflow-hidden bg-[var(--ink-2)]">
                                             {l.primary_photo ? (
-                                                <Image
+                                                <Photo
                                                     src={l.primary_photo}
                                                     alt={l.address ?? 'Property photo'}
                                                     width={480}
                                                     height={360}
+                                                    sizes="(max-width: 768px) 50vw, 33vw"
                                                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                                                 />
                                             ) : (

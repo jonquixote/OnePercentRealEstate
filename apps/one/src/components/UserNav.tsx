@@ -13,6 +13,8 @@ export default function UserNav() {
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -26,10 +28,16 @@ export default function UserNav() {
 
   useEffect(() => {
     if (!open) return;
+    menuRef.current?.focus();
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        btnRef.current?.focus();
+      }
+    };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
@@ -64,9 +72,11 @@ export default function UserNav() {
     <div className="relative" ref={ref}>
       <button
         type="button"
+        ref={btnRef}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-label="Account menu"
         className="flex items-center gap-2"
         title={user.email}
       >
@@ -82,8 +92,11 @@ export default function UserNav() {
 
       {open && (
         <div
+          ref={menuRef}
           role="menu"
-          className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-line bg-card/95 p-2 shadow-[0_24px_60px_-20px_rgba(42,37,32,0.20)] backdrop-blur"
+          tabIndex={-1}
+          aria-label="Account"
+          className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-line bg-card/95 p-2 shadow-[var(--shadow-pop)] backdrop-blur"
         >
           <p className="truncate px-3 py-2 text-sm text-foreground" title={user.email}>
             {user.email}

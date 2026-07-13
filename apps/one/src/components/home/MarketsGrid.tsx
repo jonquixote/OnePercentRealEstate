@@ -43,6 +43,10 @@ export function MarketsGrid() {
             <div key={i} className="aspect-[3/2] animate-pulse" style={{ background: 'var(--ink-panel)' }} />
           ))}
         </div>
+      ) : markets.length === 0 ? (
+        <div className="flex items-center justify-center rounded-[var(--r-panel)] border px-6 py-12 text-[14px]" style={{ borderColor: 'var(--line)', color: 'var(--mute)' }}>
+          No market data available yet.
+        </div>
       ) : (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--r-panel)] sm:grid-cols-3" style={{ background: 'var(--line)', border: '1px solid var(--line)' }}>
           {markets.map((m) => {

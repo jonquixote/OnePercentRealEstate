@@ -126,6 +126,13 @@ export function WatchSearchButton({ filters }: { filters: FilterState }) {
 
   const onClick = () => {
     if (!user) {
+      // Defer the watch through login (plan F3): stash intent so the resume
+      // effect fires on return, then route to auth with ?next + reason.
+      try {
+        sessionStorage.setItem(PENDING_KEY, '1');
+      } catch {
+        /* ignore */
+      }
       requireAuth(router, 'watch');
       return;
     }

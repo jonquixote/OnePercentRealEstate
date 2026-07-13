@@ -297,9 +297,17 @@ export function PropertyMap({ filters, onMarkerClick, hoveredId, onFeatureHover,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showLayerControls]);
 
-  return (
-    <div className="relative h-full w-full" aria-label="Property map" role="application">
-      <div ref={containerRef} className="h-full w-full" style={{ minHeight: '400px' }} />
+    return (
+      <div
+        className="relative h-full w-full"
+        role="application"
+        aria-roledescription="interactive map"
+        aria-label="Interactive property map. Use the layer and basemap controls to change what is shown; listing markers can be activated to open a property."
+      >
+        <div ref={containerRef} className="h-full w-full" style={{ minHeight: '400px' }} />
+        <p className="sr-only" aria-live="polite">
+          {`Basemap: ${basemap}${toggles.length ? `; active layers: ${toggles.join(', ')}` : ''}`}
+        </p>
       {showLayerControls && (
         <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">
           <BasemapToggle basemap={basemap} setBasemap={setBasemap} hasSatellite={!!esriKey} />

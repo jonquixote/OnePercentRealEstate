@@ -35,12 +35,16 @@ export function FirstRunCoach() {
   const [pos, setPos] = useState<Pos | null>(null);
   const popRef = useRef<HTMLDivElement>(null);
 
+  // Coach marks show exactly once per browser. Read after mount so the
+  // server and first client render both start at `null` (no hydration
+  // mismatch); localStorage is only touched client-side.
   useEffect(() => {
     try {
       if (!localStorage.getItem(STORAGE_KEY)) setStep(0);
     } catch {
       /* private mode — skip coaching */
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, []);
 
   const finish = () => {
@@ -80,7 +84,6 @@ export function FirstRunCoach() {
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onResize);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   useEffect(() => {
@@ -90,7 +93,6 @@ export function FirstRunCoach() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   if (step === null) return null;

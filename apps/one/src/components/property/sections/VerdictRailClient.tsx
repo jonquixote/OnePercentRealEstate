@@ -137,7 +137,7 @@ export default function VerdictRailClient({
       {/* M2: mobile sticky CTA bar — replaces the rail on small screens */}
       <div
         className="lg:hidden fixed inset-x-0 bottom-0 z-40 flex items-center gap-3 border-t px-4 py-3 backdrop-blur"
-        style={{ background: 'rgba(250,247,242,.95)', borderColor: 'var(--line-hi)' }}
+        style={{ background: 'color-mix(in srgb, var(--ink) 92%, transparent)', borderColor: 'var(--line-hi)' }}
       >
         <div className="min-w-0">
           <p className="figure text-[17px] leading-tight">{usd0.format(price)}</p>
@@ -149,7 +149,7 @@ export default function VerdictRailClient({
           onClick={toggleWatch}
           disabled={savingWatch}
           className="ml-auto shrink-0 rounded-full px-5 py-2.5 text-[14px] font-semibold transition-colors disabled:opacity-50"
-          style={{ background: watched ? 'var(--line-hi)' : 'var(--pass)', color: watched ? 'var(--text)' : '#fff' }}
+        style={{ background: watched ? 'var(--line-hi)' : 'var(--pass)', color: watched ? 'var(--text)' : 'var(--ink)' }}
         >
           {watched ? 'Watching' : 'Watch'}
         </button>

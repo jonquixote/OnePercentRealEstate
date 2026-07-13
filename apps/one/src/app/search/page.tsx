@@ -200,11 +200,9 @@ export default function SearchPage() {
 
             {/* Count + sort + actions */}
             <div className="ml-auto flex items-center gap-2">
-              {activeChips.length === 0 && !showFilters && (
-                <span className="hidden sm:inline text-[12px]" style={{ color: 'var(--mute)' }} aria-live="polite">
-                  {loading ? 'Loading…' : `${num.format(properties.length)} properties`}
-                </span>
-              )}
+              <span className="hidden sm:inline text-[12px]" style={{ color: 'var(--mute)' }} aria-live="polite">
+                {loading ? 'Loading…' : `${num.format(properties.length)} properties`}
+              </span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
@@ -260,7 +258,7 @@ export default function SearchPage() {
       </div>
 
       {/* Content: cards + map */}
-      <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-6 py-6 pb-24 lg:px-8 lg:pb-6">
         <div className={`grid gap-6 ${showMap ? 'grid-cols-1 lg:grid-cols-[1fr_45%] lg:gap-8' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
 
           {/* Cards */}
