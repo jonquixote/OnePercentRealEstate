@@ -87,8 +87,10 @@ async function runMigrations(): Promise<void> {
     // table. Collations differ (glibc vs macOS en-US), so names must be
     // collation-invariant — this guard surfaces accidental ordering traps.
     const fnOwners = new Map<string, string[]>();
-    const fnRe = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+([a-zA-Z_][\w.]*)/gi;
     for (const file of files) {
+      // Fresh regex per file: a shared /g regex carries lastIndex across
+      // iterations, so a stateful instance could skip matches in later files.
+      const fnRe = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+([a-zA-Z_][\w.]*)/gi;
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
       let m: RegExpExecArray | null;
       while ((m = fnRe.exec(sql)) !== null) {

@@ -78,6 +78,9 @@ export function Workspace({
     }
   }, []);
 
+  // Cleanup for an in-flight drag, so listeners never dangle on window if the
+  // component unmounts mid-drag (before pointerup fires).
+  const dragCleanup = React.useRef<(() => void) | null>(null);
   const startDrag = React.useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     const container = splitRef.current;
@@ -92,13 +95,17 @@ export function Workspace({
         /* ignore */
       }
     };
-    const up = () => {
+    const cleanup = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      dragCleanup.current = null;
     };
+    const up = () => cleanup();
+    dragCleanup.current = cleanup;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   }, []);
+  React.useEffect(() => () => dragCleanup.current?.(), []);
 
   const tableHeight = bottomPane ? `${split * 100}%` : "100%";
   const paneHeight = bottomPane ? `${(1 - split) * 100}%` : "0%";

@@ -91,10 +91,23 @@ export function ScreenTabs({ expression, sort, columnIds, onApply, onExport }: S
     void loadAlerts();
   }, [loadScreens, loadAlerts]);
 
+  const toastTimer = React.useRef<number | null>(null);
   const flash = React.useCallback((msg: string) => {
     setToast(msg);
-    window.setTimeout(() => setToast(null), 1800);
+    // Rapid successive flashes: cancel the prior clear so an earlier toast's
+    // timer can't wipe a newer message before its own 1800ms elapse.
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimer.current = null;
+    }, 1800);
   }, []);
+  React.useEffect(
+    () => () => {
+      if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    },
+    [],
+  );
 
   const pick = React.useCallback(
     (tab: ScreenLike) => {

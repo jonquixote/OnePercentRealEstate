@@ -18,6 +18,7 @@ CREATE OR REPLACE FUNCTION claim_anon_identity(p_account text, p_anon text)
 RETURNS int LANGUAGE plpgsql AS $$
 DECLARE
   n int := 0;
+  _rc int := 0;
 BEGIN
   IF p_account IS NULL OR p_anon IS NULL OR p_account = p_anon THEN
     RETURN 0;
@@ -39,7 +40,8 @@ BEGIN
        SELECT 1 FROM terminal_screens t2
         WHERE t2.user_id = p_account AND t2.name = t.name
      );
-  GET DIAGNOSTICS n = n + ROW_COUNT;
+  GET DIAGNOSTICS _rc = ROW_COUNT;
+  n := n + _rc;
 
    -- Only re-key alerts whose screen actually transferred to the account
    -- (terminal_screens re-key, above, leaves an anon screen in place when the
@@ -57,7 +59,8 @@ BEGIN
         SELECT 1 FROM screen_alerts sa2
          WHERE sa2.user_id = p_account AND sa2.screen_id = sa.screen_id
       );
-   GET DIAGNOSTICS n = n + ROW_COUNT;
+   GET DIAGNOSTICS _rc = ROW_COUNT;
+   n := n + _rc;
 
   RETURN n;
 END;
