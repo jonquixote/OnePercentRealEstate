@@ -1,114 +1,154 @@
 /**
- * REDESIGN EXAMPLE — Market page /market/[zipcode] ("the area statement")
- * Self-contained, mock data, not wired.
- *
- * What changes vs today:
- *  - Powered by the tables that actually have data now: hud_safmr (FMR by
- *    bedroom), zcta_demographics (ACS), listings aggregates, sold_listings,
- *    price-cut counts. market_benchmarks (1 dead row) is never read again.
- *  - "Rent vs HUD FMR" becomes the page's signature chart: engraved bars,
- *    model median vs FMR per bedroom count.
- *  - FRED trend strip at the bottom (the working /api/mortgage-rates).
+ * example-market.tsx — J4: the ZIP dossier. Answers "should I even look
+ * here?" then hands off to a pre-scoped search. SEO front door: every
+ * number sourced, breadcrumbed, internally linked both directions
+ * (property pages link here; this links to properties + adjacent ZIPs).
  */
+'use client';
 
 const M = {
-  zip: '44113', place: 'Tremont · Cleveland, OH',
-  listings: 214, clearing: 61, cuts: 18, medPrice: 97_500,
-  acs: { income: 46_300, medRent: 1_050, homeValue: 98_400, population: 19_800, vacancy: 0.11, year: 2024 },
-  fmrVsModel: [
-    { br: 'Studio', fmr: 820, model: 780 },
-    { br: '1 BR', fmr: 940, model: 985 },
-    { br: '2 BR', fmr: 1_120, model: 1_190 },
-    { br: '3 BR', fmr: 1_420, model: 1_460 },
-    { br: '4 BR', fmr: 1_710, model: 1_640 },
+  zip: '90004',
+  name: 'Koreatown / Hancock Park',
+  city: 'Los Angeles, CA',
+  medPrice: 1250000,
+  medRent: 4050,
+  ratio: 0.39,
+  clearCount: 0,
+  listings: 214,
+  hpi: [148, 156, 171, 189, 178, 182, 196, 214, 228, 236], // 10y index
+  income: 68400,
+  incomeGrowth5: 21,
+  walk: 15.1,
+  nriRating: 'Relatively High',
+  unemployment: 4.9,
+  adjacent: [['90005', '0.52%'], ['90020', '0.47%'], ['90029', '0.61%'], ['90038', '0.55%']],
+  clears: [
+    { addr: '2814 Dawson St', price: 89000, ratio: 1.28 },
+    { addr: '118 E 49th Pl', price: 132000, ratio: 1.09 },
   ],
-  sold90d: { count: 42, medPpsf: 84 },
-  flood: 'Relatively Low',
 };
 
 const money = (n: number) => `$${n.toLocaleString()}`;
-const MAX = 1_800;
+
+function Spark({ data, w = 220, h = 48 }: { data: number[]; w?: number; h?: number }) {
+  const min = Math.min(...data), max = Math.max(...data);
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / (max - min)) * (h - 6) - 3}`).join(' ');
+  return (
+    <svg width={w} height={h} aria-hidden>
+      <polyline points={pts} fill="none" stroke="var(--pass)" strokeWidth="1.5" />
+    </svg>
+  );
+}
 
 export default function ExampleMarket() {
   return (
-    <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
-      <div className="mx-auto max-w-5xl px-6 py-14">
+    <main style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
+      <div className="mx-auto max-w-6xl px-6 py-8 lg:px-8">
 
-        {/* ── Masthead ──────────────────────────────────────────────────── */}
-        <header className="pb-10" style={{ borderBottom: '1px solid var(--line)' }}>
-          <p className="prov mb-4 inline-block">market statement · {M.zip}</p>
-          <h1 style={{ font: `400 var(--display-1)/1.05 var(--font-display)` }}>{M.place}</h1>
-          <div className="mt-6 flex flex-wrap gap-x-10 gap-y-2 text-[13px]" style={{ color: 'var(--haze)' }}>
-            <span><b className="figure" style={{ color: 'var(--text)' }}>{M.listings}</b> active listings</span>
-            <span><b className="figure" style={{ color: 'var(--pass-hi)' }}>{M.clearing}</b> clear the line</span>
-            <span><b className="figure" style={{ color: 'var(--brass-hi)' }}>{M.cuts}</b> price cuts</span>
-            <span><b className="figure" style={{ color: 'var(--text)' }}>{money(M.medPrice)}</b> median ask</span>
+        <nav aria-label="Breadcrumb" className="text-[12px]" style={{ color: 'var(--mute)' }}>
+          <a href="/" style={{ color: 'var(--haze)' }}>Home</a> · <a href="/market" style={{ color: 'var(--haze)' }}>Markets</a> · {M.zip}
+        </nav>
+
+        {/* hero: name + the one verdict figure */}
+        <div className="mt-4 flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <h1 style={{ font: '400 var(--display-2)/1.1 var(--font-display)' }}>{M.name}</h1>
+            <p className="mt-1 text-[14px]" style={{ color: 'var(--haze)' }}>{M.zip} · {M.city} · <span className="figure">{M.listings}</span> active listings</p>
           </div>
-        </header>
-
-        {/* ── Signature chart: model rent vs HUD FMR, per bedroom ───────── */}
-        <section className="py-14" style={{ borderBottom: '1px solid var(--line)' }}>
-          <h2 className="prov mb-8 inline-block">modeled rent vs HUD fair market rent</h2>
-          <div className="space-y-6">
-            {M.fmrVsModel.map((r) => (
-              <div key={r.br} className="grid grid-cols-[64px_1fr] items-center gap-4">
-                <span className="text-[13px]" style={{ color: 'var(--haze)' }}>{r.br}</span>
-                <div className="relative h-8">
-                  {/* FMR: hairline reference bar */}
-                  <div className="absolute top-1 h-2 rounded-full"
-                       style={{ width: `${(r.fmr / MAX) * 100}%`, background: 'var(--line-hi)' }} />
-                  {/* Model: emerald engraved bar */}
-                  <div className="absolute bottom-1 h-2 rounded-full"
-                       style={{ width: `${(r.model / MAX) * 100}%`, background: 'var(--pass)' }} />
-                  <span className="figure absolute -top-0.5 text-[11px]"
-                        style={{ left: `calc(${(r.fmr / MAX) * 100}% + 8px)`, color: 'var(--mute)' }}>
-                    FMR {money(r.fmr)}
-                  </span>
-                  <span className="figure absolute -bottom-0.5 text-[11px]"
-                        style={{ left: `calc(${(r.model / MAX) * 100}% + 8px)`, color: 'var(--pass-hi)' }}>
-                    {money(r.model)}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="text-right">
+            <p className="figure text-[34px]" style={{ color: M.ratio >= 1 ? 'var(--pass)' : 'var(--haze)' }}>{M.ratio.toFixed(2)}%</p>
+            <p className="prov" style={{ color: 'var(--mute)' }}>median rent ÷ median price</p>
           </div>
-          <p className="mt-6 text-[12px]" style={{ color: 'var(--mute)' }}>
-            Model = OnePercent v1 median for this ZIP. FMR = HUD SAFMR FY2026. Where the emerald
-            bar clears the reference, the market rents above the federal floor.
-          </p>
-        </section>
+        </div>
 
-        {/* ── ACS strip: the census speaks quietly ───────────────────────── */}
-        <section className="grid grid-cols-2 gap-y-8 py-14 md:grid-cols-4" style={{ borderBottom: '1px solid var(--line)' }}>
+        {/* stat strip: all sourced */}
+        <div className="mt-8 grid gap-px overflow-hidden rounded-[var(--r-panel)] sm:grid-cols-2 lg:grid-cols-4" style={{ background: 'var(--line)', border: '1px solid var(--line)' }}>
           {[
-            ['Median household income', money(M.acs.income)],
-            ['Median area rent', `${money(M.acs.medRent)}/mo`],
-            ['Median home value', money(M.acs.homeValue)],
-            ['Population', M.acs.population.toLocaleString()],
-          ].map(([k, v]) => (
-            <div key={k as string}>
-              <p className="figure text-[24px]">{v}</p>
-              <p className="mt-1 text-[12px]" style={{ color: 'var(--haze)' }}>{k}</p>
+            ['Median asking', money(M.medPrice), 'active listings'],
+            ['Median model rent', `${money(M.medRent)}/mo`, 'model v1'],
+            ['Median HH income', money(M.income), `ACS · +${M.incomeGrowth5}%/5y`],
+            ['Unemployment', `${M.unemployment}%`, 'BLS LAUS · county'],
+          ].map(([k, v, src]) => (
+            <div key={k} className="p-5" style={{ background: 'var(--ink)' }}>
+              <p className="text-[12px]" style={{ color: 'var(--haze)' }}>{k}</p>
+              <p className="figure mt-1 text-[20px]">{v}</p>
+              <p className="prov mt-1" style={{ color: 'var(--mute)' }}>{src}</p>
             </div>
           ))}
-          <p className="prov col-span-full">american community survey {M.acs.year} · vacancy {(M.acs.vacancy * 100).toFixed(0)}% · flood risk {M.flood} (FEMA NRI)</p>
-        </section>
+        </div>
 
-        {/* ── Sold market truth (Track B) ────────────────────────────────── */}
-        <section className="flex flex-wrap items-baseline gap-x-12 gap-y-4 py-14">
+        {/* trajectory + context: two columns */}
+        <div className="mt-12 grid gap-12 lg:grid-cols-2">
+          <section>
+            <p className="prov mb-4" style={{ color: 'var(--mute)' }}>ten years of price</p>
+            <Spark data={M.hpi} w={440} h={80} />
+            <p className="mt-2 text-[13px]" style={{ color: 'var(--haze)' }}>
+              House price index <b className="figure" style={{ color: 'var(--text)' }}>+{Math.round(((M.hpi[9] - M.hpi[4]) / M.hpi[4]) * 100)}%</b> over five years
+              <span className="prov ml-1.5" style={{ color: 'var(--mute)' }}>FHFA ZIP HPI</span>
+            </p>
+            <div className="mt-8">
+              <p className="prov mb-3" style={{ color: 'var(--mute)' }}>rent, block by block</p>
+              <div className="mat">
+                <div className="flex h-44 items-center justify-center rounded-[var(--r-mat)]" style={{ background: 'var(--ink-2)' }}>
+                  <span className="prov" style={{ color: 'var(--mute)' }}>rent-heat mini-map · this ZIP</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <p className="prov mb-4" style={{ color: 'var(--mute)' }}>character & risk</p>
+            <dl className="space-y-3 text-[14px]">
+              {[
+                ['Walkability', `${M.walk} / 20`, 'EPA Smart Location'],
+                ['FEMA risk index', M.nriRating, 'NRI overall'],
+                ['Flood exposure', '3.2% of listings in SFHA', 'FEMA NFHL'],
+                ['Transit', '38 stops · 2 rail', 'GTFS'],
+                ['Schools', '11 public within the ZIP', 'NCES'],
+              ].map(([k, v, src]) => (
+                <div key={k} className="flex items-baseline justify-between gap-4 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+                  <dt style={{ color: 'var(--haze)' }}>{k}</dt>
+                  <dd className="text-right"><span className="figure">{v}</span><span className="prov block" style={{ color: 'var(--mute)' }}>{src}</span></dd>
+                </div>
+              ))}
+            </dl>
+
+            {/* what clears here (or honesty when nothing does) */}
+            <div className="mt-8">
+              <p className="prov mb-3" style={{ color: 'var(--mute)' }}>clearing the line here</p>
+              {M.clearCount === 0 ? (
+                <p className="rounded-[var(--r-panel)] border p-4 text-[13px]" style={{ borderColor: 'var(--line)', color: 'var(--haze)' }}>
+                  Nothing in {M.zip} clears 1% today — typical for prime LA.
+                  Investors here underwrite on appreciation, not cash flow.
+                  <a href="/playbook/buy-hold" className="ml-1 font-medium hover:underline" style={{ color: 'var(--pass)' }}>The playbook explains when that works →</a>
+                </p>
+              ) : (
+                <ul>{M.clears.map((c) => <li key={c.addr}>{c.addr}</li>)}</ul>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* handoff + adjacency loop */}
+        <div className="mt-14 flex flex-wrap items-center justify-between gap-6 rounded-[var(--r-panel)] border p-6" style={{ borderColor: 'var(--line)', background: 'var(--ink-2)' }}>
           <div>
-            <p className="figure text-[24px]">{M.sold90d.count}</p>
-            <p className="mt-1 text-[12px]" style={{ color: 'var(--haze)' }}>closed sales · 90 days</p>
+            <p className="text-[15px] font-medium">Hunt in {M.zip}</p>
+            <p className="mt-0.5 text-[13px]" style={{ color: 'var(--haze)' }}>Opens the workbench scoped to this ZIP, rent-heat on.</p>
           </div>
-          <div>
-            <p className="figure text-[24px]">${M.sold90d.medPpsf}<span className="text-[14px]">/sqft</span></p>
-            <p className="mt-1 text-[12px]" style={{ color: 'var(--haze)' }}>median sold $/sqft</p>
-          </div>
-          <a className="ml-auto text-[13px]" style={{ color: 'var(--pass-hi)' }}>
-            Browse the {M.listings} listings in {M.zip} →
+          <a href={`/search?q=${M.zip}&mv=-118.3150,34.0740,13.0`} className="rounded-full px-6 py-2.5 text-[14px] font-semibold" style={{ background: 'var(--pass)', color: 'var(--ink)' }}>
+            Search {M.zip} →
           </a>
-        </section>
+        </div>
+
+        <div className="mt-10 flex flex-wrap items-center gap-3 pb-16 text-[13px]">
+          <span style={{ color: 'var(--mute)' }}>Adjacent:</span>
+          {M.adjacent.map(([z, r]) => (
+            <a key={z} href={`/market/${z}`} className="rounded-full border px-3.5 py-1.5 font-medium hover:border-line-hi" style={{ borderColor: 'var(--line)', color: 'var(--haze)' }}>
+              {z} <span className="figure" style={{ color: 'var(--text)' }}>{r}</span>
+            </a>
+          ))}
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

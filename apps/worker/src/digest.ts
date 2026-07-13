@@ -312,7 +312,11 @@ async function sendDailyDigestForUser(
 
   for (const search of searchesRes.rows) {
     if (listings.length >= DAILY_LISTING_CAP) break;
-    const { sql, bind } = compileSavedSearchParams(search.params ?? {});
+    const { sql: rawSql, bind } = compileSavedSearchParams(search.params ?? {});
+    // compileSavedSearchParams numbers its placeholders from $1; the outer
+    // query uses $1 for `cutoff`, so shift the filter placeholders up by one
+    // to avoid a parameter-index collision.
+    const sql = rawSql.replace(/\$(\d+)/g, (_, n) => `$${Number(n) + 1}`);
     const remaining = DAILY_LISTING_CAP - listings.length;
 
     const res = await client.query(

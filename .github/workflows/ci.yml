@@ -47,6 +47,7 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install
       - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm lint 2>&1 | head -50 || true
       # C2: run the workspace test suites (apps/one now includes the C1 query
       # parameterization tests; worker + primitives suites also run here).

@@ -250,7 +250,13 @@ def _arcgis_get(params: dict, retries: int = 4) -> dict:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "oper-nfhl/1.0"})
             with urllib.request.urlopen(req, timeout=180) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                res_data = json.loads(resp.read().decode("utf-8"))
+            # ArcGIS returns HTTP 200 with an {"error": {...}} body on query
+            # failures (bad params, rate limit, token). Treat that as an error
+            # so we never silently "succeed" with 0 rows.
+            if isinstance(res_data, dict) and "error" in res_data:
+                raise RuntimeError(f"ArcGIS error payload: {res_data['error']}")
+            return res_data
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             wait = 2 ** attempt
@@ -291,6 +297,12 @@ def _load_state_arcgis(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
     skipped = 0
     page_size = NFHL_PAGE_SIZE
     try:
+        # Idempotency: clear this state's rows so re-runs don't duplicate
+        # polygons (which would skew point-in-polygon lookups and query cost).
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM flood_zones WHERE state_fips = %s", (state_fips,))
+        conn.commit()
+
         offset = 0
         while offset < total:
             try:
@@ -332,7 +344,10 @@ def _load_state_arcgis(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
                 if not is_sfha and (fld_zone or "").upper() not in SFHA_ZONES:
                     skipped += 1
                     continue
-                rows.append((state_fips, fld_zone, is_sfha, json.dumps(geom)))
+                # flood_zones.fld_zone is NOT NULL; coerce a missing code to ''
+                # so one zone-less SFHA polygon can't fail the whole batch INSERT
+                # (execute_values commits 200 rows at a time).
+                rows.append((state_fips, fld_zone or "", is_sfha, json.dumps(geom)))
 
             if rows:
                 with conn.cursor() as cur:
@@ -463,7 +478,13 @@ def _load_state(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
 
                 from psycopg2 import sql as pg_sql
 
-                # Build the INSERT using proper identifier quoting
+                # Build the INSERT using proper identifier quoting. Reuse the
+                # shared SFHA_ZONES set so the legacy GDB path and the arcgis
+                # path select the same zones (no drift).
+                zone_list = sorted(SFHA_ZONES)
+                zone_placeholders = pg_sql.SQL(", ").join(
+                    pg_sql.Placeholder() for _ in zone_list
+                )
                 insert_query = pg_sql.SQL("""
                     INSERT INTO flood_zones (state_fips, fld_zone, sfha, geom)
                     SELECT
@@ -473,15 +494,16 @@ def _load_state(state_fips: str, state_abbr: str, pg_dsn: str) -> None:
                         ST_Multi(ST_Transform({geom}, 4326))
                     FROM {staging}
                     WHERE {sfha} = 'T'
-                       OR {fld} IN ('AE', 'VE', 'A', 'AO', 'AH')
+                       OR {fld} IN ({zones})
                 """).format(
                     fld=pg_sql.Identifier(fld_col),
                     sfha=pg_sql.Identifier(sfha_col),
                     geom=pg_sql.Identifier(geom_col),
                     staging=pg_sql.Identifier(staging_table),
+                    zones=zone_placeholders,
                 )
 
-                cur.execute(insert_query, (state_fips,))
+                cur.execute(insert_query, (state_fips, *zone_list))
                 inserted = cur.rowcount
             conn.commit()
         finally:
@@ -513,6 +535,12 @@ def _drop_staging(pg_dsn: str, table: str) -> None:
 
 def main() -> None:
     source = os.environ.get("NFHL_SOURCE", "arcgis").lower()
+    if source not in ("arcgis", "gdb"):
+        print(
+            f"ERROR: unknown NFHL_SOURCE {source!r} (expected 'arcgis' or 'gdb')",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     if source == "gdb":
         _check_ogr2ogr()
 
