@@ -9,7 +9,14 @@ User=root
 WorkingDirectory=/opt/onepercent
 EnvironmentFile=/etc/oper.env
 EnvironmentFile=-/etc/oper-role-worker.env
-ExecStart=/usr/bin/node apps/worker/dist/digest.js
+# digest imports @oper/query-lang (TS-only, exports src/*.ts) for AL1 screen
+# alerts, so it must run through tsx — plain `node dist/digest.js` can't
+# resolve the .ts grammar import (ERR_MODULE_NOT_FOUND). Exec the tsx bin
+# directly (it is a #!/bin/sh shim with its own shebang); do NOT wrap it in
+# `node` (node would parse the shell shim as JS → SyntaxError), and `node
+# --import tsx` does not resolve since tsx is not hoisted to the root.
+# tsx is a prod dep of @oper/worker. WorkingDirectory is /opt/onepercent.
+ExecStart=/opt/onepercent/apps/worker/node_modules/.bin/tsx apps/worker/src/digest.ts
 Restart=on-failure
 RestartSec=5
 MemoryMax=192M
