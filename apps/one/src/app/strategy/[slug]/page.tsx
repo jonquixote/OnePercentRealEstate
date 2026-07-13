@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import { ArrowLeft, TrendingUp, DollarSign, Home, Shield, Sparkles } from 'lucide-react';
 
 const STRATEGIES: Record<string, {
@@ -144,6 +145,12 @@ export default async function StrategyPage({ params }: { params: Promise<{ slug:
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-4xl px-6 py-10">
+        <Breadcrumbs items={[
+            { label: 'Home', href: '/' },
+            { label: 'Playbook', href: '/playbook' },
+            { label: s.title },
+        ]} />
+
         {/* Back link */}
         <Link href="/playbook" className="mb-8 flex items-center gap-1.5 text-sm text-haze hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" />

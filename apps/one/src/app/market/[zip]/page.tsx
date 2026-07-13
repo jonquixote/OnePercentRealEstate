@@ -2,6 +2,7 @@ import pool from '@/lib/db';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import Breadcrumbs from '@/components/Breadcrumbs';
 
 // ISR: market stats move on the scrape cadence, not per-request. force-dynamic
 // would silently disable revalidate — do not add it back alongside this.
@@ -385,6 +386,12 @@ export default async function MarketPage({ params }: { params: Promise<{ zip: st
         <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
             <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
             <div className="mx-auto max-w-5xl px-6 py-14">
+                <Breadcrumbs items={[
+                    { label: 'Home', href: '/' },
+                    { label: 'Markets', href: '/market' },
+                    { label: displayName },
+                ]} />
+
                 <header className="pb-10" style={{ borderBottom: '1px solid var(--line)' }}>
                     <p className="prov mb-4 inline-block">market report · {zip}</p>
                     <h1 style={{ font: '400 var(--display-1)/1.05 var(--font-display)' }}>{displayName}</h1>
