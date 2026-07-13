@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import Header from "@/components/Header";
@@ -46,6 +46,12 @@ export const metadata: Metadata = {
   },
   robots: { index: true, follow: true },
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+};
+
+export const viewport: Viewport = {
+  themeColor: "#faf7f2",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
