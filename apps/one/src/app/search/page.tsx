@@ -9,6 +9,7 @@ import { DrawSearch } from '@oper/map/controls/DrawSearch';
 import { SearchCard } from '@/components/search/SearchCard';
 import { ResultsTable } from '@/components/search/ResultsTable';
 import { WatchSearchButton } from '@/components/WatchSearchButton';
+import { FirstRunCoach } from '@/components/search/FirstRunCoach';
 import {
   PropertyFilters,
   propertyFilterParsers,
@@ -242,7 +243,9 @@ export default function SearchPage() {
               >
                 {copied ? 'Copied!' : 'Copy link'}
               </button>
-              <WatchSearchButton filters={filters} />
+              <span data-coach="save" className="contents">
+                <WatchSearchButton filters={filters} />
+              </span>
             </div>
           </div>
         </div>
@@ -260,7 +263,7 @@ export default function SearchPage() {
         <div className={`grid gap-6 ${showMap ? 'grid-cols-1 lg:grid-cols-[1fr_45%] lg:gap-8' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
 
           {/* Cards */}
-          <div>
+          <div data-coach="cards">
             {loading ? (
               <div className={`grid gap-6 ${showMap ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -337,6 +340,7 @@ export default function SearchPage() {
           {/* Map */}
           {showMap && (
             <div
+              data-coach="map"
               className="relative overflow-hidden rounded-2xl border lg:sticky lg:top-[140px] lg:h-[calc(100vh-160px)]"
               style={{ borderColor: 'var(--line)', background: 'var(--ink-2)' }}
             >
@@ -424,6 +428,8 @@ export default function SearchPage() {
           )}
         </div>
       </div>
+
+      <FirstRunCoach />
     </div>
   );
 }
