@@ -22,6 +22,12 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react", "recharts"],
   },
+  async redirects() {
+    return [
+      // IA rename: Portfolio → Shelf (per plans/redesign/IA.md §1).
+      { source: "/portfolio", destination: "/shelf", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

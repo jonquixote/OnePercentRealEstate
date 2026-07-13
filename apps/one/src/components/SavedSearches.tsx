@@ -30,45 +30,7 @@ import {
   toFilterState,
 } from '@/components/PropertyFilters';
 import { useSessionUser } from '@/lib/useSessionUser';
-
-const USER_ID_STORAGE_KEY = 'oper:user_id';
-
-function generateUuid(): string {
-  // Prefer the platform UUID when available (modern browsers + Node 19+).
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID();
-  }
-  // RFC 4122 v4 fallback for older runtimes.
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-function useLocalUserId(): string | null {
-  // Prefer the real account id when a session exists; fall back to the
-  // anonymous localStorage UUID otherwise. This is what makes saved searches
-  // claimed on login instantly visible to the same browser.
-  const session = useSessionUser();
-  const [anonId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY);
-      if (existing) return existing;
-      const fresh = generateUuid();
-      window.localStorage.setItem(USER_ID_STORAGE_KEY, fresh);
-      return fresh;
-    } catch {
-      // Private browsing / storage disabled — ephemeral id so the UI works.
-      return generateUuid();
-    }
-  });
-  return session?.id ?? anonId;
-}
+import { useLocalUserId } from '@/lib/useLocalUserId';
 
 /** Best-effort count of "non-default" filters in a saved params blob. */
 function countActiveFilters(params: Record<string, unknown>): number {

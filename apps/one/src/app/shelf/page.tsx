@@ -20,7 +20,7 @@ interface SavedSearch {
   created_at: string;
 }
 
-export default function PortfolioPage() {
+export default function ShelfPage() {
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +75,7 @@ export default function PortfolioPage() {
     <div className="min-h-screen">
       <div className="mx-auto max-w-4xl px-6 py-10">
         <header className="mb-10">
-          <h1 className="display-1 mb-2">Portfolio</h1>
+          <h1 className="display-1 mb-2">Shelf</h1>
           <p className="text-[15px] text-haze">Your watchlists and saved searches, all in one place.</p>
         </header>
 
@@ -149,7 +149,7 @@ export default function PortfolioPage() {
 
         {/* Call to action */}
         <div className="mt-12 rounded-[var(--r-panel)] bg-ink-2 border border-line p-6 text-center">
-          <p className="text-sm text-haze mb-4">Sign in to sync your portfolio across devices and set up email alerts for new listings.</p>
+          <p className="text-sm text-haze mb-4">Sign in to sync your shelf across devices and set up email alerts for new listings.</p>
           <Link
             href="/login"
             className="inline-flex items-center gap-2 rounded-full bg-pass px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
