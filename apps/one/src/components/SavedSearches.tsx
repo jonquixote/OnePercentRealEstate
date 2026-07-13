@@ -30,45 +30,7 @@ import {
   toFilterState,
 } from '@/components/PropertyFilters';
 import { useSessionUser } from '@/lib/useSessionUser';
-
-const USER_ID_STORAGE_KEY = 'oper:user_id';
-
-function generateUuid(): string {
-  // Prefer the platform UUID when available (modern browsers + Node 19+).
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID();
-  }
-  // RFC 4122 v4 fallback for older runtimes.
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-function useLocalUserId(): string | null {
-  // Prefer the real account id when a session exists; fall back to the
-  // anonymous localStorage UUID otherwise. This is what makes saved searches
-  // claimed on login instantly visible to the same browser.
-  const session = useSessionUser();
-  const [anonId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY);
-      if (existing) return existing;
-      const fresh = generateUuid();
-      window.localStorage.setItem(USER_ID_STORAGE_KEY, fresh);
-      return fresh;
-    } catch {
-      // Private browsing / storage disabled — ephemeral id so the UI works.
-      return generateUuid();
-    }
-  });
-  return session?.id ?? anonId;
-}
+import { useLocalUserId } from '@/lib/useLocalUserId';
 
 /** Best-effort count of "non-default" filters in a saved params blob. */
 function countActiveFilters(params: Record<string, unknown>): number {
@@ -284,7 +246,7 @@ export function SavedSearches() {
                         <label className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-600">
                           <input
                             type="checkbox"
-                            className="h-3 w-3 accent-blue-600"
+                            className="h-3 w-3 accent-[var(--pass)]"
                             checked={Boolean(search.email_digest)}
                             disabled={toggleDigestMutation.isPending}
                             onChange={(e) =>
@@ -304,7 +266,7 @@ export function SavedSearches() {
                     <button
                       type="button"
                       onClick={() => handleRestore(search)}
-                      className="rounded p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-700"
+                        className="rounded p-1.5 text-slate-500 hover:bg-[var(--pass-dim)] hover:text-[var(--pass-hi)]"
                       title="Restore filters"
                       aria-label={`Restore filters from ${search.name}`}
                     >
@@ -338,7 +300,7 @@ export function SavedSearches() {
                   if (e.key === 'Enter') void handleSave();
                 }}
                 placeholder="Search name"
-                className="h-8 flex-1 rounded-md border border-slate-200 px-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className="h-8 flex-1 rounded-md border border-slate-200 px-2 text-sm outline-none focus:border-[var(--pass)] focus:ring-1 focus:ring-[var(--pass)]"
                 aria-label="New saved search name"
               />
               <Button

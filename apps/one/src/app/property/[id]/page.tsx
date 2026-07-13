@@ -19,6 +19,7 @@ import { NeighborhoodPanel } from '@/components/property/sections/NeighborhoodPa
 import { MarketContextPanel } from '@/components/property/sections/MarketContextPanel';
 import { MiniMap } from '@/components/property/sections/MiniMap';
 import VerdictRailClient from '@/components/property/sections/VerdictRailClient';
+import Breadcrumbs from '@/components/Breadcrumbs';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -122,7 +123,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     if (property.style) specParts.push(property.style);
 
     return (
-        <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
+        <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }} className="pb-24 lg:pb-0">
             <Schema kind="RealEstateListing" data={buildSchemaData(property, id) as any} />
 
             {/* Sticky menu header */}
@@ -132,6 +133,12 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
             <StickyTabNav />
 
             <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+                <Breadcrumbs items={[
+                    { label: 'Home', href: '/' },
+                    ...(zip ? [{ label: `${raw.city ? raw.city + ' ' : ''}${zip}`, href: `/market/${zip}` }] : []),
+                    { label: property.address },
+                ]} />
+
                 <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_360px]">
 
                     {/* ── Left: dossier ─────────────────── */}

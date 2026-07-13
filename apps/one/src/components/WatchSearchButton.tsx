@@ -1,73 +1,169 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Check, Loader2 } from 'lucide-react';
 import type { FilterState } from '@/components/PropertyFilters';
+import { useSessionUser } from '@/lib/useSessionUser';
+import { useToast } from '@/components/ui/toast';
+import { requireAuth } from '@/lib/requireAuth';
 
 /**
  * Wave 5 — "Watch this search": snapshots the current filters as a watchlist
  * criteria query. The alert worker evaluates it every ~15 min; new matches
  * (incl. price cuts once price_cut_pct is in the query) become alert emails.
+ *
+ * F3: signed-out visitors are routed through login (requireAuth) carrying the
+ * intent; the anon data is claimed on login, and a deferred watch is resumed
+ * automatically on return.
  */
+const PENDING_KEY = 'oper:pending:watch';
+
 export function WatchSearchButton({ filters }: { filters: FilterState }) {
-    const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'login' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const user = useSessionUser();
+  const router = useRouter();
+  const { showToast } = useToast();
+  const resumed = useRef(false);
 
-    const buildQuery = (): Record<string, unknown> => {
-        const q: Record<string, unknown> = {};
-        if (filters.minPrice > 0 || filters.maxPrice < 10000000) {
-            q.price = {
-                ...(filters.minPrice > 0 ? { min: filters.minPrice } : {}),
-                ...(filters.maxPrice < 10000000 ? { max: filters.maxPrice } : {}),
-            };
+  const buildQuery = (): Record<string, unknown> => {
+    const q: Record<string, unknown> = {};
+    if (filters.minPrice > 0 || filters.maxPrice < 10000000) {
+      q.price = {
+        ...(filters.minPrice > 0 ? { min: filters.minPrice } : {}),
+        ...(filters.maxPrice < 10000000 ? { max: filters.maxPrice } : {}),
+      };
+    }
+    if (filters.minBeds > 0) q.bedrooms = { min: filters.minBeds };
+    if (filters.minBaths > 0) q.bathrooms = { min: filters.minBaths };
+    if (filters.propertyType) q.property_type = filters.propertyType;
+    q.sale_type = filters.saleType || 'standard';
+    if (filters.hasPriceCut) q.price_cut_pct = { min: 0.0001 };
+    if (filters.domMin > 0) q.days_on_market = { min: filters.domMin };
+    return q;
+  };
+
+  // Resume a watch deferred through login (plan F3).
+  useEffect(() => {
+    if (resumed.current || !user) return;
+    let pending: string | null = null;
+    try {
+      pending = sessionStorage.getItem(PENDING_KEY);
+    } catch {
+      /* ignore */
+    }
+    if (!pending) return;
+    resumed.current = true;
+    try {
+      sessionStorage.removeItem(PENDING_KEY);
+    } catch {
+      /* ignore */
+    }
+    (async () => {
+      setState('saving');
+      try {
+        const query = buildQuery();
+        const label =
+          Object.keys(query).filter((k) => k !== 'sale_type').join(' · ') ||
+          'all listings';
+        const res = await fetch('/api/watchlists', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: `Watch: ${label}`.slice(0, 100), query }),
+        });
+        if (res.ok) {
+          setState('saved');
+          showToast('Watching — your search was saved.');
+          setTimeout(() => setState('idle'), 2500);
+        } else {
+          setState('idle');
+          showToast('Could not resume your watch — try again.');
         }
-        if (filters.minBeds > 0) q.bedrooms = { min: filters.minBeds };
-        if (filters.minBaths > 0) q.bathrooms = { min: filters.minBaths };
-        if (filters.propertyType) q.property_type = filters.propertyType;
-        q.sale_type = filters.saleType || 'standard';
-        if (filters.hasPriceCut) q.price_cut_pct = { min: 0.0001 };
-        if (filters.domMin > 0) q.days_on_market = { min: filters.domMin };
-        return q;
-    };
+      } catch {
+        setState('idle');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
-    const save = async () => {
-        setState('saving');
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 10_000);
+  const save = async () => {
+    setState('saving');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    try {
+      const query = buildQuery();
+      const label =
+        Object.keys(query).filter((k) => k !== 'sale_type').join(' · ') ||
+        'all listings';
+      const res = await fetch('/api/watchlists', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: `Watch: ${label}`.slice(0, 100), query }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (res.status === 401) {
+        // Session lapsed mid-action — send them through login and resume.
         try {
-            const query = buildQuery();
-            const label = Object.keys(query).filter((k) => k !== 'sale_type').join(' · ') || 'all listings';
-            const res = await fetch('/api/watchlists', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ name: `Watch: ${label}`.slice(0, 100), query }),
-                signal: ctrl.signal,
-            });
-            clearTimeout(timer);
-            if (res.status === 401) { setState('login'); return; }
-            if (!res.ok) { setState('error'); return; }
-            setState('saved');
-            setTimeout(() => setState('idle'), 2500);
+          sessionStorage.setItem(PENDING_KEY, '1');
         } catch {
-            clearTimeout(timer);
-            setState('error');
+          /* ignore */
         }
-    };
+        requireAuth(router, 'watch');
+        return;
+      }
+      if (!res.ok) {
+        setState('error');
+        return;
+      }
+      setState('saved');
+      setTimeout(() => setState('idle'), 2500);
+    } catch {
+      clearTimeout(timer);
+      setState('error');
+    }
+  };
 
-    return (
-        <button
-            onClick={state === 'login' ? () => (window.location.href = '/login') : save}
-            disabled={state === 'saving'}
-            className={`inline-flex items-center gap-2 px-3 h-9 rounded-full text-sm font-medium transition-colors ${
-                state === 'saved'
-                    ? 'bg-pass text-white'
-                    : 'bg-ink-2/80 text-haze hover:bg-ink-2 border border-line'
-            }`}
-            title="Get alerted when new listings (and price cuts) match these filters"
-        >
-            {state === 'saving' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                : state === 'saved' ? <Check className="h-4 w-4" aria-hidden="true" />
-                : <span aria-hidden="true" className="text-[15px] leading-none">⌂</span>}
-            {state === 'saved' ? 'Watching' : state === 'login' ? 'Log in to watch' : state === 'error' ? 'Retry watch' : 'Watch this search'}
-        </button>
-    );
+  const onClick = () => {
+    if (!user) {
+      // Defer the watch through login (plan F3): stash intent so the resume
+      // effect fires on return, then route to auth with ?next + reason.
+      try {
+        sessionStorage.setItem(PENDING_KEY, '1');
+      } catch {
+        /* ignore */
+      }
+      requireAuth(router, 'watch');
+      return;
+    }
+    save();
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={state === 'saving'}
+      className={`inline-flex items-center gap-2 px-3 h-9 rounded-full text-sm font-medium transition-colors ${
+        state === 'saved'
+          ? 'bg-pass text-white'
+          : 'bg-ink-2/80 text-haze hover:bg-ink-2 border border-line'
+      }`}
+      title="Get alerted when new listings (and price cuts) match these filters"
+    >
+      {state === 'saving' ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      ) : state === 'saved' ? (
+        <Check className="h-4 w-4" aria-hidden="true" />
+      ) : (
+        <span aria-hidden="true" className="text-[15px] leading-none">
+          ⌂
+        </span>
+      )}
+      {state === 'saved'
+        ? 'Watching'
+        : state === 'error'
+          ? 'Retry watch'
+          : 'Watch this search'}
+    </button>
+  );
 }

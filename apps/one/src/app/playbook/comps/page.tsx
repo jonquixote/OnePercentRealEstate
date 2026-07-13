@@ -48,19 +48,17 @@ export default function CompsPage() {
         if (!res.ok) {
           // expression may fail for ilike (not supported by query-lang)
           // fall back to a basic expression
+          // A failed text/address search must not be replaced with unrelated
+          // listings — only ZIP searches are supported by the query API, so
+          // surface the limitation instead of showing broad results as matches.
           if (!isZip) {
-            const fallbackRes = await fetch('/api/properties/query', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ expression: 'price > 10000', limit: 20 }),
-            });
-            if (!fallbackRes.ok) throw new Error('Query failed');
-            const fbData = await fallbackRes.json();
-            if (!cancelled) setComps(fbData?.items ?? []);
-          } else {
-            throw new Error('No results');
+            if (!cancelled) {
+              setComps([]);
+              setError('Text search isn’t supported yet — try a 5-digit ZIP code.');
+            }
+            return;
           }
-          return;
+          throw new Error('No results');
         }
         const data = await res.json();
         if (!cancelled) {

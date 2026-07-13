@@ -1,139 +1,236 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRef, useEffect } from 'react';
-import { Search, BarChart3, Menu, X, Compass, Calculator, Library, Briefcase, ChevronDown } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Menu, X } from 'lucide-react';
 import UserNav from './UserNav';
 import GlobalSearch from './GlobalSearch';
-import { PRIMARY_LINKS, TOOL_LINKS, STRATEGY_LINKS } from '@/lib/nav';
+import {
+  PRIMARY_LINKS,
+  TOOL_LINKS,
+  STRATEGY_LINKS,
+  isActivePrimary,
+} from '@/lib/nav';
+import { useLocalUserId } from '@/lib/useLocalUserId';
+import { useSavedSearches } from '@oper/api-client';
 
 export default function Header() {
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [exploreOpen, setExploreOpen] = useState(false);
-  const exploreRef = useRef<HTMLDivElement>(null);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
+  // Live "new matches" count for the Shelf badge.
+  const userId = useLocalUserId();
+  const { data: searches = [] } = useSavedSearches(userId);
+  const newMatches = searches.reduce((n, s) => n + (s.new_matches ?? 0), 0);
+
+  // Lock scroll + trap focus while the mobile sheet is open.
   useEffect(() => {
-    const onClickAway = (e: MouseEvent) => {
-      if (exploreRef.current && !exploreRef.current.contains(e.target as Node)) {
-        setExploreOpen(false);
+    if (!mobileOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const sheet = sheetRef.current;
+    const focusables = sheet?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled])',
+    );
+    focusables?.[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMobileOpen(false);
+        return;
+      }
+      if (e.key === 'Tab' && focusables && focusables.length > 0) {
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
-    document.addEventListener('mousedown', onClickAway);
-    return () => document.removeEventListener('mousedown', onClickAway);
-  }, []);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
+      mobileToggleRef.current?.focus();
+    };
+  }, [mobileOpen]);
+
+  const closeMobile = useCallback(() => setMobileOpen(false), []);
 
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-ink/85 backdrop-blur supports-[backdrop-filter]:bg-ink/70">
-      <nav className="mx-auto flex max-w-7xl items-center gap-6 px-6 py-3 lg:px-8" aria-label="Global">
-        {/* Brand */}
-        <div className="flex items-center">
-          <Link href="/" className="-m-1.5 p-1.5 flex items-center">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-pass font-mono text-[13px] font-bold text-white">1%</span>
-            <span className="ml-3 text-lg font-display font-semibold text-foreground tracking-tight">OnePercent</span>
-          </Link>
+      <nav className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6 lg:px-8" aria-label="Global">
+        {/* Brand — the line runs through the diamond */}
+        <Link href="/" className="-m-1.5 p-1.5 flex items-center gap-2" aria-label="OnePercent home">
+          <span aria-hidden className="relative inline-flex h-4 w-4 items-center">
+            <span className="absolute inset-x-0 top-1/2 h-px bg-pass" />
+            <span className="mx-auto h-2.5 w-2.5 rotate-45 border border-foreground bg-ink" />
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight text-foreground">OnePercent</span>
+        </Link>
+
+        {/* Primary nav — exactly four jobs */}
+        <div className="hidden h-full items-center gap-7 lg:flex">
+          {PRIMARY_LINKS.map((l) => {
+            const active = isActivePrimary(pathname, l.href);
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                aria-current={active ? 'page' : undefined}
+                className={`relative flex h-full items-center gap-1.5 text-sm font-medium leading-6 transition-colors ${
+                  active ? 'text-foreground' : 'text-haze hover:text-foreground'
+                }`}
+              >
+                {l.label}
+                {l.href === '/shelf' && newMatches > 0 && (
+                  <span className="rounded-full bg-pass px-1.5 py-px text-[10px] font-bold leading-none text-ink">
+                    {newMatches}
+                  </span>
+                )}
+                {active && (
+                  <span aria-hidden className="absolute inset-x-0 -bottom-px h-[2px] bg-pass" />
+                )}
+              </Link>
+            );
+          })}
         </div>
 
-        {/* Prominent search — header */}
-        <div className="hidden md:flex flex-1 justify-center">
+        {/* Search — header (md+) */}
+        <div className="hidden flex-1 justify-center md:flex">
           <GlobalSearch variant="header" />
         </div>
 
-        {/* Primary nav */}
-        <div className="hidden lg:flex items-center gap-7">
-          {PRIMARY_LINKS.slice(0, 3).map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="text-sm font-medium leading-6 text-haze hover:text-foreground transition-colors"
-            >
-              {l.label}
-            </Link>
-          ))}
-
-          {/* Explore mega-menu */}
-          <div className="relative" ref={exploreRef}>
-            <button
-              type="button"
-              onClick={() => setExploreOpen((v) => !v)}
-              aria-expanded={exploreOpen}
-              className="flex items-center gap-1 text-sm font-medium leading-6 text-haze hover:text-foreground transition-colors"
-            >
-              <Compass className="h-4 w-4" />
-              Explore
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${exploreOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {exploreOpen && (
-              <div
-                onKeyDown={(e) => { if (e.key === 'Escape') setExploreOpen(false); }}
-                className="absolute right-0 top-full mt-2 w-[520px] rounded-xl border border-line bg-card/95 backdrop-blur shadow-[0_24px_60px_-20px_rgba(42,37,32,0.20)] p-6 grid grid-cols-3 gap-6"
-              >
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-3">Tools</p>
-                  <ul className="space-y-2">
-                    {TOOL_LINKS.map((l) => (
-                      <li key={l.href}>
-                        <Link href={l.href} onClick={() => setExploreOpen(false)} className="text-sm text-foreground hover:text-pass transition-colors">{l.label}</Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="col-span-2">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-3">Strategy</p>
-                  <ul className="space-y-2">
-                    {STRATEGY_LINKS.map((l) => (
-                      <li key={l.href}>
-                        <Link href={l.href} onClick={() => setExploreOpen(false)} className="text-sm text-foreground hover:text-pass transition-colors">{l.label}</Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <Link href="/pricing" className="text-sm font-semibold leading-6 text-brass-hi hover:text-brass transition-colors">
+        {/* Utility cluster: Pricing (brass affordance) + account */}
+        <div className="ml-auto hidden items-center gap-3 lg:flex">
+          <Link
+            href="/pricing"
+            className="text-sm font-semibold leading-6 text-brass-hi transition-colors hover:text-brass"
+          >
             Pricing
           </Link>
-        </div>
-
-        {/* User nav — single instance, hoisted so responsive blocks don't duplicate */}
-        <div className="hidden lg:flex items-center">
           <UserNav />
         </div>
 
         {/* Mobile toggle */}
-        <div className="flex lg:hidden ml-auto items-center gap-3">
-          <div className="lg:hidden"><UserNav /></div>
+        <div className="ml-auto flex items-center gap-3 lg:hidden">
+          <UserNav />
           <button
+            ref={mobileToggleRef}
             type="button"
-            onClick={() => setMobileOpen(!mobileOpen)}
+            onClick={() => setMobileOpen((v) => !v)}
             className="-m-2.5 inline-flex items-center justify-center rounded-md p-2.5 text-haze hover:text-foreground"
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileOpen}
+            aria-controls="mobile-sheet"
           >
             {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
       </nav>
 
-      {/* Mobile drawer */}
+      {/* Mobile sheet */}
       {mobileOpen && (
-        <div className="lg:hidden border-t border-line bg-card">
-          <div className="p-4">
-            <GlobalSearch variant="header" className="w-full" />
-          </div>
-          <div className="space-y-1 px-4 pb-4">
-            {[...PRIMARY_LINKS, ...TOOL_LINKS, ...STRATEGY_LINKS].map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                onClick={() => setMobileOpen(false)}
-                className="block rounded-md px-3 py-2 text-base font-medium text-foreground hover:bg-ink-2 hover:text-pass"
+        <div
+          id="mobile-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu"
+          className="fixed inset-0 z-[60] lg:hidden"
+          ref={sheetRef}
+        >
+          <div
+            className="absolute inset-0 bg-[rgba(42,37,32,0.3)]"
+            onClick={closeMobile}
+            aria-hidden
+          />
+          <div className="absolute inset-y-0 right-0 flex w-[84%] max-w-sm flex-col bg-ink shadow-[var(--shadow-pop)] border-l border-line">
+            <div className="flex items-center justify-between border-b border-line px-6 py-4">
+              <span className="text-[15px] font-semibold text-foreground">OnePercent</span>
+              <button
+                type="button"
+                onClick={closeMobile}
+                aria-label="Close menu"
+                className="text-[20px] leading-none text-haze hover:text-foreground"
               >
-                {l.label}
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Mobile">
+              {PRIMARY_LINKS.map((l) => {
+                const active = isActivePrimary(pathname, l.href);
+                return (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    onClick={closeMobile}
+                    aria-current={active ? 'page' : undefined}
+                    className={`flex items-center justify-between rounded-xl px-4 py-4 text-[17px] font-medium ${
+                      active ? 'bg-pass-dim text-pass' : 'text-foreground'
+                    }`}
+                  >
+                    {l.label}
+                    {l.href === '/shelf' && newMatches > 0 && (
+                      <span className="rounded-full bg-pass px-2 py-0.5 text-[11px] font-bold text-ink">
+                        {newMatches}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+              <div className="mx-4 my-3 h-px bg-line" />
+              <Link
+                href="/pricing"
+                onClick={closeMobile}
+                className="block px-4 py-3 text-[15px] font-semibold text-brass-hi"
+              >
+                Pricing
               </Link>
-            ))}
+              <Link
+                href="/account"
+                onClick={closeMobile}
+                className="block px-4 py-3 text-[15px] text-haze"
+              >
+                Account
+              </Link>
+              <div className="mx-4 my-3 h-px bg-line" />
+              <p className="px-4 pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Tools
+              </p>
+              {TOOL_LINKS.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={closeMobile}
+                  className="block px-4 py-2.5 text-[14px] text-haze hover:text-foreground"
+                >
+                  {l.label}
+                </Link>
+              ))}
+              <p className="px-4 pb-2 pt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Strategy
+              </p>
+              {STRATEGY_LINKS.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={closeMobile}
+                  className="block px-4 py-2.5 text-[14px] text-haze hover:text-foreground"
+                >
+                  {l.label}
+                </Link>
+              ))}
+            </nav>
+            <div className="border-t border-line px-6 py-4 text-[11px] text-mute">
+              Terminal for pros → two.octavo.press
+            </div>
           </div>
         </div>
       )}

@@ -9,6 +9,7 @@ import { DrawSearch } from '@oper/map/controls/DrawSearch';
 import { SearchCard } from '@/components/search/SearchCard';
 import { ResultsTable } from '@/components/search/ResultsTable';
 import { WatchSearchButton } from '@/components/WatchSearchButton';
+import { FirstRunCoach } from '@/components/search/FirstRunCoach';
 import {
   PropertyFilters,
   propertyFilterParsers,
@@ -57,6 +58,7 @@ export default function SearchPage() {
   const [showMap, setShowMap] = useState(true);
   const [tableView, setTableView] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'list' | 'map'>('list');
 
   const [qs, setQs] = useQueryStates(propertyFilterParsers, { history: 'replace', shallow: true });
   const filters = useMemo(() => toFilterState(qs), [qs]);
@@ -198,11 +200,9 @@ export default function SearchPage() {
 
             {/* Count + sort + actions */}
             <div className="ml-auto flex items-center gap-2">
-              {activeChips.length === 0 && !showFilters && (
-                <span className="hidden sm:inline text-[12px]" style={{ color: 'var(--mute)' }}>
-                  {loading ? 'Loading…' : `${num.format(properties.length)} properties`}
-                </span>
-              )}
+              <span className="hidden sm:inline text-[12px]" style={{ color: 'var(--mute)' }} aria-live="polite">
+                {loading ? 'Loading…' : `${num.format(properties.length)} properties`}
+              </span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
@@ -242,7 +242,9 @@ export default function SearchPage() {
               >
                 {copied ? 'Copied!' : 'Copy link'}
               </button>
-              <WatchSearchButton filters={filters} />
+              <span data-coach="save" className="contents">
+                <WatchSearchButton filters={filters} />
+              </span>
             </div>
           </div>
         </div>
@@ -256,11 +258,11 @@ export default function SearchPage() {
       </div>
 
       {/* Content: cards + map */}
-      <div className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-6 py-6 pb-24 lg:px-8 lg:pb-6">
         <div className={`grid gap-6 ${showMap ? 'grid-cols-1 lg:grid-cols-[1fr_45%] lg:gap-8' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
 
           {/* Cards */}
-          <div>
+          <div data-coach="cards" className={mobileTab === 'map' ? 'hidden lg:block' : ''}>
             {loading ? (
               <div className={`grid gap-6 ${showMap ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -337,7 +339,8 @@ export default function SearchPage() {
           {/* Map */}
           {showMap && (
             <div
-              className="relative overflow-hidden rounded-2xl border lg:sticky lg:top-[140px] lg:h-[calc(100vh-160px)]"
+              data-coach="map"
+              className={`relative overflow-hidden rounded-2xl border lg:sticky lg:top-[140px] lg:h-[calc(100vh-160px)] ${mobileTab === 'list' ? 'hidden lg:block' : 'h-[68vh]'}`}
               style={{ borderColor: 'var(--line)', background: 'var(--ink-2)' }}
             >
               <PropertyMap
@@ -424,6 +427,31 @@ export default function SearchPage() {
           )}
         </div>
       </div>
+
+      {/* Mobile List|Map segmented control (thumb zone) — desktop keeps split view */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center lg:hidden">
+        <div
+          className="pointer-events-auto flex overflow-hidden rounded-full border shadow-lg"
+          style={{ borderColor: 'var(--line-hi)', background: 'var(--ink-panel)' }}
+          role="tablist"
+          aria-label="Search view"
+        >
+          {(['list', 'map'] as const).map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={mobileTab === t}
+              onClick={() => setMobileTab(t)}
+              className="px-6 py-2.5 text-[13px] font-semibold capitalize"
+              style={mobileTab === t ? { background: 'var(--text)', color: 'var(--ink)' } : { color: 'var(--haze)' }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <FirstRunCoach />
     </div>
   );
 }
