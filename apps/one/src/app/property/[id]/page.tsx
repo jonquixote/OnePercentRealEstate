@@ -123,7 +123,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     if (property.style) specParts.push(property.style);
 
     return (
-        <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }}>
+        <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }} className="pb-24 lg:pb-0">
             <Schema kind="RealEstateListing" data={buildSchemaData(property, id) as any} />
 
             {/* Sticky menu header */}

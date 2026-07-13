@@ -85,7 +85,7 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                     <table className="w-full min-w-[800px] rounded-[var(--r-panel)]" style={{ borderCollapse: 'collapse' as const }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                                <th className="p-4 text-left text-[13px] font-semibold w-48" style={{ color: 'var(--haze)', background: 'var(--ink-2)' }}>Feature</th>
+                                <th className="p-4 text-left text-[13px] font-semibold w-48" style={{ color: 'var(--haze)', background: 'var(--ink-2)', position: 'sticky', left: 0, zIndex: 20, borderRight: '1px solid var(--line)' }}>Feature</th>
                                 {properties.map(p => (
                                     <th key={p.id} className="p-4 text-left min-w-[250px]" style={{ borderLeft: '1px solid var(--line)', background: 'var(--ink-2)' }}>
                                         <div>
@@ -106,7 +106,7 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                             {/* Financials Section */}
                             <tr>
                                 <td className="p-2 px-4 text-[10px] font-bold uppercase tracking-wider" colSpan={properties.length + 1}
-                                    style={{ color: 'var(--mute)', background: 'var(--ink-2)' }}>Financials</td>
+                                    style={{ color: 'var(--mute)', background: 'var(--ink-2)', position: 'sticky', left: 0, zIndex: 10, borderRight: '1px solid var(--line)' }}>Financials</td>
                             </tr>
                             <TableRow label="Listing Price" properties={properties} render={(p) => usd0.format(p.listing_price ?? 0)} />
                             <TableRow label="Est. Rent" properties={properties} render={(p) => usd0.format(p.estimated_rent ?? 0)} />
@@ -139,7 +139,7 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                             {/* Specs Section */}
                             <tr>
                                 <td className="p-2 px-4 text-[10px] font-bold uppercase tracking-wider" colSpan={properties.length + 1}
-                                    style={{ color: 'var(--mute)', background: 'var(--ink-2)' }}>Property Specs</td>
+                                    style={{ color: 'var(--mute)', background: 'var(--ink-2)', position: 'sticky', left: 0, zIndex: 10, borderRight: '1px solid var(--line)' }}>Property Specs</td>
                             </tr>
                             <TableRow label="Bedrooms" properties={properties} render={(p) => String(p.financial_snapshot?.bedrooms ?? '-')} />
                             <TableRow label="Bathrooms" properties={properties} render={(p) => String(p.financial_snapshot?.bathrooms ?? '-')} />
@@ -149,7 +149,7 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                             {/* Additional Data */}
                             <tr>
                                 <td className="p-2 px-4 text-[10px] font-bold uppercase tracking-wider" colSpan={properties.length + 1}
-                                    style={{ color: 'var(--mute)', background: 'var(--ink-2)' }}>Additional Data</td>
+                                    style={{ color: 'var(--mute)', background: 'var(--ink-2)', position: 'sticky', left: 0, zIndex: 10, borderRight: '1px solid var(--line)' }}>Additional Data</td>
                             </tr>
                             <TableRow label="HOA Fee" properties={properties} render={(p) => p.hoa_fee != null ? usd0.format(p.hoa_fee) : 'N/A'} />
                             <TableRow label="Status" properties={properties} render={(p) => (p.status || 'active').replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())} />
@@ -170,7 +170,7 @@ function TableRow({ label, properties, render }: {
 }) {
     return (
         <tr style={{ borderBottom: '1px solid var(--line)' }}>
-            <td className="p-4 text-[14px] font-medium" style={{ color: 'var(--haze)' }}>{label}</td>
+            <td className="p-4 text-[14px] font-medium" style={{ color: 'var(--haze)', background: 'var(--ink)', position: 'sticky', left: 0, zIndex: 10, borderRight: '1px solid var(--line)' }}>{label}</td>
             {properties.map(p => (
                 <td key={p.id} className="p-4 text-[14px]" style={{ borderLeft: '1px solid var(--line)' }}>
                     {render(p)}
@@ -201,7 +201,7 @@ function BestRow({ label, properties, value, format, best }: {
     });
     return (
         <tr style={{ borderBottom: '1px solid var(--line)' }}>
-            <td className="p-4 text-[14px] font-medium" style={{ color: 'var(--haze)' }}>{label}</td>
+            <td className="p-4 text-[14px] font-medium" style={{ color: 'var(--haze)', background: 'var(--ink)', position: 'sticky', left: 0, zIndex: 10, borderRight: '1px solid var(--line)' }}>{label}</td>
             {properties.map((p, i) => (
                 <td key={p.id} className="p-4 text-[14px]" style={{ borderLeft: '1px solid var(--line)' }}>
                     {values[i] == null ? '—' : (

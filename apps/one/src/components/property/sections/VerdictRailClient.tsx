@@ -133,6 +133,27 @@ export default function VerdictRailClient({
       <p className="mt-3 text-center text-[11px]" style={{ color: 'var(--mute)' }}>
         financing: 20% down · {mortgageRate != null ? `${mortgageRate.toFixed(2)}%` : '—'} (FRED, live) · 30yr
       </p>
+
+      {/* M2: mobile sticky CTA bar — replaces the rail on small screens */}
+      <div
+        className="lg:hidden fixed inset-x-0 bottom-0 z-40 flex items-center gap-3 border-t px-4 py-3 backdrop-blur"
+        style={{ background: 'rgba(250,247,242,.95)', borderColor: 'var(--line-hi)' }}
+      >
+        <div className="min-w-0">
+          <p className="figure text-[17px] leading-tight">{usd0.format(price)}</p>
+          <p className="figure text-[12px]" style={{ color: ratioPct != null && ratioPct >= targetPct ? 'var(--pass)' : 'var(--haze)' }}>
+            {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '—'} · rent {hasRent ? usd0.format(rent) : '—'}
+          </p>
+        </div>
+        <button
+          onClick={toggleWatch}
+          disabled={savingWatch}
+          className="ml-auto shrink-0 rounded-full px-5 py-2.5 text-[14px] font-semibold transition-colors disabled:opacity-50"
+          style={{ background: watched ? 'var(--line-hi)' : 'var(--pass)', color: watched ? 'var(--text)' : '#fff' }}
+        >
+          {watched ? 'Watching' : 'Watch'}
+        </button>
+      </div>
     </div>
   );
 }
