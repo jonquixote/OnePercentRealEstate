@@ -26,6 +26,12 @@ const nextConfig: NextConfig = {
     return [
       // IA rename: Portfolio → Shelf (per plans/redesign/IA.md §1).
       { source: "/portfolio", destination: "/shelf", permanent: true },
+      // N2 consolidation (plans/redesign/IA.md §1): tool pages fold into
+      // Markets / Playbook; old URLs 301 so no links orphans.
+      { source: "/analytics", destination: "/market", permanent: true },
+      { source: "/calculator", destination: "/playbook/calculator", permanent: true },
+      { source: "/comps", destination: "/playbook/comps", permanent: true },
+      { source: "/strategy/:slug", destination: "/playbook/:slug", permanent: true },
     ];
   },
   async headers() {

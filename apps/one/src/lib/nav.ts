@@ -21,9 +21,8 @@ export const PRIMARY_LINKS: NavLink[] = [
  * primary nav. Pricing is handled separately as the single brass affordance.
  */
 export const TOOL_LINKS: NavLink[] = [
-  { href: '/calculator', label: 'Calculator', group: 'tools' },
-  { href: '/comps', label: 'Comps', group: 'tools' },
-  { href: '/analytics', label: 'Analytics', group: 'tools' },
+  { href: '/playbook/calculator', label: 'Calculator', group: 'tools' },
+  { href: '/playbook/comps', label: 'Comps', group: 'tools' },
 ];
 
 export const STRATEGY_LINKS: NavLink[] = [
@@ -63,6 +62,7 @@ export const FOOTER_METHOD: NavLink[] = [
   { href: '/playbook', label: 'The 1% rule' },
   { href: '/playbook/buy-hold', label: 'Buy & Hold' },
   { href: '/playbook/brrr', label: 'BRRRR' },
+  { href: '/playbook/comps', label: 'Comps' },
   { href: '/playbook/calculator', label: 'Deal calculator' },
   { href: '/playbook/model', label: 'How the model works' },
 ];
@@ -72,10 +72,6 @@ export function isActivePrimary(pathname: string, href: string): boolean {
   if (href === '/search') return pathname === '/search';
   if (href === '/market') return pathname === '/market' || pathname.startsWith('/market/');
   if (href === '/shelf') return pathname === '/shelf';
-  if (href === '/playbook') return (
-    pathname === '/playbook' ||
-    pathname.startsWith('/playbook/') ||
-    pathname.startsWith('/strategy/')
-  );
+  if (href === '/playbook') return pathname === '/playbook' || pathname.startsWith('/playbook/');
   return pathname === href;
 }

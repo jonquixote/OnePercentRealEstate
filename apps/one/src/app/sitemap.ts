@@ -36,7 +36,7 @@ async function fetchZipCodes(): Promise<string[]> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-    const coreRoutes = ['', '/search', '/market', '/shelf', '/pricing'].map((route) => ({
+    const coreRoutes = ['', '/search', '/market', '/shelf', '/playbook', '/pricing'].map((route) => ({
         url: `${BASE_URL}${route}`,
         lastModified: new Date(),
         changeFrequency: 'daily' as const,

@@ -58,7 +58,7 @@ export default function PlaybookPage() {
             return (
               <Link
                 key={s.slug}
-                href={`/strategy/${s.slug}`}
+                href={`/playbook/${s.slug}`}
                 className="group rounded-[var(--r-panel)] border border-line bg-card p-6 transition-all hover:border-pass/30 hover:shadow-[var(--shadow-pop)]"
               >
                 <div className="flex items-start gap-5">
@@ -84,7 +84,7 @@ export default function PlaybookPage() {
         <div className="mt-12 rounded-[var(--r-panel)] bg-ink-2 border border-line p-6 text-center">
           <p className="text-sm text-haze mb-4">Not sure which strategy fits? Use the calculator to compare scenarios side by side.</p>
           <Link
-            href="/calculator"
+            href="/playbook/calculator"
             className="inline-flex items-center gap-2 rounded-full border border-pass px-6 py-2.5 text-sm font-semibold text-pass transition-colors hover:bg-pass/10"
           >
             Try the Calculator
