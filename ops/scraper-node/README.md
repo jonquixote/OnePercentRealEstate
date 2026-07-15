@@ -320,6 +320,123 @@ kill-switch" below for the full kill-switch procedure.
 
 ## Calibration + kill-switch
 
-_(Task D3 — per-IP calibration procedure and kill-switch steps land here.)_
+### Per-endpoint metrics
 
-_(Task D3 — per-IP calibration procedure and kill-switch steps land here.)_
+The driver (`apps/worker`, unit `oper-worker`) logs one structured line per
+scraper endpoint every 60s (`METRICS_INTERVAL_MS` in `apps/worker/src/crawl.ts`),
+built from the pure `formatEndpointMetrics()` in `apps/worker/src/metrics.ts`:
+
+```json
+{"url":"http://10.8.3.41","interval_ms":18000,"ok":142,"blocked":0,"error":1,"ready_in_ms":0,"msg":"scraper endpoint metrics"}
+```
+
+- `interval_ms` — the endpoint's current AIMD-adjusted minimum gap between
+  job starts (lower = the driver believes this IP can go faster).
+- `ok` / `blocked` / `error` — cumulative counters since worker boot (reset on
+  restart; there's no persistence of these across a deploy).
+- `ready_in_ms` — how long until this endpoint is next eligible for a job (0
+  if it's currently available).
+
+Tail these on main with:
+
+```bash
+sudo journalctl -u oper-worker -f | grep 'scraper endpoint metrics'
+```
+
+## Calibrating a new IP
+
+Every new scraper IP (side node) needs its own settle-in period before it can
+be trusted to run at a tight interval. Do this **after** the node passes its
+smoke test (Node provisioning, step 2) and is registered in `SCRAPER_URLS`
+(step 3).
+
+1. **Start conservative.** The AIMD default `startIntervalMs` is 30s
+   (`CRAWL_JOB_MIN_INTERVAL_MS`, also the fleet-wide default for
+   `SCRAPER_MIN_INTERVAL_MS`'s floor) — every new endpoint boots at this
+   interval regardless of how tight its siblings have already tightened,
+   since AIMD state is per-endpoint (`ScraperEndpoint` in
+   `apps/worker/src/scraper-pool.ts`), not shared across the pool.
+2. **Let AIMD tighten on sustained success.** Each `ok` settle subtracts
+   `decreaseMs` (`SCRAPER_AIMD_DECREASE_MS`) from that endpoint's interval,
+   down to `minIntervalMs` (`SCRAPER_MIN_INTERVAL_MS`). No manual action is
+   needed here — just let the fleet run and watch the metrics log.
+3. **Watch the `blocked` counter** for that IP's log lines. Note the
+   `blocked` count and `interval_ms` at two points a few hours apart. If
+   `blocked` isn't climbing and `interval_ms` has stopped decreasing, the
+   endpoint has found its **stable operating interval** — the point where
+   AIMD settles without repeated blocks. Record that interval per IP (e.g. in
+   this file, a table, or your fleet inventory) so future re-provisioning of
+   the same node/region can start closer to it instead of always re-learning
+   from 30s.
+4. **If an IP blocks repeatedly within an hour**, its stable interval is
+   still above `minIntervalMs` — the floor is letting AIMD race down to a
+   rate that IP/region can't sustain. Raise that IP's floor by setting a
+   higher `SCRAPER_MIN_INTERVAL_MS` on **that node's** `/etc/oper.env`...
+   but note `SCRAPER_MIN_INTERVAL_MS` is currently a single fleet-wide value
+   read once by the driver (`apps/worker/src/env.ts`), not per-endpoint. Until
+   a per-endpoint floor override exists, the practical lever is to give the
+   repeatedly-blocked IP a longer rest via the kill-switch below (pull it from
+   `SCRAPER_URLS` for a cool-down period) rather than degrading the whole
+   fleet's floor to accommodate one weak IP.
+
+### Boot-phase stagger
+
+Side nodes are provisioned from the same provider/region as the existing box,
+so without deliberate desynchronization every endpoint's first job after a
+driver restart would fire at the same `startIntervalMs` offset — a
+same-provider burst hitting Realtor.com at once, which is exactly the
+bursty pattern the per-IP AIMD pacing exists to avoid. `crawl.ts` seeds each
+pool endpoint's `reserve()` at boot with an `i/N`-fraction offset of
+`startIntervalMs` (endpoint `i` of `N` gets `i * startIntervalMs / N`), so the
+fleet's start phases are spread across one interval from the first tick
+onward instead of synchronized. This only runs when there's more than one
+endpoint; a single-IP pool is unaffected.
+
+## Kill-switch
+
+Three levels, from narrowest to broadest blast radius:
+
+**Pause one IP** (e.g. it's blocking repeatedly, or the node itself is
+suspect): remove its URL from `SCRAPER_URLS` in `/etc/oper.env` on **main**,
+then:
+
+```bash
+sudo systemctl restart oper-worker
+```
+
+This drains cleanly — `shutdown()` in `crawl.ts` stops accepting new work,
+waits up to 30s for in-flight jobs, then exits; the restarted driver reads
+the trimmed `SCRAPER_URLS` and simply never acquires that endpoint again. The
+rest of the fleet is unaffected (per-endpoint AIMD state is isolated by
+design). This is also the rollback step referenced in "Node provisioning"
+above.
+
+**Pause the whole fleet** (e.g. a widespread block, or investigating a data
+quality issue): stop the driver entirely — no scraper node will receive new
+jobs since they're all pull-based (nodes never initiate; the driver calls
+`POST /scrape` on them):
+
+```bash
+sudo systemctl stop oper-worker
+```
+
+**Pause a single node without touching the driver** (e.g. the node itself
+needs patching/rebooting, or you want to pull it out of rotation without
+editing `SCRAPER_URLS`/restarting the driver and losing the rest of the
+pool's warmed-up AIMD state): stop the scraper service on **that node**:
+
+```bash
+sudo systemctl stop oper-scraper
+```
+
+The driver keeps `SCRAPER_URLS` unchanged and will still try that endpoint,
+but every request now fails to connect. `processClaimedJob`'s failure
+classification treats a down scraper as `transient` (`isTransientScraperError`
+in `crawl-errors.ts`), which `runnerLoop` maps to the `'error'` outcome —
+`ScraperEndpoint.settle('error', ...)` deliberately leaves `intervalMs`
+untouched (see the comment in `scraper-pool.ts`: "'error' leaves the rate
+untouched"). So the stopped node's AIMD state is preserved (no rate decay),
+its `error` counter climbs in the metrics log, and it stops drawing new jobs
+after its current in-flight one finishes — without a driver restart and
+without disturbing the other endpoints' pacing. Restart `oper-scraper` on
+the node when it's ready to rejoin; no driver-side action is needed.

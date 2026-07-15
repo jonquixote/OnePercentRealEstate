@@ -32,6 +32,7 @@ import { loadEnv } from './env.js';
 import { isBlockError, isTransientScraperError } from './crawl-errors.js';
 import { getLogger, newTraceId, withTrace, type WorkerLogger } from './logger.js';
 import { ScraperPool, type Outcome } from './scraper-pool.js';
+import { formatEndpointMetrics } from './metrics.js';
 
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
@@ -43,6 +44,21 @@ const log = getLogger(env.LOG_LEVEL);
 // today's single-IP behavior. Named scraperPool to avoid colliding with the
 // pg Pool below (named `pool`).
 const scraperPool = new ScraperPool(env.SCRAPER_URLS, env.aimd);
+
+// Boot-phase stagger: same-provider/region side nodes otherwise all start at
+// intervalMs after boot in lockstep, so their first requests (and every
+// AIMD-synchronized cadence after that) can land on Realtor.com at the same
+// moment — the exact multi-IP burst pattern that trips bot heuristics.
+// Seeding each endpoint's reserve() with an i/N-fraction offset spreads the
+// fleet's start phases across one interval so they desynchronize from boot.
+// endpoint 0 gets a 0ms offset (fires on the normal schedule); a pool of 1
+// is a no-op division (offset 0), so the guard below is just clarity.
+if (scraperPool.endpoints.length > 1) {
+  const n = scraperPool.endpoints.length;
+  scraperPool.endpoints.forEach((endpoint, i) => {
+    endpoint.reserve(Date.now() + (i * env.aimd.startIntervalMs) / n);
+  });
+}
 
 interface CrawlJob {
   readonly id: string; // BIGSERIAL — keep as string to avoid JS bigint friction
@@ -550,6 +566,29 @@ async function reaperLoop(parentLog: WorkerLogger): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Per-endpoint metrics: one structured log line per scraper IP every
+// METRICS_INTERVAL_MS, so `blocked` counters and current AIMD interval are
+// observable without a DB query — this is what the calibration procedure in
+// ops/scraper-node/README.md watches. unref()'d so a bare metrics timer never
+// keeps the process alive on its own, and explicitly cleared on shutdown for
+// belt-and-suspenders (matches this file's habit of never leaving a timer
+// dangling — see reaperLoop/runnerLoop's shuttingDown checks).
+// ---------------------------------------------------------------------------
+
+const METRICS_INTERVAL_MS = 60_000;
+
+let metricsTimer: NodeJS.Timeout | null = null;
+
+function startMetricsLoop(parentLog: WorkerLogger): void {
+  metricsTimer = setInterval(() => {
+    for (const m of formatEndpointMetrics(scraperPool, Date.now())) {
+      parentLog.info(m, 'scraper endpoint metrics');
+    }
+  }, METRICS_INTERVAL_MS);
+  metricsTimer.unref();
+}
+
+// ---------------------------------------------------------------------------
 // Graceful shutdown: stop new work, drain in-flight, close, exit.
 // ---------------------------------------------------------------------------
 
@@ -558,6 +597,10 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   log.info({ signal, in_flight: inFlight }, 'shutdown initiated');
   wakeupAll(); // release any parked runners so they observe shuttingDown
+  if (metricsTimer) {
+    clearInterval(metricsTimer);
+    metricsTimer = null;
+  }
 
   const deadline = Date.now() + 30_000;
   while (inFlight > 0 && Date.now() < deadline) {
@@ -597,6 +640,7 @@ async function main(): Promise<void> {
   // plus the LISTEN loop that wakes parked runners on live enqueues. The
   // runners are the source of truth for pulling work — they never starve on
   // the static seed backlog the way a NOTIFY-only design did.
+  startMetricsLoop(log);
   const runners = Array.from({ length: concurrency }, (_, i) => runnerLoop(i, log));
   await Promise.all([listenLoop(log), reaperLoop(log), ...runners]);
 }
