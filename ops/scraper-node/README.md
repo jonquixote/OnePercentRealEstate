@@ -187,7 +187,19 @@ on the provider console/CLI in use for this fleet — pass
 script, after filling in `${SCRAPER_DB_PASSWORD}` with the `oper_scraper`
 role password (generated in "Central DB access", step 1 above — never
 commit it; substitute it in your provider's user-data field or a local copy
-of the file that is not checked into git).
+of the file that is not checked into git) and `${DEPLOY_REF}` with the
+reviewed commit SHA (or signed tag) being deployed — never leave a node
+tracking bare `main`.
+
+**Preferred `SCRAPER_DB_PASSWORD` delivery:** leave it OUT of user-data
+entirely. Boot the node with a placeholder/empty `DATABASE_URL`, then once
+cloud-init finishes, `scp` a real `/etc/oper.env` from the driver box (main)
+to the new node out-of-band (mode stays `0600`) and restart
+`oper-scraper.service`. This avoids the password ever touching cloud-init
+user-data or the provider's activity log. If you do embed the password in
+user-data (e.g. for unattended fleet scripting), the cloud-init run shreds
+`/var/lib/cloud/instances/*/user-data.txt` as its last step as a fallback —
+treat that as a safety net, not the primary control.
 
 Example shape (adjust flags/API to the actual provider CLI):
 
@@ -196,23 +208,38 @@ Example shape (adjust flags/API to the actual provider CLI):
   --region <same-region-as-10.8.3.41> \
   --image ubuntu-22.04 \
   --private-network <the-10.8.0.0/22-mesh-network> \
-  --user-data-file <(sed "s/\${SCRAPER_DB_PASSWORD}/<the-actual-password>/" ops/scraper-node/cloud-init.yaml) \
+  --user-data-file <(sed -e "s/\${SCRAPER_DB_PASSWORD}/<the-actual-password>/" -e "s/\${DEPLOY_REF}/<the-reviewed-commit-sha>/" ops/scraper-node/cloud-init.yaml) \
   --name oper-scraper-node-N
 ```
 
 Cloud-init (`ops/scraper-node/cloud-init.yaml`) then, unattended:
 
 1. Installs `git`, `python3-venv`, `python3-pip`, `build-essential`,
-   `libpq-dev`.
+   `libpq-dev`, `nftables`.
 2. Writes `/etc/oper.env` (mode `0600`) with the mesh `DATABASE_URL`
    pointing at `oper_scraper@10.8.2.241:5432` and `SCRAPE_TIMEOUT_MS`.
-3. Clones `OnePercentRealEstate` to `/opt/onepercent` and builds the venv
-   at `services/ml/.venv` (same layout as the working side box).
+3. Clones `OnePercentRealEstate` to `/opt/onepercent` and checks out
+   `${DEPLOY_REF}` — a pinned, reviewed commit/tag, not floating `main` —
+   then builds the venv at `services/ml/.venv` (same layout as the working
+   side box). A recommended follow-up: hash-locked requirements
+   (`pip install --require-hashes`) for the scraper's dependency install.
 4. Installs the real `ops/systemd/oper-scraper.service` unit verbatim, then
    patches only the `--host`/`--port` flags to bind the node's own `eth1`
    private IP on port 80 (the fleet convention — `SCRAPER_URLS` entries are
-   bare IPs like `http://10.8.3.41`, no port suffix).
+   bare IPs like `http://10.8.3.41`, no port suffix). The unit still runs as
+   `User=root` to match the proven side-box unit; dropping to an
+   unprivileged user with `CAP_NET_BIND_SERVICE` (so it can still bind port
+   80) is a recommended future hardening.
 5. Enables and starts `oper-scraper.service`.
+6. Installs a persistent `nftables` ruleset (`/etc/nftables.conf`) that
+   allows inbound `tcp/80` on `eth1` only from `10.8.2.241` (main, the
+   `oper-worker` driver — the only legitimate client) and drops everything
+   else on that port. Without this, any host that can route to
+   `10.8.0.0/22` could reach `/scrape` on the node.
+7. Shreds (or, if `shred` is unavailable, removes) the cloud-init
+   `user-data.txt` on disk — the fallback for not leaving
+   `SCRAPER_DB_PASSWORD` on disk when it was embedded in user-data rather
+   than delivered out-of-band per the preferred path above.
 
 Boot the instance and wait for cloud-init to finish
 (`cloud-init status --wait` over SSH, or watch the provider console) before

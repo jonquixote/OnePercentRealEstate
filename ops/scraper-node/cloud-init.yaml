@@ -16,7 +16,7 @@
 # 10.8.0.0/22 automatically at boot.
 #cloud-config
 package_update: true
-packages: [git, python3-venv, python3-pip, build-essential, libpq-dev]
+packages: [git, python3-venv, python3-pip, build-essential, libpq-dev, nftables]
 
 write_files:
   - path: /etc/oper.env
@@ -30,6 +30,10 @@ runcmd:
   # (matches the layout of the working side box: services/ml/.venv is
   # shared across the scraper + ML services on that host).
   - git clone https://github.com/jonquixote/OnePercentRealEstate /opt/onepercent
+  # Pin to the reviewed commit/tag being deployed — never leave a node
+  # tracking bare `main` (see README, "Node provisioning" for how to set
+  # DEPLOY_REF at provision time).
+  - git -C /opt/onepercent checkout ${DEPLOY_REF}
   - python3 -m venv /opt/onepercent/services/ml/.venv
   - /opt/onepercent/services/ml/.venv/bin/pip install -r /opt/onepercent/services/scraper_service/requirements.txt
 
@@ -49,3 +53,28 @@ runcmd:
     sed -i "s#--host [0-9.]*#--host ${PRIV_IP}#" /etc/systemd/system/oper-scraper.service
     sed -i "s#--port [0-9]*#--port 80#" /etc/systemd/system/oper-scraper.service
     systemctl daemon-reload && systemctl enable --now oper-scraper.service
+
+  # Restrict the mesh port to the crawl driver only. The scraper unit binds
+  # 0.0.0.0-equivalent on its eth1 mesh IP:80 (see above) — without a
+  # firewall, any host that can route to 10.8.0.0/22 could hit /scrape.
+  # oper-worker on main (10.8.2.241) is the only legitimate client.
+  - |
+    cat >/etc/nftables.conf <<'NFT'
+    #!/usr/sbin/nft -f
+    flush ruleset
+    table inet scraper {
+      chain input {
+        type filter hook input priority 0; policy accept;
+        # Only the crawl driver (main, mesh 10.8.2.241) may reach the scraper port.
+        iifname "eth1" tcp dport 80 ip saddr 10.8.2.241 accept
+        iifname "eth1" tcp dport 80 drop
+      }
+    }
+    NFT
+  - systemctl enable --now nftables
+  - nft -f /etc/nftables.conf
+
+  # Don't leave the DB password sitting on disk in user-data once the node
+  # is up. Fallback for when out-of-band /etc/oper.env delivery (README,
+  # "Node provisioning") isn't used and the password was embedded here.
+  - sh -c 'shred -u /var/lib/cloud/instances/*/user-data.txt 2>/dev/null || rm -f /var/lib/cloud/instances/*/user-data.txt'
