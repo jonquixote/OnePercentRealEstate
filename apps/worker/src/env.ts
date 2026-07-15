@@ -10,6 +10,10 @@
 export interface WorkerEnv {
   readonly DATABASE_URL: string;
   readonly SCRAPER_URL: string;
+  // Wave — horizontal scaling. Pool of scraper endpoints (comma-separated
+  // SCRAPER_URLS), falling back to [SCRAPER_URL] for single-IP setups.
+  readonly SCRAPER_URLS: string[];
+  readonly aimd: import('./scraper-pool').AimdConfig;
   readonly WORKER_CONCURRENCY: number;
   readonly CLUSTER_REFRESH_INTERVAL_MS: number;
   readonly LOG_LEVEL: string;
@@ -78,9 +82,23 @@ function readStringOpt(name: string): string | null {
 }
 
 export function loadEnv(): WorkerEnv {
+  const scraperUrls = (process.env.SCRAPER_URLS ?? '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
   return {
     DATABASE_URL: readString('DATABASE_URL'),
     SCRAPER_URL: readString('SCRAPER_URL', 'http://scraper:8000'),
+    SCRAPER_URLS: scraperUrls.length ? scraperUrls : [readString('SCRAPER_URL', 'http://scraper:8000')],
+    aimd: {
+      // Defaults reproduce today's single-IP behavior: 30s start, gentle.
+      minIntervalMs: readIntMin0('SCRAPER_MIN_INTERVAL_MS', 12_000),
+      maxIntervalMs: readIntMin0('SCRAPER_MAX_INTERVAL_MS', 120_000),
+      startIntervalMs: readIntMin0('CRAWL_JOB_MIN_INTERVAL_MS', 30_000),
+      decreaseMs: readIntMin0('SCRAPER_AIMD_DECREASE_MS', 1_000),
+      increaseFactor: readInt('SCRAPER_AIMD_INCREASE_FACTOR', 2),
+      cooloffMs: readInt('CRAWL_BLOCK_COOLOFF_MS', 30 * 60_000),
+      cooloffMaxMs: readInt('SCRAPER_COOLOFF_MAX_MS', 4 * 60 * 60_000),
+      jitterFrac: 0.25,
+    },
     // Default 1 (serialized) to match the old n8n workflow's gentle, one-ZIP-
     // at-a-time cadence that avoided Realtor.com IP blocks for months.
     WORKER_CONCURRENCY: readInt('WORKER_CONCURRENCY', 1),
