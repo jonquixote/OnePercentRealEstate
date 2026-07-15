@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 pandas
-homeharvest
+homeharvest==0.8.18
 psycopg2-binary
 sqlalchemy
 requests

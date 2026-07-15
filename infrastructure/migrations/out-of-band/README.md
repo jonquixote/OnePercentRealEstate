@@ -57,3 +57,49 @@ as the new code goes live:
 done + bridge index in place. Running containers are still on OLD code (forward
 -compatible: they ignore the new columns/tables). Pending: deploy app + scraper +
 worker, then drop the bridge index.
+
+---
+
+## 2026-07-14 — `idx_crawl_jobs_finished_at` (crawler stall/block alerting)
+
+`2026_07_14_crawl_jobs_finished_at_idx.sql` — partial `CREATE INDEX CONCURRENTLY`
+on `crawl_jobs (finished_at DESC) WHERE finished_at IS NOT NULL`. Supports the
+`crawler_health` custom query in `infrastructure/monitoring/postgres-exporter/queries.yml`
+(miss_streak / fail_streak scans). Independent of the sale_type sequence above;
+run any time. Idempotent (`IF NOT EXISTS`).
+
+```bash
+psql "$DATABASE_URL" -f infrastructure/migrations/out-of-band/2026_07_14_crawl_jobs_finished_at_idx.sql
+```
+
+**Prod state:** already applied on the main server 2026-07-14.
+
+---
+
+## 2026-07-15 — `crawler_block_state` (block circuit-breaker signal) — ORDERING CRITICAL
+
+`2026_07_15_crawler_block_state.sql` — creates the `crawler_block_state` singleton
+table (+ GRANTs: `oper_worker` read/write, `oper_exporter` read). The crawl
+worker's block circuit breaker writes this row; the `crawler_health` query in
+`infrastructure/monitoring/postgres-exporter/queries.yml` reads it via the
+`block_cooloff_active` column, which powers the `CrawlerBlockCooloff` alert.
+
+**Why ordering is critical:** postgres-exporter fails the ENTIRE scrape (every
+custom metric, and the target goes DOWN) if any one query errors. The new
+`block_cooloff_active` subquery references `crawler_block_state` directly, so a
+missing table is a hard parse error — `COALESCE`/`to_regclass` guards do **not**
+help (Postgres still parses the inner reference). Therefore:
+
+> **Apply this migration BEFORE deploying the updated `queries.yml` / restarting
+> postgres-exporter.** If the exporter is restarted first, it takes down all
+> custom crawler metrics AND `pg_up` for the target until the table exists.
+
+Idempotent (`CREATE TABLE IF NOT EXISTS` + `INSERT ... ON CONFLICT DO NOTHING`);
+run any time, but sequence it ahead of the exporter reload.
+
+```bash
+psql "$DATABASE_URL" -f infrastructure/migrations/out-of-band/2026_07_15_crawler_block_state.sql
+```
+
+**Prod state:** already applied on the main server 2026-07-15 (before the
+`queries.yml` reload).

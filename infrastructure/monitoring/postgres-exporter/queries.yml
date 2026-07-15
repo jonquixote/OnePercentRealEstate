@@ -145,4 +145,106 @@ table_dead_tuple_ratio:
         usage: "GAUGE"
         description: "Fraction of dead tuples (0-1) — proxy for table bloat / vacuum lag"
 
+# --- Added 2026-07-14: smart crawler stall / block detector ---
+# One row, many gauges → metrics `crawler_health_<column>`. Powers the
+# CrawlerStalling / CrawlerLikelyBlocked / CrawlerBlockedAuth rules.
+#
+# Signal design (why these columns):
+#   * A "miss" = a finished job that produced no data (listings_found = 0)
+#     OR failed. A few misses in a row = a STALL. Many dozen consecutive
+#     misses = statistically impossible when healthy → likely an IP BLOCK.
+#   * Failures (status='failed') are strictly worse than empties: an empty
+#     ZIP can be legitimately barren, a failure means the scrape errored.
+#   * auth_fail_15m matches the exact fingerprint of the incident that
+#     started all this (Realtor.com AuthenticationError / 401/403/429).
+#     That is the fastest, highest-confidence block signal.
+# The streak scans are bounded to the 800 most-recent finished jobs
+# (supported by idx_crawl_jobs_finished_at) so cost stays flat as the
+# table grows; crit thresholds sit well under that cap.
+crawler_health:
+  query: |
+    WITH recent AS (
+      SELECT id, status, COALESCE(listings_found, 0) AS found, finished_at
+      FROM crawl_jobs
+      WHERE finished_at IS NOT NULL AND status IN ('completed', 'failed')
+      ORDER BY finished_at DESC, id DESC
+      LIMIT 800
+    ),
+    ord AS (
+      SELECT status, found,
+             ROW_NUMBER() OVER (ORDER BY finished_at DESC, id DESC) AS rn
+      FROM recent
+    )
+    SELECT
+      -- liveness: jobs finishing recently
+      (SELECT count(*) FROM crawl_jobs
+         WHERE finished_at > now() - interval '5 minutes'
+           AND status IN ('completed','failed'))::float          AS finished_5m,
+      (SELECT count(*) FROM crawl_jobs
+         WHERE finished_at > now() - interval '30 minutes'
+           AND status IN ('completed','failed'))::float          AS finished_30m,
+      -- yield: jobs that actually produced data in the last 30m
+      (SELECT count(*) FROM crawl_jobs
+         WHERE finished_at > now() - interval '30 minutes'
+           AND status = 'completed' AND COALESCE(listings_found,0) > 0)::float
+                                                                  AS data_30m,
+      -- consecutive most-recent misses (0-data or failed) before first data hit
+      COALESCE(
+        (SELECT min(rn) FILTER (WHERE status = 'completed' AND found > 0) FROM ord) - 1,
+        (SELECT count(*) FROM ord)
+      )::float                                                    AS miss_streak,
+      -- consecutive most-recent hard failures before first non-failure
+      COALESCE(
+        (SELECT min(rn) FILTER (WHERE status <> 'failed') FROM ord) - 1,
+        (SELECT count(*) FROM ord)
+      )::float                                                    AS fail_streak,
+      -- direct block fingerprint in recent failures
+      (SELECT count(*) FROM crawl_jobs
+         WHERE status = 'failed'
+           AND finished_at > now() - interval '15 minutes'
+           AND COALESCE(error_message, '') ~* '(authenticat|unauthor|forbidden|captcha|blocked|access denied|rate.?limit|too many request|\y(401|403|429)\y)')::float
+                                                                  AS auth_fail_15m,
+      -- seconds since the crawler last produced ANY data
+      COALESCE(
+        EXTRACT(EPOCH FROM (now() - (
+          SELECT max(finished_at) FROM crawl_jobs
+          WHERE status = 'completed' AND COALESCE(listings_found,0) > 0
+        ))),
+        999999
+      )::float                                                    AS secs_since_data,
+      -- breaker-authored block signal: 1 while the worker's circuit breaker is
+      -- in a block cool-off. Authoritative now that blocked jobs are RE-PENDED
+      -- (not 'failed'), which keeps them out of the auth_fail_15m fingerprint.
+      COALESCE(
+        (SELECT CASE WHEN cooloff_until IS NOT NULL AND cooloff_until > now()
+                     THEN 1 ELSE 0 END
+           FROM crawler_block_state WHERE id = 1),
+        0
+      )::float                                                    AS block_cooloff_active
+  master: true
+  metrics:
+    - finished_5m:
+        usage: "GAUGE"
+        description: "Crawl jobs finished (completed|failed) in the last 5 minutes — liveness"
+    - finished_30m:
+        usage: "GAUGE"
+        description: "Crawl jobs finished in the last 30 minutes"
+    - data_30m:
+        usage: "GAUGE"
+        description: "Crawl jobs that produced data (>0 listings) in the last 30 minutes"
+    - miss_streak:
+        usage: "GAUGE"
+        description: "Consecutive most-recent finished jobs with no data or failed (stall/block core signal)"
+    - fail_streak:
+        usage: "GAUGE"
+        description: "Consecutive most-recent finished jobs that hard-failed"
+    - auth_fail_15m:
+        usage: "GAUGE"
+        description: "Failed jobs in last 15m whose error matches an auth/block fingerprint (401/403/429/captcha/blocked)"
+    - secs_since_data:
+        usage: "GAUGE"
+        description: "Seconds since the crawler last produced any data"
+    - block_cooloff_active:
+        usage: "GAUGE"
+        description: "1 while the crawl worker's circuit breaker is in a block cool-off (upstream block detected, crawling paused)"
 

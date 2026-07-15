@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Union, List
 from homeharvest import scrape_property
 import pandas as pd
 import psycopg2
@@ -98,9 +98,41 @@ def batch_geocode(address_list):
 def get_property_type(row):
     return row.get('style') or row.get('property_type') or row.get('home_type') or row.get('prop_type')
 
+# Statuses homeharvest returns for a for-sale-side row (incl. the pending/
+# contingent variants surfaced by the or_filters). These are correctly stored
+# in the `listings` table.
+_FOR_SALE_STATUSES = {
+    'for_sale', 'ready_to_build', 'new_community', 'pending', 'contingent',
+    'active', 'off_market', 'other', 'coming_soon',
+}
+
+
+def route_row_type(row_status, is_combined, req_listing_type):
+    """Decide which table a scraped row belongs to.
+
+    For a combined (list) query, homeharvest tags each row with its own
+    `status`; we route on that. For a single-type request we trust the
+    request so the sold/pending/foreclosure passes behave exactly as before.
+
+    Returns one of: 'for_rent' | 'sold' | 'for_sale'. Unknown/empty statuses
+    fall back to 'for_sale' (the listings table) but the caller should log
+    them so an upstream vocabulary change is visible rather than silent.
+    """
+    if not is_combined:
+        return req_listing_type
+    s = str(row_status or '').strip().lower()
+    if 'rent' in s:            # for_rent, rent, etc.
+        return 'for_rent'
+    if s == 'sold':
+        return 'sold'
+    return 'for_sale'
+
 class ScrapeRequest(BaseModel):
     location: str
-    listing_type: str = "for_sale"
+    # Accepts a single listing type ("for_sale") or a list (["for_sale", "for_rent"]).
+    # A list issues ONE combined homeharvest query (status: [...]) and the results
+    # are demuxed row-by-row into the correct table via each row's `status` field.
+    listing_type: Union[str, List[str]] = "for_sale"
     past_days: int = 30
     radius: Optional[float] = None
     mls_only: bool = False
@@ -112,6 +144,17 @@ class ScrapeRequest(BaseModel):
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     source: str = "homeharvest"
+    # Parallel pagination fires all result pages concurrently (a ThreadPoolExecutor
+    # of ~32). That burst of simultaneous requests from one IP is a primary
+    # Realtor.com bot-detection trigger, so it defaults OFF here: pages are
+    # fetched sequentially, matching the gentle cadence that ran unblocked for
+    # months. Callers can override per-request if a large windowed pull needs it.
+    parallel: bool = False
+    # Per-property detail fetches. NOTE: this is a no-op in the pinned homeharvest
+    # 0.8.18 (the library hard-disables it: `self.extra_property_data = False`),
+    # kept only so a future upgrade doesn't silently re-enable a heavy per-page
+    # detail query. Default OFF to keep request volume minimal.
+    extra_property_data: bool = False
 
 @app.get("/health")
 def health_check():
@@ -133,7 +176,8 @@ def scrape_listings(req: ScrapeRequest):
             radius=req.radius,
             mls_only=req.mls_only,
             foreclosure=req.foreclosure,
-            extra_property_data=True,
+            extra_property_data=req.extra_property_data,
+            parallel=req.parallel,
         )
         if req.date_from:
             scrape_kwargs["date_from"] = req.date_from
@@ -141,10 +185,12 @@ def scrape_listings(req: ScrapeRequest):
             scrape_kwargs["date_to"] = req.date_to
         df = scrape_property(**scrape_kwargs)
         
-        is_rental = req.listing_type == 'for_rent'
-        is_sold = req.listing_type == 'sold'
-        target_table = 'rental_listings' if is_rental else 'sold_listings' if is_sold else 'listings'
-        print(f"Target table: {target_table}")
+        # A list listing_type means one combined query returned mixed statuses;
+        # route each row by its own `status`. A single string keeps the legacy
+        # request-level routing so the sold/pending/foreclosure passes are
+        # unchanged.
+        is_combined = isinstance(req.listing_type, list)
+        print(f"Combined demux: {is_combined}")
         
         if df is None or (hasattr(df, "empty") and df.empty):
             print(f"No results for {req.location}")
@@ -211,6 +257,15 @@ def scrape_listings(req: ScrapeRequest):
 
         try:
             for i, row in enumerate(clean_records):
+                # Per-row routing. For a combined call we trust each row's own
+                # `status`; otherwise the request-level listing_type drives it.
+                row_status = str(row.get('status') or '').strip().lower()
+                if is_combined and row_status and row_status not in _FOR_SALE_STATUSES and 'rent' not in row_status and row_status != 'sold':
+                    print(f"WARN: unexpected combined-row status '{row_status}' -> routing to listings (for_sale)")
+                row_type = route_row_type(row_status, is_combined, req.listing_type)
+                is_rental = row_type == 'for_rent'
+                is_sold = row_type == 'sold'
+
                 zip_raw = row.get('zip_code')
                 zip_code = str(zip_raw).split('.')[0].zfill(5) if zip_raw else ""
                 address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
@@ -417,7 +472,7 @@ def scrape_listings(req: ScrapeRequest):
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,
                         bedrooms, bathrooms, sqft, year_built, get_property_type(row),
-                        req.listing_type, Json(images), Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
+                        row_type, Json(images), Json(raw_data), raw_data.get("lat"), raw_data.get("lon"),
                         DEFAULT_USER_ID,
                         req.foreclosure, req.foreclosure, req.foreclosure, req.foreclosure,
                         row.get('city'), row.get('state'),
