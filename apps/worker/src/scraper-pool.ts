@@ -51,3 +51,27 @@ export class ScraperEndpoint {
     // 'error' leaves the rate untouched (transient scraper/network issue).
   }
 }
+
+export class ScraperPool {
+  readonly endpoints: ScraperEndpoint[];
+  private now: () => number;
+
+  constructor(urls: string[], cfg: AimdConfig, now: () => number = Date.now) {
+    if (urls.length === 0) throw new Error('ScraperPool needs at least one URL');
+    this.now = now;
+    this.endpoints = urls.map((u) => new ScraperEndpoint(u, cfg, now));
+  }
+
+  acquire(atMs = this.now()): ScraperEndpoint | null {
+    let best: ScraperEndpoint | null = null;
+    for (const e of this.endpoints) {
+      if (e.available(atMs) && (best === null || e.readyAt() < best.readyAt())) best = e;
+    }
+    if (best) best.reserve(atMs);
+    return best;
+  }
+
+  nextReadyAt(): number {
+    return Math.min(...this.endpoints.map((e) => e.readyAt()));
+  }
+}

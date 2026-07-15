@@ -49,3 +49,29 @@ describe('ScraperEndpoint AIMD', () => {
     expect(e.readyAt() - first).toBeGreaterThan(30 * 60_000); // escalated
   });
 });
+
+import { ScraperPool } from './scraper-pool';
+
+describe('ScraperPool', () => {
+  it('acquire returns an available endpoint and reserves it', () => {
+    const p = new ScraperPool(['http://a', 'http://b'], CFG, () => 1000);
+    const e = p.acquire(1000)!;
+    expect(e).not.toBeNull();
+    expect(e.available(1000)).toBe(false); // reserved
+    // second acquire gets the OTHER endpoint (a is reserved)
+    const e2 = p.acquire(1000)!;
+    expect(e2.url).not.toBe(e.url);
+  });
+  it('returns null when every endpoint is reserved/cooling', () => {
+    const p = new ScraperPool(['http://a'], CFG, () => 1000);
+    p.acquire(1000);
+    expect(p.acquire(1000)).toBeNull();
+    expect(p.nextReadyAt()).toBe(31_000);
+  });
+  it('a blocked endpoint is skipped; a healthy one still serves', () => {
+    const p = new ScraperPool(['http://a', 'http://b'], CFG, () => 1000);
+    p.endpoints[0].settle('blocked', 1000);      // a cools off
+    const e = p.acquire(1000)!;
+    expect(e.url).toBe('http://b');               // b still available
+  });
+});
