@@ -51,8 +51,11 @@ const scraperPool = new ScraperPool(env.SCRAPER_URLS, env.aimd);
 // moment — the exact multi-IP burst pattern that trips bot heuristics.
 // Seeding each endpoint's reserve() with an i/N-fraction offset spreads the
 // fleet's start phases across one interval so they desynchronize from boot.
-// endpoint 0 gets a 0ms offset (fires on the normal schedule); a pool of 1
-// is a no-op division (offset 0), so the guard below is just clarity.
+// This stagger is an ADDED offset on top of the normal first-fire schedule:
+// every endpoint first fires at now + startIntervalMs + i*startIntervalMs/N,
+// so endpoint 0 does NOT fire immediately at boot; it fires after the normal
+// startIntervalMs. A pool of 1 is a no-op division (offset 0), so the guard
+// below is just clarity.
 if (scraperPool.endpoints.length > 1) {
   const n = scraperPool.endpoints.length;
   scraperPool.endpoints.forEach((endpoint, i) => {

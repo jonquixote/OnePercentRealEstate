@@ -375,8 +375,10 @@ smoke test (Node provisioning, step 2) and is registered in `SCRAPER_URLS`
    but note `SCRAPER_MIN_INTERVAL_MS` is currently a single fleet-wide value
    read once by the driver (`apps/worker/src/env.ts`), not per-endpoint. Until
    a per-endpoint floor override exists, the practical lever is to give the
-   repeatedly-blocked IP a longer rest via the kill-switch below (pull it from
-   `SCRAPER_URLS` for a cool-down period) rather than degrading the whole
+   repeatedly-blocked IP a longer rest via the kill-switch below: remove its
+   URL from `SCRAPER_URLS` on **main** and `systemctl restart oper-worker`
+   (a driver restart), then restore it after the cool-down period. This is
+   heavier than just watching a counter, but it avoids degrading the whole
    fleet's floor to accommodate one weak IP.
 
 ### Boot-phase stagger
@@ -436,7 +438,10 @@ in `crawl-errors.ts`), which `runnerLoop` maps to the `'error'` outcome —
 `ScraperEndpoint.settle('error', ...)` deliberately leaves `intervalMs`
 untouched (see the comment in `scraper-pool.ts`: "'error' leaves the rate
 untouched"). So the stopped node's AIMD state is preserved (no rate decay),
-its `error` counter climbs in the metrics log, and it stops drawing new jobs
-after its current in-flight one finishes — without a driver restart and
-without disturbing the other endpoints' pacing. Restart `oper-scraper` on
-the node when it's ready to rejoin; no driver-side action is needed.
+its `error` counter climbs in the metrics log, the endpoint keeps being
+selected and re-attempted every ~5s (`SCRAPER_DOWN_BACKOFF_MS`), each attempt
+failing fast and re-pending its job — no jobs are lost and the other endpoints
+are unaffected, but this endpoint does not go idle until `oper-scraper` is
+started again (or its URL is removed from `SCRAPER_URLS` +
+`systemctl restart oper-worker`). Restart `oper-scraper` on the node when
+it's ready to rejoin; no driver-side action is needed.
