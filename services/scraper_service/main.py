@@ -127,6 +127,19 @@ def route_row_type(row_status, is_combined, req_listing_type):
         return 'sold'
     return 'for_sale'
 
+
+# Substrings Realtor.com / homeharvest surface when our IP is throttled or
+# challenged. A block is an EXCEPTION carrying one of these, OR a suspicious
+# empty-but-slow response. A fast empty response is a genuinely empty ZIP.
+_BLOCK_MARKERS = ("403", "429", "forbidden", "captcha", "access to this page has been denied",
+                  "too many requests", "unusual traffic", "blocked")
+
+def classify_block(exc, row_count: int, elapsed_s: float) -> bool:
+    if exc is not None:
+        msg = str(exc).lower()
+        return any(m in msg for m in _BLOCK_MARKERS)
+    return False
+
 class ScrapeRequest(BaseModel):
     location: str
     # Accepts a single listing type ("for_sale") or a list (["for_sale", "for_rent"]).
@@ -183,8 +196,22 @@ def scrape_listings(req: ScrapeRequest):
             scrape_kwargs["date_from"] = req.date_from
         if req.date_to:
             scrape_kwargs["date_to"] = req.date_to
-        df = scrape_property(**scrape_kwargs)
-        
+        import time as _time
+        _t0 = _time.time()
+        _exc = None
+        try:
+            df = scrape_property(**scrape_kwargs)
+        except Exception as e:  # homeharvest raises on 403/429/challenge
+            _exc = e
+            df = None
+        _blocked = classify_block(_exc, 0 if df is None else len(df), _time.time() - _t0)
+        if _blocked:
+            # Signal the driver to cool this IP down. 429 is the contract.
+            raise HTTPException(status_code=429, detail={"blocked": True, "count": 0, "inserted": 0, "skipped": 0})
+        if df is None:
+            # A non-block error: surface as 502 so the driver logs but does not cool off.
+            raise HTTPException(status_code=502, detail=f"scrape error: {str(_exc)[:200]}")
+
         # A list listing_type means one combined query returned mixed statuses;
         # route each row by its own `status`. A single string keeps the legacy
         # request-level routing so the sold/pending/foreclosure passes are
@@ -194,7 +221,7 @@ def scrape_listings(req: ScrapeRequest):
         
         if df is None or (hasattr(df, "empty") and df.empty):
             print(f"No results for {req.location}")
-            return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0}
+            return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0, "blocked": False}
 
         print(f"df shape: {df.shape}")
 
@@ -229,7 +256,7 @@ def scrape_listings(req: ScrapeRequest):
             clean_records.append(clean_rec)
 
         if not clean_records:
-            return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0}
+            return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0, "blocked": False}
 
         # Phase 1: Collect all addresses for batch geocoding
         address_list = []
@@ -509,7 +536,7 @@ def scrape_listings(req: ScrapeRequest):
             conn.close()
 
         print(f"Completed {req.location}: {inserted} inserted, {updated} updated, {skipped} skipped")
-        return {"count": len(clean_records), "inserted": inserted, "updated": updated, "skipped": skipped}
+        return {"count": len(clean_records), "inserted": inserted, "updated": updated, "skipped": skipped, "blocked": False}
 
     except HTTPException:
         raise

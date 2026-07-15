@@ -215,6 +215,18 @@ crawler_health:
       -- breaker-authored block signal: 1 while the worker's circuit breaker is
       -- in a block cool-off. Authoritative now that blocked jobs are RE-PENDED
       -- (not 'failed'), which keeps them out of the auth_fail_15m fingerprint.
+      --
+      -- 2026-07-15 semantics change: the crawler moved from one global
+      -- DB-persisted breaker to a per-endpoint ScraperPool (AIMD), one
+      -- breaker per scraper IP, isolated from each other. crawler_block_state
+      -- is now a best-effort FLEET-WIDE aggregate the worker upserts once per
+      -- metrics tick (crawl.ts): this flag is 1 only when ALL scraper
+      -- endpoints are simultaneously in cool-off. A single-IP cool-off is
+      -- normal AIMD calibration and no longer sets this flag / pages anyone —
+      -- per-endpoint blocked counts and intervals live in the worker's
+      -- structured "scraper endpoint metrics" log lines, and
+      -- consecutive_blocks on this row carries the count of endpoints
+      -- currently cooling (not a monotonic block counter anymore).
       COALESCE(
         (SELECT CASE WHEN cooloff_until IS NOT NULL AND cooloff_until > now()
                      THEN 1 ELSE 0 END

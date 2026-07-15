@@ -217,6 +217,13 @@ groups:
       # cool-off in crawler_block_state → block_cooloff_active = 1 here. This is
       # now the primary "crawler is blocked" page; the auth_fail rules remain as
       # a backstop for blocks that slip through as hard failures.
+      #
+      # 2026-07-15 semantics change: per-endpoint breakers replaced the single
+      # global one (ScraperPool, one AIMD breaker per scraper IP). This alert
+      # now fires only on a FLEET-WIDE block — ALL scraper endpoints
+      # simultaneously in cool-off, upserted by the worker's metrics tick. A
+      # single-IP cool-off is normal AIMD calibration and does NOT page;
+      # per-endpoint cool-off state lives in the worker's metrics log lines.
       - alert: CrawlerBlockCooloff
         expr: crawler_health_block_cooloff_active == 1
         for: 1m

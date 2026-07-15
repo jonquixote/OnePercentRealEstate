@@ -1,0 +1,80 @@
+# ops/scraper-node/cloud-init.yaml
+#
+# Stands up a new Realtor.com scraper node on the private mesh
+# (10.8.0.0/22, interface eth1) and registers it as a systemd-managed
+# oper-scraper instance, ready to be added to the driver's SCRAPER_URLS.
+#
+# Fill the ${...} placeholders at provision time (cloud-init supports
+# #cloud-config user-data variable substitution via your provider's
+# templating, or hand-edit a copy of this file per node before boot).
+# No secrets are committed here — ${SCRAPER_DB_PASSWORD} must be supplied
+# out-of-band (see ops/scraper-node/README.md, "Central DB access", step 1
+# for how the password was generated).
+#
+# Same provider/region as the existing side box (10.8.3.41) is required so
+# the new node lands on the same private mesh and gets an eth1 address in
+# 10.8.0.0/22 automatically at boot.
+#cloud-config
+package_update: true
+packages: [git, python3-venv, python3-pip, build-essential, libpq-dev, nftables]
+
+write_files:
+  - path: /etc/oper.env
+    permissions: '0600'
+    content: |
+      DATABASE_URL=postgresql://oper_scraper:${SCRAPER_DB_PASSWORD}@10.8.2.241:5432/postgres
+      SCRAPE_TIMEOUT_MS=240000
+
+runcmd:
+  # Clone the app repo and build the venv the scraper unit expects
+  # (matches the layout of the working side box: services/ml/.venv is
+  # shared across the scraper + ML services on that host).
+  - git clone https://github.com/jonquixote/OnePercentRealEstate /opt/onepercent
+  # Pin to the reviewed commit/tag being deployed — never leave a node
+  # tracking bare `main` (see README, "Node provisioning" for how to set
+  # DEPLOY_REF at provision time).
+  - git -C /opt/onepercent checkout ${DEPLOY_REF}
+  - python3 -m venv /opt/onepercent/services/ml/.venv
+  - /opt/onepercent/services/ml/.venv/bin/pip install -r /opt/onepercent/services/scraper_service/requirements.txt
+
+  # Install the real oper-scraper.service unit verbatim (same file as the
+  # working side box: ops/systemd/oper-scraper.service), then patch only
+  # the bind address/port for this node. The committed unit binds
+  # 127.0.0.1:8001 (its safe default for local-only use); the fleet
+  # convention for a scraper endpoint reachable over the mesh is the
+  # node's private eth1 IP on port 80 (matches the existing side box,
+  # reachable today as http://10.8.3.41 with no port suffix). PRIV_IP is
+  # derived from eth1 and used immediately in the same shell invocation —
+  # runcmd entries each spawn a separate subprocess, so a variable set in
+  # one list item would not survive into the next.
+  - |
+    PRIV_IP=$(ip -4 -o addr show eth1 | awk '{print $4}' | cut -d/ -f1)
+    install -m644 /opt/onepercent/ops/systemd/oper-scraper.service /etc/systemd/system/oper-scraper.service
+    sed -i "s#--host [0-9.]*#--host ${PRIV_IP}#" /etc/systemd/system/oper-scraper.service
+    sed -i "s#--port [0-9]*#--port 80#" /etc/systemd/system/oper-scraper.service
+    systemctl daemon-reload && systemctl enable --now oper-scraper.service
+
+  # Restrict the mesh port to the crawl driver only. The scraper unit binds
+  # 0.0.0.0-equivalent on its eth1 mesh IP:80 (see above) — without a
+  # firewall, any host that can route to 10.8.0.0/22 could hit /scrape.
+  # oper-worker on main (10.8.2.241) is the only legitimate client.
+  - |
+    cat >/etc/nftables.conf <<'NFT'
+    #!/usr/sbin/nft -f
+    flush ruleset
+    table inet scraper {
+      chain input {
+        type filter hook input priority 0; policy accept;
+        # Only the crawl driver (main, mesh 10.8.2.241) may reach the scraper port.
+        iifname "eth1" tcp dport 80 ip saddr 10.8.2.241 accept
+        iifname "eth1" tcp dport 80 drop
+      }
+    }
+    NFT
+  - systemctl enable --now nftables
+  - nft -f /etc/nftables.conf
+
+  # Don't leave the DB password sitting on disk in user-data once the node
+  # is up. Fallback for when out-of-band /etc/oper.env delivery (README,
+  # "Node provisioning") isn't used and the password was embedded here.
+  - sh -c 'shred -u /var/lib/cloud/instances/*/user-data.txt 2>/dev/null || rm -f /var/lib/cloud/instances/*/user-data.txt'
