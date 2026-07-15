@@ -18,10 +18,14 @@ export interface WorkerEnv {
   readonly CLUSTER_REFRESH_INTERVAL_MS: number;
   readonly LOG_LEVEL: string;
   readonly SCRAPE_TIMEOUT_MS: number;
-  // Crawler politeness / anti-block pacing
-  readonly CRAWL_JOB_MIN_INTERVAL_MS: number;
+  // Crawler politeness / anti-block pacing. CRAWL_JOB_MIN_INTERVAL_MS and
+  // CRAWL_BLOCK_COOLOFF_MS are read only inside `aimd` below (as
+  // startIntervalMs/cooloffMs) since the per-endpoint ScraperPool took over
+  // pacing/breaking from crawl.ts's old module-globals — no standalone field
+  // needed for them. CRAWL_PASS_JITTER_MS is still read directly by
+  // crawl.ts's passGap() (inter-pass spacing within one ZIP, unrelated to
+  // per-endpoint pacing), so it keeps its own field.
   readonly CRAWL_PASS_JITTER_MS: number;
-  readonly CRAWL_BLOCK_COOLOFF_MS: number;
   // Wave 3 — rent estimator service
   readonly ML_URL: string;
   readonly RENT_TIMEOUT_MS: number;
@@ -110,14 +114,11 @@ export function loadEnv(): WorkerEnv {
     // reaperLoop() re-pends anything stuck in 'processing' past ~1.5× the
     // worst-case job budget. (Prod sets SCRAPE_TIMEOUT_MS=240000.)
     SCRAPE_TIMEOUT_MS: readInt('SCRAPE_TIMEOUT_MS', 10 * 60 * 1000),
-    // Anti-block pacing. Minimum wall-clock gap between job STARTS across all
-    // runners (~30s ≈ old n8n schedule tick); randomized gap between the passes
-    // of one ZIP; and the initial cool-off when Realtor.com blocks our IP
-    // (doubles per consecutive block up to a 4h cap, in crawl.ts). Interval and
-    // jitter accept 0 to disable.
-    CRAWL_JOB_MIN_INTERVAL_MS: readIntMin0('CRAWL_JOB_MIN_INTERVAL_MS', 30 * 1000),
+    // Anti-block pacing: randomized gap between the passes of one ZIP so its
+    // five requests don't arrive at an endpoint as a tight burst. Accepts 0 to
+    // disable. (The old per-endpoint start-interval and block-cooloff knobs
+    // are read above, inside `aimd`.)
     CRAWL_PASS_JITTER_MS: readIntMin0('CRAWL_PASS_JITTER_MS', 1_500),
-    CRAWL_BLOCK_COOLOFF_MS: readInt('CRAWL_BLOCK_COOLOFF_MS', 30 * 60 * 1000),
     // Wave 3
     ML_URL: readString('ML_URL', 'http://ml:8000'),
     REDIS_URL: readString('REDIS_URL', ''),

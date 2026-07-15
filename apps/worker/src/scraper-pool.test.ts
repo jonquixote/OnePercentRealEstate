@@ -48,6 +48,21 @@ describe('ScraperEndpoint AIMD', () => {
     e.settle('blocked', first);       // second block after the first window
     expect(e.readyAt() - first).toBeGreaterThan(30 * 60_000); // escalated
   });
+  it('cooloffUntil reflects the block cool-off deadline', () => {
+    const e = new ScraperEndpoint('http://a', CFG, () => 0);
+    expect(e.cooloffUntil).toBe(0); // fresh endpoint, never blocked
+    e.settle('blocked', 1000);
+    expect(e.cooloffUntil).toBe(1000 + 30 * 60_000);
+  });
+  it("settle('error') counts the outcome but leaves rate and readiness untouched", () => {
+    const e = new ScraperEndpoint('http://a', CFG, () => 1000);
+    const intervalBefore = e.intervalMs;
+    const readyAtBefore = e.readyAt();
+    e.settle('error', 1000);
+    expect(e.stats.error).toBe(1);
+    expect(e.intervalMs).toBe(intervalBefore); // transient issue must not change the IP's rate
+    expect(e.readyAt()).toBe(readyAtBefore);
+  });
 });
 
 import { ScraperPool } from './scraper-pool';

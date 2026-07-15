@@ -576,17 +576,51 @@ async function reaperLoop(parentLog: WorkerLogger): Promise<void> {
 // keeps the process alive on its own, and explicitly cleared on shutdown for
 // belt-and-suspenders (matches this file's habit of never leaving a timer
 // dangling — see reaperLoop/runnerLoop's shuttingDown checks).
+//
+// This tick is also the ONLY writer of crawler_block_state now. The old
+// single global breaker's enterBlockCooloff()/resetBlockCooloff() wrote that
+// table directly on every block/recovery; the per-endpoint ScraperPool
+// replaced them (see 2026-07-15 "drive crawl through the scraper pool"), which
+// silently orphaned it — but prod monitoring's CrawlerBlockCooloff alert
+// (infrastructure/monitoring/prometheus/rules/alerts.yml) still reads
+// crawler_block_state.cooloff_until as the primary "crawler is blocked" page.
+// Best-effort upsert of the FLEET-WIDE aggregate (all endpoints cooling)
+// keeps that signal alive under per-endpoint semantics; see the comments on
+// block_cooloff_active in queries.yml and CrawlerBlockCooloff in alerts.yml.
 // ---------------------------------------------------------------------------
 
 const METRICS_INTERVAL_MS = 60_000;
 
 let metricsTimer: NodeJS.Timeout | null = null;
 
+async function updateBlockState(parentLog: WorkerLogger): Promise<void> {
+  const nowMs = Date.now();
+  const cooling = scraperPool.endpoints.filter((e) => e.cooloffUntil > nowMs);
+  const fleetBlocked = cooling.length === scraperPool.endpoints.length;
+  // Fleet-wide block = every endpoint cooling. cooloff_until = when the SOONEST
+  // endpoint becomes available again; consecutive_blocks now carries the count
+  // of endpoints currently cooling (per-endpoint breaker era).
+  try {
+    await pool.query(
+      `UPDATE crawler_block_state
+          SET cooloff_until = $1, blocked_at = CASE WHEN $1 IS NULL THEN NULL ELSE COALESCE(blocked_at, now()) END,
+              consecutive_blocks = $2, updated_at = now()
+        WHERE id = 1`,
+      [fleetBlocked ? new Date(Math.min(...cooling.map((e) => e.cooloffUntil))) : null, cooling.length],
+    );
+  } catch (err) {
+    // Never let a DB hiccup kill the metrics tick — this is a best-effort
+    // monitoring signal, not load-bearing for crawling itself.
+    parentLog.warn({ err: (err as Error).message }, 'failed to update crawler_block_state');
+  }
+}
+
 function startMetricsLoop(parentLog: WorkerLogger): void {
   metricsTimer = setInterval(() => {
     for (const m of formatEndpointMetrics(scraperPool, Date.now())) {
       parentLog.info(m, 'scraper endpoint metrics');
     }
+    void updateBlockState(parentLog);
   }, METRICS_INTERVAL_MS);
   metricsTimer.unref();
 }
@@ -633,6 +667,7 @@ async function main(): Promise<void> {
     {
       concurrency,
       scraper_endpoints: scraperPool.endpoints.length,
+      scraper_urls: env.SCRAPER_URLS,
       scraper_start_interval_ms: env.aimd.startIntervalMs,
       block_cooloff_ms: env.aimd.cooloffMs,
     },

@@ -18,17 +18,27 @@ export class ScraperEndpoint {
   intervalMs: number;
   stats = { ok: 0, blocked: 0, error: 0 };
   private cfg: AimdConfig;
-  private now: () => number;
   private nextStart = 0;   // epoch ms; earliest this endpoint may start a job
   private blockedUntil = 0;
   private cooloff = 0;     // current escalating cool-off
 
+  // `now` is accepted for constructor signature compatibility with
+  // ScraperPool (and test call sites that pass a fake clock) but isn't
+  // stored — every method that needs "now" takes it as an explicit `atMs`
+  // parameter instead.
   constructor(url: string, cfg: AimdConfig, now: () => number = Date.now) {
     this.url = url;
     this.cfg = cfg;
-    this.now = now;
+    void now;
     this.intervalMs = cfg.startIntervalMs;
   }
+
+  // Epoch ms at which this endpoint's current block cool-off ends; 0 if not
+  // cooling. Exposed read-only for the aggregate crawler_block_state upsert
+  // in crawl.ts (see Fix 1 in the horizontal-scaling final-review wave) — the
+  // per-endpoint breaker replaced the old single global one, but prod
+  // monitoring's CrawlerBlockCooloff alert still needs a fleet-wide signal.
+  get cooloffUntil(): number { return this.blockedUntil; }
 
   readyAt(): number { return Math.max(this.nextStart, this.blockedUntil); }
 

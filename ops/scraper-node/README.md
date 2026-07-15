@@ -394,6 +394,12 @@ fleet's start phases are spread across one interval from the first tick
 onward instead of synchronized. This only runs when there's more than one
 endpoint; a single-IP pool is unaffected.
 
+Note this only staggers phases *within* one `startIntervalMs` window — after a
+worker restart mid-cool-off, all N endpoints still probe within that ONE
+window (~30s), i.e. up to N staggered probes in 30s against a possibly
+still-blocked upstream. That's acceptable (each is one paced request, not a
+burst), but worth knowing when reading logs right after a restart.
+
 ## Kill-switch
 
 Three levels, from narrowest to broadest blast radius:
