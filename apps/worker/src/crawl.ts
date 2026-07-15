@@ -31,9 +31,18 @@ import { Client, Pool, type Notification } from 'pg';
 import { loadEnv } from './env.js';
 import { isBlockError, isTransientScraperError } from './crawl-errors.js';
 import { getLogger, newTraceId, withTrace, type WorkerLogger } from './logger.js';
+import { ScraperPool, type Outcome } from './scraper-pool.js';
 
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
+
+// Per-IP pacing + circuit breaker. Replaces the old single global gate
+// (nextJobEarliestStart) and single global breaker (blockedUntil) — each
+// scraper endpoint now paces and cools off independently. With SCRAPER_URLS
+// unset this falls back to a single endpoint (env.SCRAPER_URL), matching
+// today's single-IP behavior. Named scraperPool to avoid colliding with the
+// pg Pool below (named `pool`).
+const scraperPool = new ScraperPool(env.SCRAPER_URLS, env.aimd);
 
 interface CrawlJob {
   readonly id: string; // BIGSERIAL — keep as string to avoid JS bigint friction
@@ -119,7 +128,7 @@ interface JobResult {
   readonly hadPartialBlock?: boolean; // an 'ok' job that had a block among its passes
 }
 
-async function processClaimedJob(job: CrawlJob, parentLog: WorkerLogger): Promise<JobResult> {
+async function processClaimedJob(job: CrawlJob, scraperUrl: string, parentLog: WorkerLogger): Promise<JobResult> {
   const traceId = newTraceId();
   const log = withTrace(parentLog, traceId, { job_id: job.id });
   const start = Date.now();
@@ -147,22 +156,22 @@ async function processClaimedJob(job: CrawlJob, parentLog: WorkerLogger): Promis
     //
     // A short randomized gap (passGap) is inserted between passes so the five
     // requests for a ZIP don't arrive as one tight burst.
-    const saleResult = await runPass('for_sale', scrape(job, 'for_sale', log, { pastDays: 30 }));
+    const saleResult = await runPass('for_sale', scrape(job, 'for_sale', scraperUrl, log, { pastDays: 30 }));
     await passGap();
-    const rentResult = await runPass('for_rent', scrape(job, 'for_rent', log, { pastDays: 30 }));
+    const rentResult = await runPass('for_rent', scrape(job, 'for_rent', scraperUrl, log, { pastDays: 30 }));
     await passGap();
     // Distressed inventory via homeharvest's foreclosure filter. The scraper
     // tags these rows sale_type='foreclosure' (source homeharvest_flag) unless
     // its text classifier finds something more specific. foreclosure is a
     // query-wide boolean, so it stays its own windowed pass.
-    const foreclosureResult = await runPass('foreclosure', scrape(job, 'for_sale', log, { foreclosure: true, pastDays: 30 }));
+    const foreclosureResult = await runPass('foreclosure', scrape(job, 'for_sale', scraperUrl, log, { foreclosure: true, pastDays: 30 }));
     await passGap();
     // Recently sold listings (14-day lookback overlaps the ZIP recycle cycle).
-    const soldResult = await runPass('sold', scrape(job, 'sold', log, { pastDays: 14 }));
+    const soldResult = await runPass('sold', scrape(job, 'sold', scraperUrl, log, { pastDays: 14 }));
     await passGap();
     // Pending listings (leading inventory signal). Kept separate because its
     // contingent/pending or_filters are disabled when mixed with other statuses.
-    const pendingResult = await runPass('pending', scrape(job, 'pending', log, { pastDays: 14 }));
+    const pendingResult = await runPass('pending', scrape(job, 'pending', scraperUrl, log, { pastDays: 14 }));
     // NOTE: PadMapper/Zumper rental source is DISABLED — only homeharvest is
     // active until non-homeharvest scrapers are proven in their own sandbox.
 
@@ -227,8 +236,9 @@ async function processClaimedJob(job: CrawlJob, parentLog: WorkerLogger): Promis
       'crawl job completed',
     );
     // A creeping/partial block (some passes blocked, others succeeded) must NOT
-    // clear the breaker's escalation — we still got data so we don't pause, but
-    // the runner will skip resetBlockCooloff so accumulated backoff survives.
+    // reset this endpoint's AIMD backoff — we still got data so the job
+    // outcome is 'ok', but runnerLoop maps hadPartialBlock to a 'blocked'
+    // settle() so the endpoint's cool-off/backoff still escalates.
     const hadPartialBlock = passErrors.some((e) => isBlockError(e));
     return { outcome: 'ok', hadPartialBlock };
   } catch (err) {
@@ -268,10 +278,11 @@ interface ScrapeResult {
 async function scrape(
   job: CrawlJob,
   listingType: string | string[],
+  scraperUrl: string,
   log: WorkerLogger,
   opts?: { foreclosure?: boolean; pastDays?: number; dateFrom?: string; dateTo?: string; source?: string },
 ): Promise<ScrapeResult> {
-  const url = `${env.SCRAPER_URL.replace(/\/$/, '')}/scrape`;
+  const url = `${scraperUrl.replace(/\/$/, '')}/scrape`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), env.SCRAPE_TIMEOUT_MS);
   try {
@@ -331,32 +342,16 @@ const SCRAPER_DOWN_BACKOFF_MS = 5_000; // pause a runner after a scraper-unreach
 // Politeness pacing. The old n8n workflow survived for months because it hit
 // Realtor.com gently: one ZIP per ~30s schedule tick, serialized, windowed.
 // The continuous drain loop removed all pacing, which (with full-inventory
-// combined passes) tripped Realtor's per-IP bot heuristics in hours. We
-// restore two things:
-//   1. A GLOBAL minimum interval between job STARTS (across all runners), with
-//      jitter, so ZIPs are spaced out like the old schedule tick.
-//   2. A short randomized gap BETWEEN the passes of one ZIP, so its five
-//      requests don't arrive as a single tight burst.
+// combined passes) tripped Realtor's per-IP bot heuristics in hours. Per-IP
+// pacing (minimum interval between job starts on a given scraper endpoint,
+// with jitter, AIMD-adjusted) now lives in ScraperEndpoint/ScraperPool
+// (./scraper-pool.ts) — see scraperPool.acquire() in runnerLoop. What's left
+// here is the short randomized gap BETWEEN the passes of one ZIP, so its five
+// requests don't arrive at the (single, per-job) endpoint as a tight burst.
 // ---------------------------------------------------------------------------
-
-let nextJobEarliestStart = 0; // epoch ms; global gate shared by all runners
 
 function jitter(maxMs: number): number {
   return Math.floor(Math.random() * Math.max(0, maxMs));
-}
-
-// Block a runner until the global pacing gate opens, then reserve the next
-// slot. Serializes naturally at WORKER_CONCURRENCY=1; with >1 runner it still
-// spaces job starts because the gate is shared module state.
-async function paceJobStart(): Promise<void> {
-  while (!shuttingDown) {
-    const now = Date.now();
-    if (now >= nextJobEarliestStart) {
-      nextJobEarliestStart = now + env.CRAWL_JOB_MIN_INTERVAL_MS + jitter(env.CRAWL_JOB_MIN_INTERVAL_MS >> 2);
-      return;
-    }
-    await sleep(Math.min(nextJobEarliestStart - now, 1_000));
-  }
 }
 
 // Randomized pause between the passes of a single ZIP.
@@ -364,103 +359,11 @@ function passGap(): Promise<void> {
   return sleep(jitter(env.CRAWL_PASS_JITTER_MS));
 }
 
-// ---------------------------------------------------------------------------
-// Block circuit breaker. When Realtor.com blocks our IP, continuing to send
-// requests only extends the ban. On a blocked outcome we pause ALL claiming
-// for a cool-off (exponential backoff up to a cap), then let a single job act
-// as a probe: if it succeeds we reset, if it blocks again the cool-off grows.
-// This lets us "apply fixes and wait out the block" safely and resume
-// automatically when the IP frees up.
-// ---------------------------------------------------------------------------
-
-const BLOCK_COOLOFF_MAX_MS = 4 * 60 * 60 * 1000; // 4h cap
-let blockedUntil = 0; // epoch ms; runners refuse to claim before this
-let currentCooloffMs = 0; // set from env at boot
-// Monotonic counter, bumped every time a NEW block cool-off is entered. A
-// runner captures it before processing a job and only clears the cool-off on
-// success if it hasn't changed — so a clean job from one runner can't wipe a
-// cool-off that a concurrent runner entered while it was mid-flight. (With the
-// prod default WORKER_CONCURRENCY=1 there's no race, but the breaker stays
-// correct if concurrency is ever raised.)
-let blockEpoch = 0;
-
-function enterBlockCooloff(parentLog: WorkerLogger, blockError: string): void {
-  // Dedupe: with WORKER_CONCURRENCY>1 several in-flight jobs fail at once when
-  // the IP is blocked and each returns 'blocked'. Treat any block that lands
-  // while we're already paused as the SAME event, so a single block can't
-  // double-extend blockedUntil or over-escalate the backoff. (Also absorbs the
-  // post-cool-off probe storm.)
-  if (Date.now() < blockedUntil) return;
-  blockEpoch += 1;
-  if (currentCooloffMs === 0) currentCooloffMs = env.CRAWL_BLOCK_COOLOFF_MS;
-  blockedUntil = Date.now() + currentCooloffMs;
-  parentLog.error(
-    { cooloff_ms: currentCooloffMs, resume_at: new Date(blockedUntil).toISOString() },
-    'upstream block detected; crawling paused for cool-off',
-  );
-  // Persist the block state so the postgres-exporter crawler_health query (and
-  // the CrawlerBlockCooloff alert) can see we're blocked even though blocked
-  // jobs are re-pended rather than left as 'failed'. Fire-and-forget: the
-  // breaker's timing must not depend on the DB write succeeding.
-  void pool
-    .query(
-      `UPDATE crawler_block_state
-          SET blocked_at = now(),
-              cooloff_until = $1,
-              consecutive_blocks = consecutive_blocks + 1,
-              last_error = $2,
-              updated_at = now()
-        WHERE id = 1`,
-      [new Date(blockedUntil).toISOString(), blockError.slice(0, 500) || null],
-    )
-    .catch((err) => parentLog.warn({ err: (err as Error).message }, 'failed to record block state'));
-  currentCooloffMs = Math.min(currentCooloffMs * 2, BLOCK_COOLOFF_MAX_MS);
-}
-
-function resetBlockCooloff(parentLog: WorkerLogger): void {
-  const wasBlocked = blockedUntil !== 0;
-  blockedUntil = 0;
-  currentCooloffMs = env.CRAWL_BLOCK_COOLOFF_MS;
-  if (wasBlocked) {
-    parentLog.info('probe succeeded after block; cool-off cleared, resuming normal pace');
-    void pool
-      .query(
-        `UPDATE crawler_block_state
-            SET blocked_at = NULL, cooloff_until = NULL, consecutive_blocks = 0,
-                last_error = NULL, updated_at = now()
-          WHERE id = 1`,
-      )
-      .catch((err) => parentLog.warn({ err: (err as Error).message }, 'failed to clear block state'));
-  }
-}
-
-// Rehydrate the breaker from the DB at boot. The cool-off lives in module
-// memory, so without this a crash/OOM/redeploy DURING a cool-off would resume
-// crawling immediately into a still-blocked IP — re-blocking and re-escalating,
-// the exact thing the breaker exists to prevent. consecutive_blocks lets us
-// restore the escalated backoff too (matches the in-memory value after N
-// blocks: base * 2^N, capped).
-async function restoreBlockState(parentLog: WorkerLogger): Promise<void> {
-  try {
-    const res = await pool.query<{ cooloff_until: Date | null; consecutive_blocks: number }>(
-      `SELECT cooloff_until, consecutive_blocks FROM crawler_block_state WHERE id = 1`,
-    );
-    const row = res.rows[0];
-    if (!row?.cooloff_until) return;
-    const n = Math.max(0, Number(row.consecutive_blocks) || 0);
-    currentCooloffMs = Math.min(env.CRAWL_BLOCK_COOLOFF_MS * 2 ** n, BLOCK_COOLOFF_MAX_MS);
-    const until = new Date(row.cooloff_until).getTime();
-    if (until > Date.now()) {
-      blockedUntil = until;
-      parentLog.warn(
-        { resume_at: new Date(until).toISOString(), consecutive_blocks: n },
-        'restored active block cool-off from DB; crawling paused until it expires',
-      );
-    }
-  } catch (err) {
-    parentLog.warn({ err: (err as Error).message }, 'failed to restore block state at boot');
-  }
-}
+// Block circuit breaker: per-endpoint cool-off (AIMD increaseFactor + cooloffMs
+// on a 'blocked' outcome) now lives in ScraperEndpoint.settle() — see
+// scraperPool.acquire()/settle() in runnerLoop. The old module-global breaker
+// (blockedUntil/enterBlockCooloff/resetBlockCooloff/restoreBlockState) is gone;
+// see task-C2-supplement.md's KNOWN TRADEOFF re: DB-persisted restore-on-boot.
 
 // Wakeup fan-out: idle runners park here; a NOTIFY (or the idle timer) releases
 // them so they immediately re-check the queue instead of sleeping the full poll.
@@ -488,9 +391,13 @@ function waitForWork(timeoutMs: number): Promise<void> {
 
 async function runnerLoop(id: number, parentLog: WorkerLogger): Promise<void> {
   while (!shuttingDown) {
-    // Respect a global block cool-off before doing anything else.
-    if (Date.now() < blockedUntil) {
-      await sleep(Math.min(blockedUntil - Date.now(), 30_000));
+    // Acquire a scraper endpoint FIRST — this both picks the least-recently-used
+    // IP and reserves/paces its next start slot (replaces the old global
+    // paceJobStart() gate). If every endpoint is reserved or cooling off, wait
+    // for the soonest one to free up rather than busy-polling.
+    const endpoint = scraperPool.acquire();
+    if (!endpoint) {
+      await sleep(Math.min(Math.max(scraperPool.nextReadyAt() - Date.now(), 250), 5_000));
       continue;
     }
 
@@ -504,39 +411,33 @@ async function runnerLoop(id: number, parentLog: WorkerLogger): Promise<void> {
     }
 
     if (!job) {
-      // Queue empty (or every pending row locked by a peer) — park until a
-      // NOTIFY or the idle timer, then re-check. No pacing slot is consumed
-      // here, so a freshly-enqueued job isn't delayed by the job-start gate.
+      // Queue empty (or every pending row locked by a peer) — we reserved a
+      // slot on `endpoint` we won't use, which just paces that IP a little;
+      // harmless. Park until a NOTIFY or the idle timer, then re-check.
       await waitForWork(IDLE_POLL_MS);
       continue;
     }
 
-    // Pace job STARTS to mimic the old n8n schedule tick (politeness). Gated
-    // here — after a job is actually claimed — so idle polling / NOTIFY wakeups
-    // never burn a pacing slot on an empty queue.
-    await paceJobStart();
-    if (shuttingDown) break;
-
     inFlight += 1;
     try {
-      // Capture the breaker epoch BEFORE processing so a success only clears a
-      // cool-off that existed when we started — not one a peer entered meanwhile.
-      const epochAtStart = blockEpoch;
-      const result = await processClaimedJob(job, parentLog);
+      const result = await processClaimedJob(job, endpoint.url, parentLog);
+      let outcome: Outcome;
+      if (result.outcome === 'ok') {
+        // A partial block (some passes 429'd) keeps this IP's backoff up even
+        // though the job overall succeeded.
+        outcome = result.hadPartialBlock ? 'blocked' : 'ok';
+      } else if (result.outcome === 'blocked') {
+        outcome = 'blocked';
+      } else {
+        // 'transient' (scraper unreachable) and 'failed' don't implicate this
+        // IP's rate with Realtor.com — no AIMD change.
+        outcome = 'error';
+      }
+      endpoint.settle(outcome, Date.now());
       if (result.outcome === 'transient') {
         // Scraper was unreachable — the job was re-pended. Back off so we don't
         // tight-loop and burn through the whole backlog while it's down.
         await sleep(SCRAPER_DOWN_BACKOFF_MS);
-      } else if (result.outcome === 'blocked') {
-        // Realtor.com blocked our IP — pause ALL runners for a cool-off.
-        enterBlockCooloff(parentLog, result.blockError ?? '');
-      } else if (result.outcome === 'ok') {
-        // A clean success clears any prior block cool-off escalation — but only
-        // if (a) this job saw no PARTIAL block among its passes, and (b) no NEW
-        // block was entered by a concurrent runner while it was in flight
-        // (epoch unchanged). Otherwise a flapping/concurrent block would keep
-        // resetting the backoff.
-        if (!result.hadPartialBlock && blockEpoch === epochAtStart) resetBlockCooloff(parentLog);
       }
     } finally {
       inFlight -= 1;
@@ -682,14 +583,12 @@ process.on('unhandledRejection', (reason) => {
 
 async function main(): Promise<void> {
   const concurrency = Math.max(1, env.WORKER_CONCURRENCY);
-  currentCooloffMs = env.CRAWL_BLOCK_COOLOFF_MS; // seed the block-breaker backoff
-  await restoreBlockState(log); // rehydrate an in-progress cool-off across restarts
   log.info(
     {
       concurrency,
-      scraper: env.SCRAPER_URL,
-      job_interval_ms: env.CRAWL_JOB_MIN_INTERVAL_MS,
-      block_cooloff_ms: env.CRAWL_BLOCK_COOLOFF_MS,
+      scraper_endpoints: scraperPool.endpoints.length,
+      scraper_start_interval_ms: env.aimd.startIntervalMs,
+      block_cooloff_ms: env.aimd.cooloffMs,
     },
     'crawl worker starting',
   );
