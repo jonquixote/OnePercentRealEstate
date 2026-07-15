@@ -28,10 +28,15 @@ cd /opt/onepercent
 sudo -u postgres psql -f infrastructure/migrations/out-of-band/2026_07_15_scraper_ingest_role.sql
 ```
 
-This idempotently creates `oper_scraper LOGIN IN ROLE oper_rw` if it doesn't
-already exist (`oper_rw` — CRUD on all public tables/sequences — was created by
-`2026_07_12_db_roles.sql`; reusing it keeps grants consistent with
-`oper_app`/`oper_worker`/`oper_ml`).
+This idempotently creates `oper_scraper` as a standalone least-privilege role
+if it doesn't already exist — it is **not** a member of `oper_rw` (which has
+CRUD on all public tables/sequences, created by `2026_07_12_db_roles.sql`).
+Scraper nodes are the most-exposed hosts in the fleet (public egress to
+Realtor.com), so `oper_scraper` gets only its real write surface: explicit
+`INSERT`/`UPDATE`/`SELECT` grants on `listings`, `rental_listings`, and
+`sold_listings` (plus `USAGE`/`SELECT` on their id sequences) and nothing
+else — no default privileges, so new tables never become writable by a
+compromised scraper node automatically.
 
 The role has **no password yet** — the migration deliberately does not set one
 (never commit a password). Set it out-of-band, once:
@@ -62,10 +67,9 @@ listen_addresses = 'localhost,10.8.2.241'
 hostssl  postgres  oper_scraper  10.8.0.0/22  scram-sha-256
 ```
 
-Reload (no restart needed — `listen_addresses` changes on a running native
-`postgres -D ... -c config_file=...` process still require a full restart of
-`oper-postgres.service` to bind the new address; `pg_hba.conf` changes are
-picked up by reload alone):
+`listen_addresses` changes require a full Postgres restart (a reload is NOT
+enough); `pg_hba.conf` changes only need a reload. The restart below also
+picks up the `pg_hba.conf` edit, so a single restart covers both:
 
 ```bash
 sudo systemctl restart oper-postgres.service   # required for listen_addresses to take effect
