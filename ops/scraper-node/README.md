@@ -163,10 +163,132 @@ is sufficient to retire them without deleting anything irreversible).
 
 ## Node provisioning
 
-_(Task D2 — cloud-init + provisioning steps land here.)_
+**Goal:** bring up additional scraper nodes (up to 4 side servers, same
+provider/region as the existing `10.8.3.41` box) on the private mesh, then
+register each one's private IP with the driver so it starts drawing jobs.
+
+Each node is a stateless FastAPI scraper (`services/scraper_service`) that
+scrapes Realtor.com from its own egress IP and inserts straight into main's
+Postgres over the mesh — the same shape as `10.8.3.41`, just with a
+different bind IP. Nothing about the driver (`apps/worker`, unit
+`oper-worker`) changes when you add a node beyond editing `SCRAPER_URLS`.
+
+### 1. Provision the VPS
+
+Create a new VPS with the **same provider and region** as the existing side
+box, so it lands on the same private mesh (`10.8.0.0/22`) and picks up an
+`eth1` address automatically at boot. The exact provisioning command depends
+on the provider console/CLI in use for this fleet — pass
+`ops/scraper-node/cloud-init.yaml` as the instance's user-data/cloud-init
+script, after filling in `${SCRAPER_DB_PASSWORD}` with the `oper_scraper`
+role password (generated in "Central DB access", step 1 above — never
+commit it; substitute it in your provider's user-data field or a local copy
+of the file that is not checked into git).
+
+Example shape (adjust flags/API to the actual provider CLI):
+
+```bash
+<provider-cli> instance create \
+  --region <same-region-as-10.8.3.41> \
+  --image ubuntu-22.04 \
+  --private-network <the-10.8.0.0/22-mesh-network> \
+  --user-data-file <(sed "s/\${SCRAPER_DB_PASSWORD}/<the-actual-password>/" ops/scraper-node/cloud-init.yaml) \
+  --name oper-scraper-node-N
+```
+
+Cloud-init (`ops/scraper-node/cloud-init.yaml`) then, unattended:
+
+1. Installs `git`, `python3-venv`, `python3-pip`, `build-essential`,
+   `libpq-dev`.
+2. Writes `/etc/oper.env` (mode `0600`) with the mesh `DATABASE_URL`
+   pointing at `oper_scraper@10.8.2.241:5432` and `SCRAPE_TIMEOUT_MS`.
+3. Clones `OnePercentRealEstate` to `/opt/onepercent` and builds the venv
+   at `services/ml/.venv` (same layout as the working side box).
+4. Installs the real `ops/systemd/oper-scraper.service` unit verbatim, then
+   patches only the `--host`/`--port` flags to bind the node's own `eth1`
+   private IP on port 80 (the fleet convention — `SCRAPER_URLS` entries are
+   bare IPs like `http://10.8.3.41`, no port suffix).
+5. Enables and starts `oper-scraper.service`.
+
+Boot the instance and wait for cloud-init to finish
+(`cloud-init status --wait` over SSH, or watch the provider console) before
+moving to the smoke test.
+
+### 2. Smoke test the new node
+
+From any host that can reach the mesh (e.g. main, or another side box),
+confirm the node is up and actually inserting:
+
+```bash
+curl http://<node-priv-ip>/health
+```
+
+Then trigger one real scrape and confirm it lands in the DB:
+
+```bash
+curl -XPOST http://<node-priv-ip>/scrape \
+  -H 'Content-Type: application/json' \
+  -d '{"location":"77002","listing_type":"for_sale"}'
+```
+
+From main:
+
+```bash
+sudo -u postgres psql -c "SELECT max(created_at) FROM listings;"
+```
+
+Re-run the `SELECT` after the `curl -XPOST` above — the timestamp should
+advance. Do not proceed to registration until both checks pass; a node that
+fails the smoke test will just fill the driver's breaker with errors
+instead of drawing real jobs.
+
+### 3. Register the node with the driver
+
+On **main**, add the new node's private IP to the driver's `SCRAPER_URLS`
+(comma-separated, no spaces required but tolerated — see
+`apps/worker/src/env.ts`) in `/etc/oper.env`:
+
+```
+SCRAPER_URLS=http://10.8.3.41,http://<node-priv-ip>
+```
+
+For a third or fourth node, keep appending, comma-separated:
+
+```
+SCRAPER_URLS=http://10.8.3.41,http://<node2-priv-ip>,http://<node3-priv-ip>
+```
+
+Restart the driver to pick up the new pool:
+
+```bash
+sudo systemctl restart oper-worker
+```
+
+### 4. Confirm the fleet is drawing from all IPs
+
+```bash
+sudo journalctl -u oper-worker -f
+```
+
+Watch for job logs alternating between endpoint URLs (e.g. requests routed
+to both `http://10.8.3.41` and `http://<node-priv-ip>`) as the
+`ScraperPool`'s earliest-available-IP selection spreads jobs across the
+fleet. If only the original IP ever appears, double-check
+`SCRAPER_URLS` was actually reloaded (`systemctl show oper-worker
+--property=Environment` or re-`cat /etc/oper.env` on main) and that the new
+node passed its own smoke test above — a node whose breaker tripped to
+`error` on first contact will be skipped, not alternated to.
+
+**Rollback:** if a newly added node causes problems (block storms, bad
+data, unreachable), drop its IP from `SCRAPER_URLS` and
+`systemctl restart oper-worker` — the rest of the fleet is unaffected
+(per-endpoint breakers are isolated by design). See "Calibration +
+kill-switch" below for the full kill-switch procedure.
 
 ---
 
 ## Calibration + kill-switch
+
+_(Task D3 — per-IP calibration procedure and kill-switch steps land here.)_
 
 _(Task D3 — per-IP calibration procedure and kill-switch steps land here.)_
