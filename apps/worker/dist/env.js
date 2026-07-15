@@ -24,6 +24,18 @@ function readInt(name, fallback) {
     }
     return n;
 }
+// Like readInt but allows 0 — for pacing/jitter knobs where 0 legitimately
+// means "disable" (e.g. no inter-pass jitter). Still rejects negatives.
+function readIntMin0(name, fallback) {
+    const raw = process.env[name];
+    if (!raw)
+        return fallback;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) {
+        throw new Error(`Invalid integer for ${name}: ${raw}`);
+    }
+    return n;
+}
 function readStringOpt(name) {
     const v = process.env[name];
     if (v && v.length > 0)
@@ -34,15 +46,25 @@ export function loadEnv() {
     return {
         DATABASE_URL: readString('DATABASE_URL'),
         SCRAPER_URL: readString('SCRAPER_URL', 'http://scraper:8000'),
-        WORKER_CONCURRENCY: readInt('WORKER_CONCURRENCY', 2),
+        // Default 1 (serialized) to match the old n8n workflow's gentle, one-ZIP-
+        // at-a-time cadence that avoided Realtor.com IP blocks for months.
+        WORKER_CONCURRENCY: readInt('WORKER_CONCURRENCY', 1),
         // Cluster MV refresh cadence. 10 min default matches the Wave 2 plan.
         CLUSTER_REFRESH_INTERVAL_MS: readInt('CLUSTER_REFRESH_INTERVAL_MS', 10 * 60 * 1000),
         LOG_LEVEL: readString('LOG_LEVEL', 'info'),
         // Scrape requests can be slow on large regions. 10 min ceiling so a
-        // hung scrape doesn't pin a worker slot forever — the
-        // recycle_stuck_jobs() safety net catches anything stuck longer
-        // than 5 min anyway.
+        // hung scrape doesn't pin a worker slot forever — the in-worker
+        // reaperLoop() re-pends anything stuck in 'processing' past ~1.5× the
+        // worst-case job budget. (Prod sets SCRAPE_TIMEOUT_MS=240000.)
         SCRAPE_TIMEOUT_MS: readInt('SCRAPE_TIMEOUT_MS', 10 * 60 * 1000),
+        // Anti-block pacing. Minimum wall-clock gap between job STARTS across all
+        // runners (~30s ≈ old n8n schedule tick); randomized gap between the passes
+        // of one ZIP; and the initial cool-off when Realtor.com blocks our IP
+        // (doubles per consecutive block up to a 4h cap, in crawl.ts). Interval and
+        // jitter accept 0 to disable.
+        CRAWL_JOB_MIN_INTERVAL_MS: readIntMin0('CRAWL_JOB_MIN_INTERVAL_MS', 30 * 1000),
+        CRAWL_PASS_JITTER_MS: readIntMin0('CRAWL_PASS_JITTER_MS', 1_500),
+        CRAWL_BLOCK_COOLOFF_MS: readInt('CRAWL_BLOCK_COOLOFF_MS', 30 * 60 * 1000),
         // Wave 3
         ML_URL: readString('ML_URL', 'http://ml:8000'),
         REDIS_URL: readString('REDIS_URL', ''),
@@ -73,6 +95,12 @@ export function loadEnv() {
         RESEND_API_KEY: readString('RESEND_API_KEY', 'dummy_key_for_dev'),
         WATCHLIST_TICK_MS: readInt('WATCHLIST_TICK_MS', 15 * 60 * 1000), // 15 minutes default
         WATCHLIST_FROM_EMAIL: readString('WATCHLIST_FROM_EMAIL', 'alerts@octavo.press'),
+        // Tasks 2.1 & 2.2 — HMAC key for one-click unsubscribe tokens and the
+        // public base URL used to build those links. Required in production; a
+        // dev-only fallback keeps local runs from crashing (tokens won't verify
+        // across processes with a mismatched secret, but that's fine for dev).
+        UNSUBSCRIBE_SECRET: readString('UNSUBSCRIBE_SECRET', process.env.NODE_ENV !== 'production' ? 'dev-unsub-secret-change-me' : undefined),
+        DIGEST_PUBLIC_URL: readString('DIGEST_PUBLIC_URL', 'https://octavo.press'),
     };
 }
 //# sourceMappingURL=env.js.map

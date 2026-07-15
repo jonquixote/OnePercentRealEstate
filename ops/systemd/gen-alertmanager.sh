@@ -32,6 +32,14 @@ fi
 
 mkdir -p "$(dirname "$RUNTIME_PATH")"
 
+# SYNC NOTE: the config body below (route / receivers / inhibit_rules) is kept
+# deliberately in lockstep with the checked-in template
+# infrastructure/monitoring/alertmanager/alertmanager.yml (the human-readable,
+# secret-free reference). This script is the source of truth for what actually
+# runs (it injects the Telegram token from .env); the template documents it.
+# If you edit routing or inhibit rules HERE, mirror the change THERE (and vice
+# versa). We intentionally do NOT `yq`-extract from the template to avoid a
+# runtime yq dependency on the deploy box for a config that's regenerated rarely.
 cat > "$RUNTIME_PATH" << YAML
 global:
   resolve_timeout: 5m
@@ -78,11 +86,41 @@ receivers:
           {{ end }}
 
 inhibit_rules:
+  # NOTE: crawler metrics carry a 'server' label, not 'host'. equal:["host"] is
+  # therefore absent-on-both (treated as equal) → global inhibition, which is
+  # what we want with a single crawler/exporter. Kept for consistency with the
+  # PostgresDown/RedisDown rule; revisit if we ever run multiple crawlers.
   - source_matchers:
       - severity = "crit"
       - alertname =~ "PostgresDown|RedisDown"
     target_matchers:
       - severity = "warn"
+    equal: ["host"]
+
+  # A confirmed crawler BLOCK (crit) subsumes the softer stall / early
+  # warnings — suppress them so a real block pages once, cleanly.
+  - source_matchers:
+      - alertname =~ "CrawlerLikelyBlocked|CrawlerBlockedAuth|CrawlerBlockCooloff"
+    target_matchers:
+      - alertname =~ "CrawlerStalling|CrawlerNoFreshData|CrawlerAuthErrors"
+    equal: ["host"]
+
+  # The circuit-breaker cool-off (CrawlerBlockCooloff) is the authoritative
+  # block signal. While it's active the worker is PAUSED, so it also trips
+  # CrawlerNoProgress and the other block alerts — suppress them so a block
+  # pages exactly once as CrawlerBlockCooloff.
+  - source_matchers:
+      - alertname = "CrawlerBlockCooloff"
+    target_matchers:
+      - alertname =~ "CrawlerNoProgress|CrawlerLikelyBlocked|CrawlerBlockedAuth"
+    equal: ["host"]
+
+  # If the crawler is fully down (no progress), don't also emit stall /
+  # stale-data warnings — down-ness explains them.
+  - source_matchers:
+      - alertname = "CrawlerNoProgress"
+    target_matchers:
+      - alertname =~ "CrawlerStalling|CrawlerNoFreshData"
     equal: ["host"]
 YAML
 

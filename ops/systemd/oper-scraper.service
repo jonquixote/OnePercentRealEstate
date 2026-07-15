@@ -16,7 +16,13 @@ ExecStart=/opt/onepercent/services/ml/.venv/bin/uvicorn \
     --port 8001
 Restart=on-failure
 RestartSec=5
-MemoryMax=1G
+# homeharvest holds the full result DataFrame in memory and, with
+# extra_property_data, fan-out-fetches per-property details (20 workers). Dense
+# metros + the combined for_sale+for_rent pass push peak RSS well past 1G and
+# were OOM-killed (2026-07-14). MemoryHigh throttles (reclaim) before the hard
+# MemoryMax kill; sized for a ~4G box.
+MemoryHigh=1536M
+MemoryMax=2G
 
 [Install]
 WantedBy=multi-user.target

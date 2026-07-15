@@ -36,7 +36,10 @@ cat > "$DST" <<EOF
 DATABASE_URL=postgresql://postgres:$(urlencode "${POSTGRES_PASSWORD}")@localhost:5432/postgres
 REDIS_URL=redis://:$(urlencode "${REDIS_PASSWORD}")@localhost:6379
 ML_URL=http://localhost:8000
-SCRAPER_URL=http://localhost:8001
+# Scraper may be detached to an isolated box (to contain upstream IP blocks).
+# Its address is environment-specific, so it is read from the server-only .env
+# (SCRAPER_URL=...) and never committed. Falls back to the local scraper.
+SCRAPER_URL=${SCRAPER_URL:-http://localhost:8001}
 
 # --- Passwords (for services that need the raw values) ---
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -48,7 +51,18 @@ ML_PORT=8000
 PYTHONPATH=${PROJECT_ROOT}/services:${PROJECT_ROOT}/services/scraper_service
 
 # --- Worker tuning ---
-WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-2}
+# Serialized (1) to mimic the old n8n workflow's one-ZIP-at-a-time cadence,
+# which avoided Realtor.com IP blocks for months.
+WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-1}
+# Per-scrape-pass HTTP timeout. Kept modest so a hung/OOM'd scraper request
+# ties up a runner for minutes, not the 10-min code default (which throttled
+# throughput at low concurrency and delayed the stuck-job reaper).
+SCRAPE_TIMEOUT_MS=${SCRAPE_TIMEOUT_MS:-240000}
+# Anti-block pacing: min gap between job starts (~old schedule tick), jitter
+# between a ZIP's passes, and the initial block cool-off (doubles per block).
+CRAWL_JOB_MIN_INTERVAL_MS=${CRAWL_JOB_MIN_INTERVAL_MS:-30000}
+CRAWL_PASS_JITTER_MS=${CRAWL_PASS_JITTER_MS:-1500}
+CRAWL_BLOCK_COOLOFF_MS=${CRAWL_BLOCK_COOLOFF_MS:-1800000}
 RENT_BACKFILL_BATCH=${RENT_BACKFILL_BATCH:-200}
 RENT_WORKER_CONCURRENCY=${RENT_WORKER_CONCURRENCY:-6}
 RENT_DRAIN_INTERVAL_MS=${RENT_DRAIN_INTERVAL_MS:-30000}
@@ -86,7 +100,7 @@ DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
 # AUTH_SECRET, STRIPE_*, ADMIN_API_KEY, HUD/FRED/TELEGRAM tokens after the
 # systemd cutover (2026-07-10 incident: login + billing ran without
 # secrets). Anything not already rewritten above flows through verbatim.
-$(grep -E '^[A-Z][A-Z0-9_]*=' "$SRC" | grep -vE '^(DATABASE_URL|REDIS_URL|ML_URL|SCRAPER_URL|POSTGRES_PASSWORD|REDIS_PASSWORD|NODE_ENV|ML_PORT|PYTHONPATH|WORKER_CONCURRENCY|RENT_BACKFILL_BATCH|RENT_WORKER_CONCURRENCY|RENT_DRAIN_INTERVAL_MS|CLUSTER_REFRESH_INTERVAL_MS|MEDIA_HEALTH_CONCURRENCY|MEDIA_HEALTH_INTERVAL_MS|WATCHLIST_TICK_MS|WATCHLIST_FROM_EMAIL|LOG_LEVEL|N8N_|DB_TYPE|DB_POSTGRESDB_|WEBHOOK_URL|GENERIC_TIMEZONE)' || true)
+$(grep -E '^[A-Z][A-Z0-9_]*=' "$SRC" | grep -vE '^(DATABASE_URL|REDIS_URL|ML_URL|SCRAPER_URL|POSTGRES_PASSWORD|REDIS_PASSWORD|NODE_ENV|ML_PORT|PYTHONPATH|WORKER_CONCURRENCY|SCRAPE_TIMEOUT_MS|CRAWL_JOB_MIN_INTERVAL_MS|CRAWL_PASS_JITTER_MS|CRAWL_BLOCK_COOLOFF_MS|RENT_BACKFILL_BATCH|RENT_WORKER_CONCURRENCY|RENT_DRAIN_INTERVAL_MS|CLUSTER_REFRESH_INTERVAL_MS|MEDIA_HEALTH_CONCURRENCY|MEDIA_HEALTH_INTERVAL_MS|WATCHLIST_TICK_MS|WATCHLIST_FROM_EMAIL|LOG_LEVEL|N8N_|DB_TYPE|DB_POSTGRESDB_|WEBHOOK_URL|GENERIC_TIMEZONE)' || true)
 EOF
 
 chmod 600 "$DST"

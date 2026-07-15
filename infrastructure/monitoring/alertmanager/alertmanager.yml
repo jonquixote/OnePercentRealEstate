@@ -19,6 +19,11 @@
 #      TELEGRAM_CHAT_ID=<integer chat id — server runtime file only>
 # NOTE: alertmanager yaml does NOT expand $ENV_VARS — values must be
 # literal in the runtime file (which is why it stays server-only).
+#
+# SYNC NOTE: routing / receivers / inhibit_rules here must stay in lockstep with
+# ops/systemd/gen-alertmanager.sh, which generates the actual runtime file with
+# the token injected. Edit both together. (This template is the secret-free
+# reference; the script is what runs.)
 
 global:
   resolve_timeout: 5m
@@ -73,3 +78,30 @@ inhibit_rules:
     target_matchers:
       - severity = "warn"
     equal: ["host"]
+
+  # A confirmed crawler BLOCK (crit) subsumes the softer stall / early
+  # warnings — suppress them so a real block pages once, cleanly.
+  - source_matchers:
+      - alertname =~ "CrawlerLikelyBlocked|CrawlerBlockedAuth|CrawlerBlockCooloff"
+    target_matchers:
+      - alertname =~ "CrawlerStalling|CrawlerNoFreshData|CrawlerAuthErrors"
+    equal: ["host"]
+
+  # The circuit-breaker cool-off (CrawlerBlockCooloff) is the authoritative
+  # block signal. While it's active the worker is PAUSED, so it will also trip
+  # CrawlerNoProgress (0 jobs finishing) and the other block alerts — suppress
+  # all of those so a block pages exactly once as CrawlerBlockCooloff.
+  - source_matchers:
+      - alertname = "CrawlerBlockCooloff"
+    target_matchers:
+      - alertname =~ "CrawlerNoProgress|CrawlerLikelyBlocked|CrawlerBlockedAuth"
+    equal: ["host"]
+
+  # If the crawler is fully down (no progress), don't also emit stall /
+  # stale-data warnings — down-ness explains them.
+  - source_matchers:
+      - alertname = "CrawlerNoProgress"
+    target_matchers:
+      - alertname =~ "CrawlerStalling|CrawlerNoFreshData"
+    equal: ["host"]
+

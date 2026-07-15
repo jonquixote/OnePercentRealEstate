@@ -110,17 +110,122 @@ groups:
   - name: scraper
     interval: 60s
     rules:
-      # ScraperBacklog uses a custom postgres-exporter query. The query
-      # must be defined in postgres-exporter's queries.yml; see the
-      # snippet at the bottom of this file.
-      - alert: ScraperBacklog
-        expr: crawl_jobs_pending > 100
+      # ---------------------------------------------------------------
+      # Smart crawler stall / block detector.
+      #
+      # Metrics come from the `crawler_health` custom query in
+      # postgres-exporter's queries.yml. Tiers, escalating:
+      #
+      #   liveness   CrawlerNoProgress   crit  worker/tunnel down
+      #   stall      CrawlerStalling     warn  a few misses in a row
+      #   stall      CrawlerNoFreshData  warn  no new data for a while
+      #   early      CrawlerAuthErrors   warn  first block-like errors
+      #   block      CrawlerLikelyBlocked crit dozens of misses in a row
+      #   block      CrawlerBlockedAuth  crit  auth/401/403/429 fingerprint
+      #
+      # Inhibit rules (below) suppress the softer stall/early alerts once a
+      # block-level alert fires, so a real block pages once, cleanly.
+      # ---------------------------------------------------------------
+
+      # Worker is finishing NOTHING while a backlog exists → it's down, or
+      # the scraper box / DB reverse-tunnel is down. (pending is normally
+      # huge here — the full-US seed — so its presence is the gate, not the size.)
+      # Both series come from the same crawler_health row (identical labels), so
+      # `and` matches them directly without on()/ignoring().
+      - alert: CrawlerNoProgress
+        expr: crawler_health_finished_5m == 0 and crawler_health_pending > 0
+        for: 15m
+        labels:
+          severity: crit
+        annotations:
+          summary: "Crawler finished 0 jobs in 5m (backlog present)"
+          description: "No crawl_jobs have completed/failed for 15m while pending work exists. Check oper-worker on main and oper-scraper + the SSH DB tunnel on the scraper box."
+          runbook_url: "https://github.com/<OWNER>/OnePercentRealEstate/blob/main/documentation/operations/troubleshooting.md"
+
+      # A few misses in a row AND recent yield has genuinely dropped. The
+      # data_30m guard stops this warn-ing every time the recycle loop passes
+      # through a barren/rural cluster of ZIPs while the pipeline is otherwise
+      # healthy (data_30m stays high in that case).
+      - alert: CrawlerStalling
+        expr: crawler_health_miss_streak >= 12 and crawler_health_finished_5m > 0 and crawler_health_data_30m < 20
         for: 10m
         labels:
           severity: warn
         annotations:
-          summary: "Scraper backlog: {{ $value }} pending jobs for 10m"
-          description: "The crawl_jobs table has > 100 pending rows. Either the scraper is down or upstream is throttling."
+          summary: "Crawler stalling: {{ $value }} consecutive jobs with no data + low yield"
+          description: "A run of finished jobs produced 0 listings and overall 30m data yield is low. Could be an early upstream problem — watch for escalation to CrawlerLikelyBlocked."
+
+      # Jobs are finishing but the pipeline hasn't produced ANY new data in
+      # a while — a subtler stall than the streak (e.g. all recent ZIPs empty).
+      - alert: CrawlerNoFreshData
+        expr: crawler_health_secs_since_data > 2700 and crawler_health_finished_5m > 0
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "No new listings ingested for {{ $value | humanizeDuration }}"
+          description: "The crawler is running but hasn't inserted data in >45m. Check upstream availability and recent scrape warnings in oper-worker logs."
+
+      # First block-like errors appear — heads-up BEFORE it becomes a full
+      # block. This is the exact fingerprint of the 2026-07-09 incident.
+      - alert: CrawlerAuthErrors
+        expr: crawler_health_auth_fail_15m >= 1
+        for: 2m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Crawler auth/block errors appearing: {{ $value }} in 15m"
+          description: "Recent scrape failures match an auth/401/403/429/captcha fingerprint. Realtor.com may be starting to throttle the scraper IP. If this climbs, CrawlerBlockedAuth will page."
+
+      # Block fingerprint: either a sustained run of hard failures, OR a long
+      # miss streak WHILE throughput is high and yield is zero. The second
+      # clause is what distinguishes a real block from the crawler merely
+      # cycling through a barren/rural cluster of ZIPs (normal, given the
+      # recycle loop): only alert when lots of jobs finished recently but
+      # NONE produced data.
+      - alert: CrawlerLikelyBlocked
+        expr: |
+          crawler_health_fail_streak >= 20
+          or (
+            crawler_health_miss_streak >= 50
+            and crawler_health_finished_30m > 50
+            and crawler_health_data_30m == 0
+          )
+        for: 5m
+        labels:
+          severity: crit
+        annotations:
+          summary: "Crawler likely BLOCKED (miss/fail streak with zero yield)"
+          description: "Sustained hard-failures, or dozens of consecutive misses while lots of jobs finished but produced ZERO data in 30m — the pattern of an upstream IP block (see 2026-07-09). Rotate the scraper egress IP / move to a fresh scraper box before more damage."
+          runbook_url: "https://github.com/<OWNER>/OnePercentRealEstate/blob/main/documentation/operations/troubleshooting.md"
+
+      # Definitive block fingerprint at volume — page immediately.
+      - alert: CrawlerBlockedAuth
+        expr: crawler_health_auth_fail_15m >= 3
+        for: 2m
+        labels:
+          severity: crit
+        annotations:
+          summary: "Crawler BLOCKED (auth): {{ $value }} auth/block failures in 15m"
+          description: "Multiple scrape failures match auth/401/403/429/captcha in 15m — upstream is blocking the scraper IP. This is the failure mode that took the crawler down on 2026-07-09. Stop hammering, rotate the egress IP / scraper box."
+          runbook_url: "https://github.com/<OWNER>/OnePercentRealEstate/blob/main/documentation/operations/troubleshooting.md"
+
+      # Authoritative block signal since 2026-07-15: the crawl worker's circuit
+      # breaker RE-PENDS blocked jobs (so ZIPs retry after the block lifts)
+      # rather than leaving them 'failed', which keeps them OUT of the
+      # auth_fail_15m fingerprint above. When the breaker trips it records a
+      # cool-off in crawler_block_state → block_cooloff_active = 1 here. This is
+      # now the primary "crawler is blocked" page; the auth_fail rules remain as
+      # a backstop for blocks that slip through as hard failures.
+      - alert: CrawlerBlockCooloff
+        expr: crawler_health_block_cooloff_active == 1
+        for: 1m
+        labels:
+          severity: crit
+        annotations:
+          summary: "Crawler BLOCKED — circuit breaker in cool-off"
+          description: "The crawl worker detected an upstream Realtor.com block and PAUSED (cool-off, exponential backoff). Crawling auto-resumes with a probe when the block lifts. If this persists across cool-offs, wait it out or rotate the scraper egress IP / scraper box."
+          runbook_url: "https://github.com/<OWNER>/OnePercentRealEstate/blob/main/documentation/operations/troubleshooting.md"
 
       - alert: RentalIngestStalled
         expr: (sum(rental_ingest_by_source_last24h) or absent(sum(rental_ingest_by_source_last24h))) < 100
@@ -130,6 +235,7 @@ groups:
         annotations:
           summary: "Rental ingest below 100/day for 6h"
           description: "Total rental listings in last 24h is {{ $value }}. Pipeline may be sick — check scraper logs and upstream availability."
+
 
 # ---------------------------------------------------------------------------
 # postgres-exporter custom query (paste into postgres-exporter's
