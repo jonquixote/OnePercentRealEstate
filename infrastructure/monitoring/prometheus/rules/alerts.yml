@@ -130,8 +130,10 @@ groups:
       # Worker is finishing NOTHING while a backlog exists → it's down, or
       # the scraper box / DB reverse-tunnel is down. (pending is normally
       # huge here — the full-US seed — so its presence is the gate, not the size.)
+      # Both series come from the same crawler_health row (identical labels), so
+      # `and` matches them directly without on()/ignoring().
       - alert: CrawlerNoProgress
-        expr: crawler_health_finished_5m == 0 and on() (sum(crawl_jobs_status_count{status="pending"}) > 0)
+        expr: crawler_health_finished_5m == 0 and crawler_health_pending > 0
         for: 15m
         labels:
           severity: crit

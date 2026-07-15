@@ -32,6 +32,14 @@ fi
 
 mkdir -p "$(dirname "$RUNTIME_PATH")"
 
+# SYNC NOTE: the config body below (route / receivers / inhibit_rules) is kept
+# deliberately in lockstep with the checked-in template
+# infrastructure/monitoring/alertmanager/alertmanager.yml (the human-readable,
+# secret-free reference). This script is the source of truth for what actually
+# runs (it injects the Telegram token from .env); the template documents it.
+# If you edit routing or inhibit rules HERE, mirror the change THERE (and vice
+# versa). We intentionally do NOT `yq`-extract from the template to avoid a
+# runtime yq dependency on the deploy box for a config that's regenerated rarely.
 cat > "$RUNTIME_PATH" << YAML
 global:
   resolve_timeout: 5m

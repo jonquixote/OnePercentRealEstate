@@ -28,6 +28,7 @@
 //   "continuous cycle" pattern this project uses).
 import { Client, Pool } from 'pg';
 import { loadEnv } from './env.js';
+import { isBlockError, isTransientScraperError } from './crawl-errors.js';
 import { getLogger, newTraceId, withTrace } from './logger.js';
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
@@ -72,32 +73,6 @@ async function claimNextJob() {
       RETURNING id::text AS id, region_type, region_value`);
     return claim.rowCount === 0 ? null : claim.rows[0];
 }
-// ---------------------------------------------------------------------------
-// Process an already-claimed job (status='processing'). Marks it
-// completed/failed on the row. Never throws.
-// ---------------------------------------------------------------------------
-// A "transient" failure means the scraper itself was unreachable (process
-// down / OOM-restart / network blip) — the ZIP was never actually attempted
-// upstream. These are re-pended (not failed) so no data is lost, and the
-// runner backs off. NOTE: a scraper HTTP 4xx/5xx is deliberately NOT
-// transient — it means the scraper responded (e.g. a Realtor.com auth block
-// surfaced as `scraper 500: ...AuthenticationError...`), which must be
-// recorded as a real failure so the block detector can see it.
-function isTransientScraperError(msg) {
-    return /fetch failed|ECONNREFUSED|ECONNRESET|EPIPE|socket hang up|other side closed|network|ENOTFOUND|EAI_AGAIN/i.test(msg);
-}
-// A "block" error means Realtor.com/homeharvest rejected the request because
-// our IP is rate-limited or banned — it surfaces as `scraper 500:
-// ...AuthenticationError...` (403/401 upstream). This is distinct from a
-// transient (scraper-down) error: the scraper responded, the DATA SOURCE
-// refused. When we see this we must STOP hammering (cool-off), not retry hard.
-function isBlockError(msg) {
-    // Word-token signals are unambiguous. Bare status codes (401/403/429) are
-    // only treated as a block when they appear in an HTTP/scraper-status context
-    // (e.g. "scraper 403:" or "HTTP 429") so a number embedded elsewhere in a
-    // truncated error body (a price, an id) can't false-positive.
-    return /AuthenticationError|unauthorized|forbidden|too many requests|captcha|access denied|rate.?limit|(?:scraper|status|HTTP)\s*[:=]?\s*(?:401|403|429)\b/i.test(msg);
-}
 async function processClaimedJob(job, parentLog) {
     const traceId = newTraceId();
     const log = withTrace(parentLog, traceId, { job_id: job.id });
@@ -105,7 +80,7 @@ async function processClaimedJob(job, parentLog) {
     log.info({ region: job.region_value, region_type: job.region_type }, 'claimed crawl job');
     const passErrors = [];
     const runPass = (name, p) => p.catch((err) => {
-        const m = err.message;
+        const m = err instanceof Error ? err.message : String(err);
         passErrors.push(`${name}: ${m}`);
         log.warn({ err: m }, `${name} scrape failed`);
         return null;
@@ -158,15 +133,14 @@ async function processClaimedJob(job, parentLog) {
               SET status = 'pending', started_at = NULL, error_message = $2
             WHERE id = $1`, [job.id, `retry (scraper unreachable): ${combined}`.slice(0, 1000)]);
                 log.warn({ err: combined, duration_ms: Date.now() - start }, 'scraper unreachable; re-pended job for retry');
-                return 'transient';
+                return { outcome: 'transient' };
             }
             if (passErrors.some((e) => isBlockError(e))) {
-                lastBlockError = combined;
                 await pool.query(`UPDATE crawl_jobs
               SET status = 'pending', started_at = NULL, error_message = $2
             WHERE id = $1`, [job.id, `retry (upstream block): ${combined}`.slice(0, 1000)]);
                 log.error({ err: combined, duration_ms: Date.now() - start }, 'upstream block detected; re-pended job');
-                return 'blocked';
+                return { outcome: 'blocked', blockError: combined };
             }
             throw new Error(`all scrape passes failed: ${combined}`);
         }
@@ -192,8 +166,8 @@ async function processClaimedJob(job, parentLog) {
         // A creeping/partial block (some passes blocked, others succeeded) must NOT
         // clear the breaker's escalation — we still got data so we don't pause, but
         // the runner will skip resetBlockCooloff so accumulated backoff survives.
-        lastJobHadBlockError = passErrors.some((e) => isBlockError(e));
-        return 'ok';
+        const hadPartialBlock = passErrors.some((e) => isBlockError(e));
+        return { outcome: 'ok', hadPartialBlock };
     }
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -211,7 +185,7 @@ async function processClaimedJob(job, parentLog) {
             log.error({ markErr: markErr.message }, 'failed to mark job as failed');
         }
         log.error({ err: message, duration_ms: Date.now() - start }, 'crawl job failed');
-        return 'failed';
+        return { outcome: 'failed' };
     }
 }
 async function scrape(job, listingType, log, opts) {
@@ -313,9 +287,14 @@ function passGap() {
 const BLOCK_COOLOFF_MAX_MS = 4 * 60 * 60 * 1000; // 4h cap
 let blockedUntil = 0; // epoch ms; runners refuse to claim before this
 let currentCooloffMs = 0; // set from env at boot
-let lastBlockError = ''; // most recent block error message (for block-state row)
-let lastJobHadBlockError = false; // last 'ok' job had a partial block among its passes
-function enterBlockCooloff(parentLog) {
+// Monotonic counter, bumped every time a NEW block cool-off is entered. A
+// runner captures it before processing a job and only clears the cool-off on
+// success if it hasn't changed — so a clean job from one runner can't wipe a
+// cool-off that a concurrent runner entered while it was mid-flight. (With the
+// prod default WORKER_CONCURRENCY=1 there's no race, but the breaker stays
+// correct if concurrency is ever raised.)
+let blockEpoch = 0;
+function enterBlockCooloff(parentLog, blockError) {
     // Dedupe: with WORKER_CONCURRENCY>1 several in-flight jobs fail at once when
     // the IP is blocked and each returns 'blocked'. Treat any block that lands
     // while we're already paused as the SAME event, so a single block can't
@@ -323,6 +302,7 @@ function enterBlockCooloff(parentLog) {
     // post-cool-off probe storm.)
     if (Date.now() < blockedUntil)
         return;
+    blockEpoch += 1;
     if (currentCooloffMs === 0)
         currentCooloffMs = env.CRAWL_BLOCK_COOLOFF_MS;
     blockedUntil = Date.now() + currentCooloffMs;
@@ -338,7 +318,7 @@ function enterBlockCooloff(parentLog) {
               consecutive_blocks = consecutive_blocks + 1,
               last_error = $2,
               updated_at = now()
-        WHERE id = 1`, [new Date(blockedUntil).toISOString(), lastBlockError.slice(0, 500) || null])
+        WHERE id = 1`, [new Date(blockedUntil).toISOString(), blockError.slice(0, 500) || null])
         .catch((err) => parentLog.warn({ err: err.message }, 'failed to record block state'));
     currentCooloffMs = Math.min(currentCooloffMs * 2, BLOCK_COOLOFF_MAX_MS);
 }
@@ -409,10 +389,6 @@ async function runnerLoop(id, parentLog) {
             await sleep(Math.min(blockedUntil - Date.now(), 30_000));
             continue;
         }
-        // Pace job starts to mimic the old n8n schedule tick (politeness).
-        await paceJobStart();
-        if (shuttingDown)
-            break;
         let job = null;
         try {
             job = await claimNextJob();
@@ -424,27 +400,39 @@ async function runnerLoop(id, parentLog) {
         }
         if (!job) {
             // Queue empty (or every pending row locked by a peer) — park until a
-            // NOTIFY or the idle timer, then re-check.
+            // NOTIFY or the idle timer, then re-check. No pacing slot is consumed
+            // here, so a freshly-enqueued job isn't delayed by the job-start gate.
             await waitForWork(IDLE_POLL_MS);
             continue;
         }
+        // Pace job STARTS to mimic the old n8n schedule tick (politeness). Gated
+        // here — after a job is actually claimed — so idle polling / NOTIFY wakeups
+        // never burn a pacing slot on an empty queue.
+        await paceJobStart();
+        if (shuttingDown)
+            break;
         inFlight += 1;
         try {
-            const outcome = await processClaimedJob(job, parentLog);
-            if (outcome === 'transient') {
+            // Capture the breaker epoch BEFORE processing so a success only clears a
+            // cool-off that existed when we started — not one a peer entered meanwhile.
+            const epochAtStart = blockEpoch;
+            const result = await processClaimedJob(job, parentLog);
+            if (result.outcome === 'transient') {
                 // Scraper was unreachable — the job was re-pended. Back off so we don't
                 // tight-loop and burn through the whole backlog while it's down.
                 await sleep(SCRAPER_DOWN_BACKOFF_MS);
             }
-            else if (outcome === 'blocked') {
+            else if (result.outcome === 'blocked') {
                 // Realtor.com blocked our IP — pause ALL runners for a cool-off.
-                enterBlockCooloff(parentLog);
+                enterBlockCooloff(parentLog, result.blockError ?? '');
             }
-            else if (outcome === 'ok') {
-                // A clean success clears any prior block cool-off escalation — but a
-                // PARTIAL block (data returned yet some passes blocked) must not, or a
-                // flapping block would keep resetting the backoff.
-                if (!lastJobHadBlockError)
+            else if (result.outcome === 'ok') {
+                // A clean success clears any prior block cool-off escalation — but only
+                // if (a) this job saw no PARTIAL block among its passes, and (b) no NEW
+                // block was entered by a concurrent runner while it was in flight
+                // (epoch unchanged). Otherwise a flapping/concurrent block would keep
+                // resetting the backoff.
+                if (!result.hadPartialBlock && blockEpoch === epochAtStart)
                     resetBlockCooloff(parentLog);
             }
         }

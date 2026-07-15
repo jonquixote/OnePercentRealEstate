@@ -19,6 +19,11 @@
 #      TELEGRAM_CHAT_ID=<integer chat id — server runtime file only>
 # NOTE: alertmanager yaml does NOT expand $ENV_VARS — values must be
 # literal in the runtime file (which is why it stays server-only).
+#
+# SYNC NOTE: routing / receivers / inhibit_rules here must stay in lockstep with
+# ops/systemd/gen-alertmanager.sh, which generates the actual runtime file with
+# the token injected. Edit both together. (This template is the secret-free
+# reference; the script is what runs.)
 
 global:
   resolve_timeout: 5m

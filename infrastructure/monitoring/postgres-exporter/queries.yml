@@ -220,7 +220,13 @@ crawler_health:
                      THEN 1 ELSE 0 END
            FROM crawler_block_state WHERE id = 1),
         0
-      )::float                                                    AS block_cooloff_active
+      )::float                                                    AS block_cooloff_active,
+      -- pending backlog. Gates CrawlerNoProgress: "finished 0 recently" only
+      -- pages when there is actually work waiting (there almost always is — the
+      -- full-US seed is continuously recycled — but the gate keeps the alert
+      -- honest if the queue is ever legitimately drained). Cheap: a count over
+      -- the status btree.
+      (SELECT count(*) FROM crawl_jobs WHERE status = 'pending')::float AS pending
   master: true
   metrics:
     - finished_5m:
@@ -247,4 +253,7 @@ crawler_health:
     - block_cooloff_active:
         usage: "GAUGE"
         description: "1 while the crawl worker's circuit breaker is in a block cool-off (upstream block detected, crawling paused)"
+    - pending:
+        usage: "GAUGE"
+        description: "Crawl jobs currently in status='pending' (backlog gate for CrawlerNoProgress)"
 

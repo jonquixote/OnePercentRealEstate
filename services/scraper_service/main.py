@@ -260,7 +260,7 @@ def scrape_listings(req: ScrapeRequest):
                 # Per-row routing. For a combined call we trust each row's own
                 # `status`; otherwise the request-level listing_type drives it.
                 row_status = str(row.get('status') or '').strip().lower()
-                if is_combined and row_status and row_status not in _FOR_SALE_STATUSES and 'rent' not in row_status and row_status != 'sold':
+                if is_combined and row_status not in _FOR_SALE_STATUSES and 'rent' not in row_status and row_status != 'sold':
                     print(f"WARN: unexpected combined-row status '{row_status}' -> routing to listings (for_sale)")
                 row_type = route_row_type(row_status, is_combined, req.listing_type)
                 is_rental = row_type == 'for_rent'
