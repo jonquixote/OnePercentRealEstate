@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { CountUpRatio } from './CountUpRatio';
@@ -8,6 +9,7 @@ import type { Spotlight } from '@/lib/spotlight';
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
 export function FirstDealHero() {
+  const router = useRouter();
   const [metroLabel, setMetroLabel] = useState('');
   const [deal, setDeal] = useState<Spotlight | null>(null);
   const [loading, setLoading] = useState(true);
@@ -16,14 +18,28 @@ export function FirstDealHero() {
     setLoading(true);
     try {
       const res = await fetch('/api/spotlight');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setMetroLabel(data.metro?.label ?? '');
       setDeal(data.deal ?? null);
+    } catch (err) {
+      console.error('Failed to load spotlight deal:', err);
+      setDeal(null);
     } finally {
       setLoading(false);
     }
   }
   useEffect(() => { void load(); }, []);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const q = new FormData(e.currentTarget).get('q');
+    if (typeof q === 'string' && q.trim()) {
+      router.push(`/search?q=${encodeURIComponent(q.trim())}`);
+    } else {
+      router.push('/search');
+    }
+  }
 
   return (
     <section aria-labelledby="hero-h" className="border-b border-line">
@@ -32,7 +48,7 @@ export function FirstDealHero() {
         <h1 id="hero-h" className="mt-2 max-w-3xl font-sans text-4xl font-semibold tracking-[-0.02em] sm:text-5xl" style={{ color: 'var(--text)' }}>
           The best cash-flowing property {metroLabel ? `in ${metroLabel}` : 'near you'}, right now.
         </h1>
-        <form action="/search" className="mt-6 flex max-w-md gap-2">
+        <form action="/search" onSubmit={handleSubmit} className="mt-6 flex max-w-md gap-2">
           <label htmlFor="hero-q" className="sr-only">City or ZIP</label>
           <input
             id="hero-q" name="q"

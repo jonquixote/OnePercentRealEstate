@@ -9,6 +9,11 @@ vi.mock('next/image', () => ({
   default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
 }));
 
+// useRouter requires the app-router context, which isn't mounted in this unit test.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 const deal = {
   id: '42', address: '123 Yield St', listing_price: 190000, estimated_rent: 2200,
   ratio: 2200 / 190000, rent_low: 2000, rent_high: 2400, primary_photo: 'p.jpg', zip: '77002',

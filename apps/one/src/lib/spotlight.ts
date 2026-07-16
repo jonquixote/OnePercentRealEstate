@@ -62,6 +62,6 @@ export function shapeSpotlight(row: Record<string, unknown>): Spotlight | null {
     rent_low: row.rent_low != null ? Number(row.rent_low) : null,
     rent_high: row.rent_high != null ? Number(row.rent_high) : null,
     primary_photo: row.primary_photo != null ? String(row.primary_photo) : null,
-    zip: String(row.zip_code),
+    zip: row.zip_code != null ? String(row.zip_code) : '',
   };
 }
