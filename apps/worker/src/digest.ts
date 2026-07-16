@@ -703,7 +703,11 @@ async function sendIndexEmailIfDue(): Promise<void> {
       `SELECT metro_label, pct_clearing FROM index_snapshots WHERE month = $1 ORDER BY pct_clearing DESC LIMIT 10`,
       [month],
     );
-    const asOf = new Date(month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const asOf = new Date(month).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
     const base = env.DIGEST_PUBLIC_URL.replace(/\/$/, '');
     const indexUrl = `${base}/the-1-percent-index`;
 

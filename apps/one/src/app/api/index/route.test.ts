@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toSnapshotRows } from './route';
+import { toSnapshotRows } from '@/lib/index-data';
 
 describe('toSnapshotRows', () => {
   it('maps DB rows to the primitive SnapshotRow shape', () => {

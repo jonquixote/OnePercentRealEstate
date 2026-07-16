@@ -20,11 +20,14 @@ describe('shapeSnapshotRows', () => {
     expect(houston.pct_clearing).toBeCloseTo(0.55, 5);
     expect(houston.month).toBe('2026-07-01');
     expect(tampa.live_count).toBe(0);
+    expect(tampa.clearing_count).toBe(0);
     expect(tampa.pct_clearing).toBe(0);
   });
   it('emits a zero row for a metro absent from the DB result (no gaps)', () => {
     const rows = shapeSnapshotRows([], metros, '2026-07-01');
     expect(rows).toHaveLength(2);
-    expect(rows.every((r) => r.pct_clearing === 0 && r.live_count === 0)).toBe(true);
+    expect(
+      rows.every((r) => r.pct_clearing === 0 && r.live_count === 0 && r.clearing_count === 0),
+    ).toBe(true);
   });
 });

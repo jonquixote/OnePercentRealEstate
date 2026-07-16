@@ -1,11 +1,11 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { rankSnapshots } from "@oper/primitives";
-import { toSnapshotRows } from "@/app/api/index/route";
 import { indexMetroBySlug } from "@/lib/index-metros";
-import pool from "@/lib/db";
+import { getRankedSnapshots } from "@/lib/index-data";
 
-export const revalidate = 3600;
+// Render on demand — index_snapshots is absent at build time (migrations run
+// after deploy), so static prerender / ISR generation would crash the build.
+export const dynamic = "force-dynamic";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://one.octavo.press";
 
@@ -31,22 +31,7 @@ const pct = new Intl.NumberFormat("en-US", {
 });
 
 export default async function IndexPage() {
-  const latest = await pool.query(`SELECT max(month) AS m FROM index_snapshots`);
-  const month: string | null = latest.rows[0]?.m
-    ? new Date(latest.rows[0].m).toISOString().slice(0, 10)
-    : null;
-
-  let rows: ReturnType<typeof rankSnapshots> = [];
-  if (month) {
-    const [cur, prior] = await Promise.all([
-      pool.query(`SELECT * FROM index_snapshots WHERE month = $1`, [month]),
-      pool.query(
-        `SELECT * FROM index_snapshots WHERE month = ($1::date - interval '1 month')`,
-        [month],
-      ),
-    ]);
-    rows = rankSnapshots(toSnapshotRows(cur.rows), toSnapshotRows(prior.rows));
-  }
+  const { rows } = await getRankedSnapshots();
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-14 sm:px-6">

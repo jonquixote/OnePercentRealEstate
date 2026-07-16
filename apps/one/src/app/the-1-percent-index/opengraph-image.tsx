@@ -5,6 +5,10 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt = "The 1% Rule Index";
 
+// Render on demand — the page reads index_snapshots, which does not exist at
+// build time (migrations run after deploy), so static prerender would crash.
+export const dynamic = "force-dynamic";
+
 const TEXT = "#2a2520";
 const INK = "#faf7f2";
 const BRASS = "#9c7a34";
@@ -16,10 +20,10 @@ const pct = new Intl.NumberFormat("en-US", {
 });
 
 export default async function OG() {
-  const latest = await pool.query(`SELECT max(month) AS m FROM index_snapshots`);
-  const month: string | null = latest.rows[0]?.m
-    ? new Date(latest.rows[0].m).toISOString().slice(0, 10)
-    : null;
+  const latest = await pool.query(
+    `SELECT to_char(max(month), 'YYYY-MM-DD') AS m FROM index_snapshots`,
+  );
+  const month: string | null = latest.rows[0]?.m ?? null;
 
   let top: Array<{ label: string; pctClearing: number }> = [];
   if (month) {

@@ -5,6 +5,10 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt = "1% Rule Index — metro";
 
+// Render on demand — index_snapshots is absent at build time; static
+// prerender would crash the build.
+export const dynamic = "force-dynamic";
+
 const TEXT = "#2a2520";
 const INK = "#faf7f2";
 const BRASS = "#9c7a34";
@@ -22,10 +26,10 @@ export default async function OG({
 }) {
   const { metro } = await params;
 
-  const latest = await pool.query(`SELECT max(month) AS m FROM index_snapshots`);
-  const month: string | null = latest.rows[0]?.m
-    ? new Date(latest.rows[0].m).toISOString().slice(0, 10)
-    : null;
+  const latest = await pool.query(
+    `SELECT to_char(max(month), 'YYYY-MM-DD') AS m FROM index_snapshots`,
+  );
+  const month: string | null = latest.rows[0]?.m ?? null;
 
   let label = metro;
   let pctClearing = 0;
