@@ -5,7 +5,16 @@ import { useStats } from '@oper/api-client';
 import { PropertyCard } from '@/components/ui/card';
 import { Loader2, Search, ArrowRight, Map as MapIcon, List as ListIcon } from 'lucide-react';
 import Link from 'next/link';
-import { PropertyMap } from '@/components/PropertyMap';
+import dynamic from 'next/dynamic';
+// Heavy maplibre map lives below the fold — load it client-only and lazily so
+// it stays out of the critical first-paint bundle (Lighthouse perf gate).
+const PropertyMap = dynamic(
+  () => import('@/components/PropertyMap').then((m) => m.PropertyMap),
+  {
+    ssr: false,
+    loading: () => <div className="h-full w-full animate-pulse" style={{ background: 'var(--ink-2)' }} />,
+  },
+);
 import {
   PropertyFilters,
   propertyFilterParsers,
@@ -16,7 +25,7 @@ import { useQueryStates } from 'nuqs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { SavedSearches } from '@/components/SavedSearches';
-import { HomeHero } from '@/components/home/HomeHero';
+import { FirstDealHero } from '@/components/home/FirstDealHero';
 import { FeaturedDeals } from '@/components/home/FeaturedDeals';
 import { useSessionUser } from '@/lib/useSessionUser';
 import { COMPARE_FREE_MAX, COMPARE_MAX } from '@/components/compare/useCompare';
@@ -62,14 +71,6 @@ export default function Dashboard() {
   const strategy = asStrategy(qs.strat);
   const stratMeta = STRATEGY_BY_ID[strategy];
   const { data: stats } = useStats(strategy);
-  const [priceCuts, setPriceCuts] = useState<number | undefined>(undefined);
-  const [medianRent, setMedianRent] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetch('/api/stats/cuts').then(r => r.ok ? r.json().then(d => setPriceCuts(d.count)) : null).catch(() => {});
-    fetch('/api/stats/median-rent').then(r => r.ok ? r.json().then(d => setMedianRent(d.medianRent ?? null)) : null).catch(() => {});
-  }, []);
-
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast, ToastView } = useToast();
 
@@ -140,11 +141,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-ink font-sans text-foreground">
-      <HomeHero
-        stats={stats ?? null}
-        priceCuts={priceCuts}
-        medianRent={medianRent}
-      />
+      {/* First-Deal Magic: ten-second deal reveal leads; the full tool is one
+          scroll away below. */}
+      <FirstDealHero />
       <FeaturedDeals strategy={strategy} rentCalcPending={stats?.rentCalcPending ?? 0} />
       <ReducedRail />
       {stats && (
