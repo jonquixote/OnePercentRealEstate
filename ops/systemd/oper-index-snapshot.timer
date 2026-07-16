@@ -1,0 +1,7 @@
+[Unit]
+Description=Run the 1% Rule Index builder monthly
+[Timer]
+OnCalendar=*-*-01 09:00:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target

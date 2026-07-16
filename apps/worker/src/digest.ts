@@ -20,6 +20,7 @@ import { Pool } from 'pg';
 import { parse, compile } from '@oper/query-lang';
 import { loadEnv } from './env.js';
 import { getLogger, type WorkerLogger } from './logger.js';
+import { indexEmailHtml } from './index-email.js';
 
 type Logger = WorkerLogger;
 
@@ -659,6 +660,78 @@ async function sendWeeklyBriefForUser(
 }
 
 // ---------------------------------------------------------------------------
+// TASK 7 — monthly "State of the 1% Rule" index email
+// ---------------------------------------------------------------------------
+// Sentinel unsubscribe id: `index|<userId>`. The /api/unsubscribe route recognizes
+// this prefix and flips ONLY index_email_optin (not the global email_optout, not
+// saved-search flags) — see apps/one/src/app/api/unsubscribe/route.ts.
+function indexUnsubUrl(userId: string, email: string): string {
+  return unsubUrl(`index|${userId}`, email);
+}
+
+async function sendIndexEmailIfDue(): Promise<void> {
+  const now = new Date();
+  // dedup key IS the kind value itself (`index-YYYY-MM`), so we check the row
+  // directly. getRunDate returns last_run as a plain date, which would never
+  // match the `index-YYYY-MM` key — hence this dedicated existence check.
+  const monthKey = `index-${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const probe = await pool.query(`SELECT 1 FROM digest_runs WHERE kind = $1`, [monthKey]);
+  if (probe.rows.length > 0) return; // already sent this month
+
+  const client = await pool.connect();
+  try {
+    // Opted-in audience for the authority email, decoupled from search-alert consent.
+    const usersRes = await client.query(
+      `SELECT user_id, email FROM user_alert_prefs
+       WHERE email IS NOT NULL AND NOT email_optout AND index_email_optin`,
+    );
+    if (usersRes.rows.length === 0) {
+      await setRun(monthKey);
+      return;
+    }
+
+    // Latest snapshot month + ranked top metros. Keep `month` as the raw SQL
+    // DATE text — round-tripping through a JS Date re-interprets midnight in
+    // local TZ and can shift the day backward, breaking the label and re-query.
+    const latest = await client.query(`SELECT to_char(max(month), 'YYYY-MM-DD') AS m FROM index_snapshots`);
+    const month: string | null = latest.rows[0]?.m ?? null;
+    if (!month) {
+      await setRun(monthKey);
+      return;
+    }
+    const snap = await client.query(
+      `SELECT metro_label, pct_clearing FROM index_snapshots WHERE month = $1 ORDER BY pct_clearing DESC LIMIT 10`,
+      [month],
+    );
+    const asOf = new Date(month).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+    const base = env.DIGEST_PUBLIC_URL.replace(/\/$/, '');
+    const indexUrl = `${base}/the-1-percent-index`;
+
+    for (const { user_id, email } of usersRes.rows) {
+      try {
+        const rows = snap.rows.map((r: any, i: number) => ({
+          metroLabel: escHtml(String(r.metro_label)),
+          pctClearing: Number(r.pct_clearing),
+          rank: i + 1,
+        }));
+        const html = indexEmailHtml(rows, escHtml(asOf), indexUnsubUrl(String(user_id), email), indexUrl);
+        await sendResendEmail(email, 'The 1% Rule Index — ' + asOf, html);
+      } catch (err) {
+        logger.error({ err, userId: user_id }, 'Index email send failed for user');
+      }
+    }
+    logger.info({ users: usersRes.rows.length }, 'Index email pass complete');
+  } finally {
+    client.release();
+    await setRun(monthKey);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Scheduler
 // ---------------------------------------------------------------------------
 async function getRunDate(kind: string): Promise<string | null> {
@@ -710,6 +783,15 @@ async function maybeRun(): Promise<void> {
       } catch (err) {
         logger.error({ err }, 'Weekly brief job error');
       }
+    }
+  }
+
+  // Monthly index email — send on the 1st of the month at the digest hour.
+  if (now.getUTCDate() === 1) {
+    try {
+      await sendIndexEmailIfDue();
+    } catch (err) {
+      logger.error({ err }, 'Index email job error');
     }
   }
 }
