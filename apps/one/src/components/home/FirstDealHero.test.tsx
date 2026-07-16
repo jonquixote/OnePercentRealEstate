@@ -1,45 +1,58 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, act, fireEvent, cleanup } from '@testing-library/react';
 import { FirstDealHero } from './FirstDealHero';
 
-// next/image rejects the relative test-fixture src ("p.jpg") under jsdom; mock it
-// as a plain <img> so the reveal renders. The real component receives absolute URLs.
-vi.mock('next/image', () => ({
-  default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
-}));
-
-const deal = {
-  id: '42', address: '123 Yield St', listing_price: 190000, estimated_rent: 2200,
-  ratio: 2200 / 190000, rent_low: 2000, rent_high: 2400, primary_photo: 'p.jpg', zip: '77002',
+const entry = (zip: string, label: string, addr: string) => ({
+  metro: { label, zip },
+  deal: {
+    id: zip, address: addr, listing_price: 190000, estimated_rent: 2200,
+    ratio: 2200 / 190000, rent_low: 2000, rent_high: 2400,
+    primary_photo: 'p.jpg', zip,
+  },
+});
+const ALL = {
+  metros: [entry('77002', 'Houston', '1 Houston St'), entry('44102', 'Cleveland', '2 Cleveland Ave')],
 };
 
 beforeEach(() => {
-  window.matchMedia = ((q: string) => ({ matches: q.includes('reduce'), media: q,
+  vi.useFakeTimers();
+  vi.clearAllTimers();
+  // Pin the shuffle in useMetroRotation so the carousel starts at index 0
+  // (Houston) and rotates to index 1 (Cleveland) deterministically.
+  vi.spyOn(Math, 'random').mockReturnValue(0);
+  window.matchMedia = ((q: string) => ({ matches: false, media: q,
     addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
     onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
-  vi.stubGlobal('fetch', vi.fn(async () =>
-    ({ ok: true, json: async () => ({ metro: { label: 'Houston', zip: '77002' }, deal }) }) as Response));
+  vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+    ({ ok: true, json: async () => (String(url).includes('all=1') ? ALL : entry('90004', 'Los Angeles', '3 LA Blvd')) }) as Response));
 });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-describe('FirstDealHero', () => {
-  it('reveals the spotlight deal and points the CTA at the metro search', async () => {
+describe('FirstDealHero carousel', () => {
+  it('renders the first metro with the city set in italic serif', async () => {
     render(<FirstDealHero />);
-    await waitFor(() => expect(screen.getByText('123 Yield St')).toBeTruthy());
-    expect(screen.getByText('1.16%')).toBeTruthy(); // 2200/190000 = 1.157%
-    const cta = screen.getByRole('link', { name: /more like this/i });
-    expect(cta.getAttribute('href')).toBe('/search?q=77002');
+    await act(async () => { await Promise.resolve(); });
+    const em = document.querySelector('h2 em');
+    expect(em).not.toBeNull();
+    expect(['Houston', 'Cleveland']).toContain(em!.textContent);
+    expect(screen.getByRole('link', { name: /more like this/i })).toBeTruthy();
   });
-
-  it('re-fetches the spotlight for a typed ZIP on submit (in-place reveal)', async () => {
-    const fetchSpy = vi.fn(async () =>
-      ({ ok: true, json: async () => ({ metro: { label: 'Houston', zip: '77002' }, deal }) }) as Response);
-    vi.stubGlobal('fetch', fetchSpy);
+  it('rotates to another metro after the interval', async () => {
     render(<FirstDealHero />);
-    await waitFor(() => expect(screen.getByText('123 Yield St')).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('City or ZIP'), { target: { value: '77002' } });
-    fireEvent.submit(screen.getByLabelText('City or ZIP').closest('form')!);
-    await waitFor(() =>
-      expect(fetchSpy).toHaveBeenCalledWith('/api/spotlight?zip=77002'));
+    await act(async () => { await Promise.resolve(); });
+    const first = document.querySelector('h2 em')!.textContent;
+    await act(async () => { vi.advanceTimersByTime(6000); });
+    expect(document.querySelector('h2 em')!.textContent).not.toBe(first);
+  });
+  it('typed ZIP pins the carousel to the fetched metro', async () => {
+    render(<FirstDealHero />);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.change(screen.getByLabelText(/city or zip/i), { target: { value: '90004' } });
+    fireEvent.submit(document.querySelector('form')!);
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelector('h2 em')!.textContent).toBe('Los Angeles');
+    await act(async () => { vi.advanceTimersByTime(30000); });
+    expect(document.querySelector('h2 em')!.textContent).toBe('Los Angeles'); // pinned
   });
 });

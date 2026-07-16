@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { buildSpotlightQuery, shapeSpotlight } from '@/lib/spotlight';
+import { buildSpotlightQuery, shapeSpotlight, type SpotlightEntry } from '@/lib/spotlight';
 import { metroFromHeaders } from '@/lib/geo';
-import { metroByZip, type Metro } from '@/lib/metros';
+import { METROS, metroByZip, type Metro } from '@/lib/metros';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,20 +19,28 @@ export function resolveLoc(sp: URLSearchParams, headers: Headers): { metro: Metr
 const CACHE_MS = 5 * 60 * 1000;
 const cache = new Map<string, { at: number; body: unknown }>();
 
-export async function GET(req: NextRequest) {
-  const { metro } = resolveLoc(req.nextUrl.searchParams, req.headers);
+async function spotlightFor(metro: Metro): Promise<SpotlightEntry> {
   const hit = cache.get(metro.zip);
-  if (hit && Date.now() - hit.at < CACHE_MS) return NextResponse.json(hit.body);
-
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.body as SpotlightEntry;
   try {
     const { sql, params } = buildSpotlightQuery({ zip: metro.zip, lat: metro.lat, lng: metro.lng });
     const res = await pool.query(sql, params);
     const deal = res.rows[0] ? shapeSpotlight(res.rows[0]) : null;
-    const body = { metro: { label: metro.label, zip: metro.zip }, deal };
+    const body: SpotlightEntry = { metro: { label: metro.label, zip: metro.zip }, deal };
     cache.set(metro.zip, { at: Date.now(), body });
-    return NextResponse.json(body);
+    return body;
   } catch (err) {
     console.error('/api/spotlight error:', err);
-    return NextResponse.json({ metro: { label: metro.label, zip: metro.zip }, deal: null }, { status: 200 });
+    return { metro: { label: metro.label, zip: metro.zip }, deal: null };
   }
+}
+
+export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get('all') === '1') {
+    const metros: SpotlightEntry[] = [];
+    for (const m of METROS) metros.push(await spotlightFor(m));
+    return NextResponse.json({ metros });
+  }
+  const { metro } = resolveLoc(req.nextUrl.searchParams, req.headers);
+  return NextResponse.json(await spotlightFor(metro));
 }
