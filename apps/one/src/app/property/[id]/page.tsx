@@ -19,6 +19,8 @@ import { NeighborhoodPanel } from '@/components/property/sections/NeighborhoodPa
 import { MarketContextPanel } from '@/components/property/sections/MarketContextPanel';
 import { MiniMap } from '@/components/property/sections/MiniMap';
 import VerdictRailClient from '@/components/property/sections/VerdictRailClient';
+import { IntrinsicValueCard } from '@/components/property/IntrinsicValueCard';
+import { OwnerReturnBreakdown } from '@/components/property/OwnerReturnBreakdown';
 import Breadcrumbs from '@/components/Breadcrumbs';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -398,6 +400,8 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                             capRate={capRate}
                             cashOnCash={cashOnCash}
                         />
+                        <IntrinsicValueCard listingId={String(id)} />
+                        <OwnerReturnBreakdown listingId={String(id)} />
                     </aside>
                 </div>
             </div>
