@@ -41,6 +41,11 @@ export function useMetroRotation(
     return () => clearInterval(t);
   }, [count, pinned, paused, reduceMotion, intervalMs]);
 
+  // If count changes (e.g. entries filtered/reloaded), the shuffled order is
+  // rebuilt but index is not — clamp it back into range so callers reading
+  // order[index] never hit an out-of-bounds slot.
+  useEffect(() => { setIndex(0); }, [count]);
+
   return {
     index,
     order,

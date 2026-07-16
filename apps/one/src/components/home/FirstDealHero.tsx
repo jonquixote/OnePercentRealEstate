@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { CountUpRatio } from './CountUpRatio';
@@ -14,10 +14,10 @@ export function FirstDealHero() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
 
-  const reduceMotion = useMemo(
-    () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
-    [],
-  );
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    setReduceMotion(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+  }, []);
   const rot = useMetroRotation(entries.length, { reduceMotion });
 
   useEffect(() => {
