@@ -14,8 +14,9 @@ describe('buildSpotlightQuery', () => {
   it('only considers live, rentable, priced listings that clear the line', () => {
     const { sql } = buildSpotlightQuery({ zip: '77002', lat: 29.75, lng: -95.36 });
     expect(sql).toMatch(/estimated_rent\s*>\s*0/i);
-    expect(sql).toMatch(/price\s*>\s*0/i);
+    expect(sql).toMatch(/price\s*>=\s*30000/i);
     expect(sql).toMatch(/estimated_rent\s*\/\s*price\s*\)?\s*>=\s*0.01/i);
+    expect(sql).toMatch(/<=\s*0.05/);
   });
 });
 

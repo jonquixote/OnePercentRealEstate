@@ -14,7 +14,15 @@ export type Spotlight = {
 
 // Best live 1%-clearing deal near a point. Ranks by ratio desc but breaks ties
 // toward closer + fresher so the hero feels local and current. All user-derived
-// values are bound params; the 0.01 gate and LIMIT are server constants.
+// values are bound params; the 0.01 gate, sanity bounds, and LIMIT are server
+// constants written literally into the SQL text below (the sql string has zero
+// interpolation, so these are documented here rather than passed as `${}`).
+//
+// Sanity bounds: below this price it's almost always a data error (a $1 "listing"
+// with real rent tops an unbounded ratio sort); above this monthly ratio it's
+// not a believable deal. Verified against prod 2026-07-16: price >= 30000 AND
+// ratio <= 0.05 keeps 93,294 legitimate 1%-clearers with believable top deals
+// (3.2-3.4% in Houston). MIN_PRICE = 30000, MAX_RATIO = 0.05.
 //
 // Schema notes (verified against prod 2026-07-16, see task-2-supplement.md):
 // - the price column is `price`, not `listing_price` (aliased back in SELECT
@@ -29,9 +37,10 @@ export function buildSpotlightQuery(loc: SpotlightLoc): { sql: string; params: u
            ((geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326))) AS dist
     FROM listings
     WHERE listing_type = 'for_sale'
-      AND price > 0
+      AND price >= 30000
       AND estimated_rent > 0
       AND (estimated_rent / price) >= 0.01
+      AND (estimated_rent / price) <= 0.05
       AND geom IS NOT NULL
       AND COALESCE(primary_photo, images->>0) IS NOT NULL
       AND (zip_code = $1 OR (geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326)) < 0.6)
