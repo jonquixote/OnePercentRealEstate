@@ -33,17 +33,16 @@ export type Spotlight = {
 export function buildSpotlightQuery(loc: SpotlightLoc): { sql: string; params: unknown[] } {
   const sql = `
     SELECT id, address, zip_code, price AS listing_price, estimated_rent, rent_low, rent_high,
-           COALESCE(primary_photo, images->>0) AS primary_photo,
-           ((geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326))) AS dist
+           COALESCE(primary_photo, images->>0) AS primary_photo
     FROM listings
     WHERE listing_type = 'for_sale'
       AND price >= 30000
       AND estimated_rent > 0
-      AND (estimated_rent / price) >= 0.01
-      AND (estimated_rent / price) <= 0.05
+      AND rent_price_ratio >= 0.01
+      AND rent_price_ratio <= 0.05
       AND geom IS NOT NULL
       AND COALESCE(primary_photo, images->>0) IS NOT NULL
-      AND (zip_code = $1 OR (geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326)) < 0.6)
+      AND (zip_code = $1 OR ST_DWithin(geom, ST_SetSRID(ST_MakePoint($2, $3), 4326), 0.6))
     ORDER BY rent_price_ratio DESC,
              created_at DESC
     LIMIT 1`;

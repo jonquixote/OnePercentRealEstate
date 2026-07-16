@@ -6,7 +6,7 @@ const pct = new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDi
 export function CountUpRatio({ value, durationMs = 900 }: { value: number; durationMs?: number }) {
   const [shown, setShown] = useState(value);
   useEffect(() => {
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
     if (reduce) { setShown(value); return; }
     let raf = 0;
     const start = performance.now();

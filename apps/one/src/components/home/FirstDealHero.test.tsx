@@ -24,7 +24,7 @@ beforeEach(() => {
 
 describe('FirstDealHero', () => {
   it('reveals the spotlight deal and points the CTA at the metro search', async () => {
-    render(<FirstDealHero initialMetroLabel="Houston" />);
+    render(<FirstDealHero />);
     await waitFor(() => expect(screen.getByText('123 Yield St')).toBeTruthy());
     expect(screen.getByText('1.16%')).toBeTruthy(); // 2200/190000 = 1.157%
     const cta = screen.getByRole('link', { name: /more like this/i });

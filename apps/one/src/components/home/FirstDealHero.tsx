@@ -7,17 +7,15 @@ import type { Spotlight } from '@/lib/spotlight';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
-export function FirstDealHero({ initialMetroLabel }: { initialMetroLabel?: string }) {
-  const [metroLabel, setMetroLabel] = useState(initialMetroLabel ?? '');
+export function FirstDealHero() {
+  const [metroLabel, setMetroLabel] = useState('');
   const [deal, setDeal] = useState<Spotlight | null>(null);
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState('');
 
-  async function load(zip?: string) {
+  async function load() {
     setLoading(true);
     try {
-      const url = zip ? `/api/spotlight?zip=${encodeURIComponent(zip)}` : '/api/spotlight';
-      const res = await fetch(url);
+      const res = await fetch('/api/spotlight');
       const data = await res.json();
       setMetroLabel(data.metro?.label ?? '');
       setDeal(data.deal ?? null);
@@ -27,12 +25,6 @@ export function FirstDealHero({ initialMetroLabel }: { initialMetroLabel?: strin
   }
   useEffect(() => { void load(); }, []);
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const zip = q.trim().match(/^\d{5}$/)?.[0];
-    void load(zip);
-  }
-
   return (
     <section aria-labelledby="hero-h" className="border-b border-line">
       <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8">
@@ -40,10 +32,10 @@ export function FirstDealHero({ initialMetroLabel }: { initialMetroLabel?: strin
         <h1 id="hero-h" className="mt-2 max-w-3xl font-sans text-4xl font-semibold tracking-[-0.02em] sm:text-5xl" style={{ color: 'var(--text)' }}>
           The best cash-flowing property {metroLabel ? `in ${metroLabel}` : 'near you'}, right now.
         </h1>
-        <form onSubmit={onSubmit} action="/search" className="mt-6 flex max-w-md gap-2">
+        <form action="/search" className="mt-6 flex max-w-md gap-2">
           <label htmlFor="hero-q" className="sr-only">City or ZIP</label>
           <input
-            id="hero-q" name="q" value={q} onChange={(e) => setQ(e.target.value)}
+            id="hero-q" name="q"
             placeholder="Try a ZIP — e.g. 77002"
             className="mat h-11 flex-1 px-3 text-[15px]" style={{ color: 'var(--text)' }}
           />
