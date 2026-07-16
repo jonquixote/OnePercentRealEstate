@@ -12,6 +12,8 @@ export type Spotlight = {
   zip: string;
 };
 
+export type SpotlightEntry = { metro: { label: string; zip: string }; deal: Spotlight | null };
+
 // Best live 1%-clearing deal near a point. Ranks by ratio desc but breaks ties
 // toward closer + fresher so the hero feels local and current. All user-derived
 // values are bound params; the 0.01 gate, sanity bounds, and LIMIT are server
