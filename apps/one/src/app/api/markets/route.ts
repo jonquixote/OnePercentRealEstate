@@ -17,7 +17,32 @@ interface MarketRow {
   hpi5y: number | null;
 }
 
+// The aggregation below scans the full listings table (~1M rows, two
+// percentile_conts per ZIP): ~25s on prod. Market medians move slowly, so
+// serve from an in-process cache (same pattern as /api/spotlight) and only
+// recompute when it expires. Stale-while-revalidate: after expiry the first
+// request returns the stale body immediately and refreshes in the background,
+// so no visitor ever waits on the 25s query once the cache is primed.
+const CACHE_MS = 15 * 60 * 1000;
+let cached: { at: number; body: { markets: MarketRow[] } } | null = null;
+let refreshing: Promise<void> | null = null;
+
 export async function GET() {
+  if (cached) {
+    if (Date.now() - cached.at >= CACHE_MS && !refreshing) {
+      refreshing = refreshMarkets().finally(() => {
+        refreshing = null;
+      });
+    }
+    return NextResponse.json(cached.body);
+  }
+  await (refreshing ??= refreshMarkets().finally(() => {
+    refreshing = null;
+  }));
+  return NextResponse.json(cached ?? { markets: [] });
+}
+
+async function refreshMarkets(): Promise<void> {
   try {
     const { rows } = await pool.query<{
       zip_code: string;
@@ -67,9 +92,10 @@ export async function GET() {
       hpi5y: r.hpi5y != null ? Number(r.hpi5y) : null,
     }));
 
-    return NextResponse.json({ markets });
+    cached = { at: Date.now(), body: { markets } };
   } catch (error) {
     console.warn('[api/markets] failed:', error);
-    return NextResponse.json({ markets: [] }, { status: 200 });
+    // Keep any previous good body (serve stale on refresh failure); only fall
+    // through to empty when there has never been a successful load.
   }
 }
