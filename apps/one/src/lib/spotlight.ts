@@ -44,8 +44,7 @@ export function buildSpotlightQuery(loc: SpotlightLoc): { sql: string; params: u
       AND geom IS NOT NULL
       AND COALESCE(primary_photo, images->>0) IS NOT NULL
       AND (zip_code = $1 OR (geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326)) < 0.6)
-    ORDER BY (estimated_rent / price) DESC,
-             (geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326)) ASC,
+    ORDER BY rent_price_ratio DESC,
              created_at DESC
     LIMIT 1`;
   return { sql, params: [loc.zip, loc.lng, loc.lat] };
