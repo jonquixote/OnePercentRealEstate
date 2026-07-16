@@ -13,6 +13,7 @@ export {
   useHotkeyRegistry,
 } from "./hotkeys";
 export * from './intrinsic';
+export * from './index-score';
 export type { HotkeyOptions, HotkeyHelpProps } from "./hotkeys";
 export {
   rentToPriceMonthly,

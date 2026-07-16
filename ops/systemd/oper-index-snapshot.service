@@ -1,0 +1,15 @@
+[Unit]
+Description=OnePercent — build monthly 1% Rule Index snapshot
+After=oper-postgres.service
+Requires=oper-postgres.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+EnvironmentFile=-/etc/oper-role-worker.env
+ExecStart=/opt/onepercent/apps/worker/node_modules/.bin/tsx apps/worker/src/index-snapshot.ts
+
+[Install]
+WantedBy=multi-user.target

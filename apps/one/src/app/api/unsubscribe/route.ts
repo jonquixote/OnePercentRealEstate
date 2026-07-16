@@ -36,9 +36,22 @@ export async function GET(request: NextRequest) {
   const email = request.nextUrl.searchParams.get('e') ?? '';
 
   const ok = token && id && email && verifyToken(token, id, email);
+  let unsubbedIndex = false;
 
   if (ok) {
     try {
+      // TASK 7: index-email sentinel unsubscribe — flip ONLY index_email_optin,
+      // leaving search-alert consent and the global email_optout untouched.
+      if (id.startsWith('index|')) {
+        const userId = id.slice('index|'.length);
+        await pool.query(
+          `INSERT INTO user_alert_prefs (user_id, index_email_optin)
+           VALUES ($1, false)
+           ON CONFLICT (user_id) DO UPDATE SET index_email_optin = false`,
+          [userId],
+        );
+        unsubbedIndex = true;
+      } else {
       const owner = await pool.query(
         'SELECT user_id FROM saved_searches WHERE id = $1',
         [id]
@@ -78,6 +91,7 @@ export async function GET(request: NextRequest) {
           );
         }
       }
+      }
     } catch (err) {
       console.error('Unsubscribe error:', err);
       return NextResponse.json({ error: 'Failed to unsubscribe' }, { status: 500 });
@@ -85,7 +99,9 @@ export async function GET(request: NextRequest) {
   }
 
   const body = ok
-    ? `<p style="font-family:sans-serif">You're unsubscribed. We won't email these digests again.</p>`
+    ? `<p style="font-family:sans-serif">You're unsubscribed. We won't email ${
+        unsubbedIndex ? 'the 1% Rule Index' : 'these digests'
+      } again.</p>`
     : `<p style="font-family:sans-serif;color:#b91c1c">This unsubscribe link is invalid or expired.</p>`;
 
   return new NextResponse(
