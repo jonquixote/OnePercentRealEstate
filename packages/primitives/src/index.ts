@@ -12,6 +12,7 @@ export {
   HotkeyHelp,
   useHotkeyRegistry,
 } from "./hotkeys";
+export * from './intrinsic';
 export type { HotkeyOptions, HotkeyHelpProps } from "./hotkeys";
 export {
   rentToPriceMonthly,
