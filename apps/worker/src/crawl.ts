@@ -603,7 +603,7 @@ async function updateBlockState(parentLog: WorkerLogger): Promise<void> {
   try {
     await pool.query(
       `UPDATE crawler_block_state
-          SET cooloff_until = $1, blocked_at = CASE WHEN $1 IS NULL THEN NULL ELSE COALESCE(blocked_at, now()) END,
+          SET cooloff_until = $1::timestamptz, blocked_at = CASE WHEN $1::timestamptz IS NULL THEN NULL ELSE COALESCE(blocked_at, now()) END,
               consecutive_blocks = $2, updated_at = now()
         WHERE id = 1`,
       [fleetBlocked ? new Date(Math.min(...cooling.map((e) => e.cooloffUntil))) : null, cooling.length],
