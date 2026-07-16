@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { CountUpRatio } from './CountUpRatio';
@@ -9,18 +8,21 @@ import type { Spotlight } from '@/lib/spotlight';
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
 export function FirstDealHero() {
-  const router = useRouter();
   const [metroLabel, setMetroLabel] = useState('');
+  const [metroZip, setMetroZip] = useState('');
   const [deal, setDeal] = useState<Spotlight | null>(null);
   const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
 
-  async function load() {
+  async function load(zip?: string) {
     setLoading(true);
     try {
-      const res = await fetch('/api/spotlight');
+      const url = zip ? `/api/spotlight?zip=${encodeURIComponent(zip)}` : '/api/spotlight';
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setMetroLabel(data.metro?.label ?? '');
+      setMetroZip(data.metro?.zip ?? '');
       setDeal(data.deal ?? null);
     } catch (err) {
       console.error('Failed to load spotlight deal:', err);
@@ -31,14 +33,13 @@ export function FirstDealHero() {
   }
   useEffect(() => { void load(); }, []);
 
+  // Typed-ZIP reveal: re-fetch the spotlight for that ZIP and re-reveal in place
+  // (client-side, no full reload). `action="/search"` is the no-JS fallback; we
+  // only reach it if JS is disabled since we preventDefault below.
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const q = new FormData(e.currentTarget).get('q');
-    if (typeof q === 'string' && q.trim()) {
-      router.push(`/search?q=${encodeURIComponent(q.trim())}`);
-    } else {
-      router.push('/search');
-    }
+    const zip = q.trim().match(/^\d{5}$/)?.[0];
+    if (zip) void load(zip);
   }
 
   return (
@@ -51,7 +52,7 @@ export function FirstDealHero() {
         <form action="/search" onSubmit={handleSubmit} className="mt-6 flex max-w-md gap-2">
           <label htmlFor="hero-q" className="sr-only">City or ZIP</label>
           <input
-            id="hero-q" name="q"
+            id="hero-q" name="q" value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Try a ZIP — e.g. 77002"
             className="mat h-11 flex-1 px-3 text-[15px]" style={{ color: 'var(--text)' }}
           />
@@ -95,7 +96,7 @@ export function FirstDealHero() {
                   <p className="text-[13px]" style={{ color: 'var(--mute)' }}>
                     {usd0.format(deal.listing_price)} · est. rent {usd0.format(deal.estimated_rent)}/mo
                   </p>
-                  <Link href={`/search?q=${deal.zip}`}
+                  <Link href={`/search?q=${deal.zip || metroZip}`}
                     className="mt-3 inline-flex h-10 items-center justify-center rounded-[6px] px-4 text-[14px] font-semibold"
                     style={{ background: 'var(--brass)', color: 'var(--ink)' }}>
                     See more like this →
