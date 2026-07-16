@@ -81,7 +81,7 @@ export function FirstDealHero() {
               in{' '}
               <em
                 key={current!.metro.zip}
-                className="font-serif italic font-medium animate-in fade-in slide-in-from-bottom-1 duration-500"
+                className="font-display italic font-medium animate-in fade-in slide-in-from-bottom-1 duration-500"
                 style={{ color: 'var(--brass)' }}
               >
                 {metroLabel}
