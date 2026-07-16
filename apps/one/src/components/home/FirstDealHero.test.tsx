@@ -28,6 +28,6 @@ describe('FirstDealHero', () => {
     await waitFor(() => expect(screen.getByText('123 Yield St')).toBeTruthy());
     expect(screen.getByText('1.16%')).toBeTruthy(); // 2200/190000 = 1.157%
     const cta = screen.getByRole('link', { name: /more like this/i });
-    expect(cta.getAttribute('href')).toBe('/search?zip=77002');
+    expect(cta.getAttribute('href')).toBe('/search?q=77002');
   });
 });

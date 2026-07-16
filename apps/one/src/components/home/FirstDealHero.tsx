@@ -54,13 +54,30 @@ export function FirstDealHero({ initialMetroLabel }: { initialMetroLabel?: strin
 
         <div className="mt-10">
           {loading ? (
-            <div className="mat aspect-[16/7] max-w-3xl animate-pulse" aria-hidden />
+            <div className="mat max-w-3xl overflow-hidden p-0 animate-pulse" aria-hidden>
+              {/* Skeleton mirrors the revealed card box exactly (same mat/grid/aspect)
+                  so the reveal causes zero layout shift (Lighthouse CLS). */}
+              <div className="grid sm:grid-cols-[1.2fr_1fr]">
+                <div className="relative aspect-[4/3]" style={{ background: 'var(--ink-2)' }} />
+                <div className="flex flex-col justify-center gap-2 p-6">
+                  <div className="h-4 w-1/3 rounded" style={{ background: 'var(--ink-2)' }} />
+                  <div className="h-10 w-2/3 rounded" style={{ background: 'var(--ink-2)' }} />
+                  <div className="h-4 w-1/2 rounded" style={{ background: 'var(--ink-2)' }} />
+                  <div className="mt-3 h-10 w-40 rounded-[6px]" style={{ background: 'var(--ink-2)' }} />
+                </div>
+              </div>
+            </div>
           ) : deal ? (
             <article className="mat max-w-3xl overflow-hidden p-0 animate-in fade-in slide-in-from-bottom-3 duration-500">
               <div className="grid sm:grid-cols-[1.2fr_1fr]">
                 <div className="relative aspect-[4/3]">
+                  {/* unoptimized: primary_photo is a free-form scraper URL (COALESCE of
+                      primary_photo / images->>0) that can come from any host; the tight
+                      next.config remotePatterns allowlist would 400 on unlisted hosts.
+                      One hero image, so we skip the optimizer rather than widen the
+                      security-sensitive allowlist. */}
                   {deal.primary_photo && (
-                    <Image src={deal.primary_photo} alt={deal.address} fill className="object-cover" sizes="(max-width:640px) 100vw, 400px" />
+                    <Image src={deal.primary_photo} alt={deal.address} fill className="object-cover" sizes="(max-width:640px) 100vw, 400px" unoptimized />
                   )}
                 </div>
                 <div className="flex flex-col justify-center gap-2 p-6">
@@ -70,7 +87,7 @@ export function FirstDealHero({ initialMetroLabel }: { initialMetroLabel?: strin
                   <p className="text-[13px]" style={{ color: 'var(--mute)' }}>
                     {usd0.format(deal.listing_price)} · est. rent {usd0.format(deal.estimated_rent)}/mo
                   </p>
-                  <Link href={`/search?zip=${deal.metroZip}`}
+                  <Link href={`/search?q=${deal.metroZip}`}
                     className="mt-3 inline-flex h-10 items-center justify-center rounded-[6px] px-4 text-[14px] font-semibold"
                     style={{ background: 'var(--brass)', color: 'var(--ink)' }}>
                     See more like this →
