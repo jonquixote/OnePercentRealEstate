@@ -23,15 +23,14 @@ describe('buildSpotlightQuery', () => {
 describe('shapeSpotlight', () => {
   it('computes ratio as a fraction and passes through band', () => {
     const s = shapeSpotlight(
-      { id: 1, address: '1 Main', listing_price: '200000', estimated_rent: '2200',
+      { id: 1, address: '1 Main', zip_code: '77002', listing_price: '200000', estimated_rent: '2200',
         rent_low: '2000', rent_high: '2400', primary_photo: 'x.jpg' },
-      '77002',
     );
     expect(s).not.toBeNull();
     expect(s!.ratio).toBeCloseTo(0.011, 3);
-    expect(s!.metroZip).toBe('77002');
+    expect(s!.zip).toBe('77002');
   });
   it('returns null when price or rent missing (never a broken hero)', () => {
-    expect(shapeSpotlight({ id: 1, address: 'x', listing_price: null, estimated_rent: '2200' }, '77002')).toBeNull();
+    expect(shapeSpotlight({ id: 1, address: 'x', listing_price: null, estimated_rent: '2200' })).toBeNull();
   });
 });

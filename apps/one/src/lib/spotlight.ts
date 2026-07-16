@@ -9,7 +9,7 @@ export type Spotlight = {
   rent_low: number | null;
   rent_high: number | null;
   primary_photo: string | null;
-  metroZip: string;
+  zip: string;
 };
 
 // Best live 1%-clearing deal near a point. Ranks by ratio desc but breaks ties
@@ -32,7 +32,7 @@ export type Spotlight = {
 //   the `images` jsonb array, so we COALESCE to the first image.
 export function buildSpotlightQuery(loc: SpotlightLoc): { sql: string; params: unknown[] } {
   const sql = `
-    SELECT id, address, price AS listing_price, estimated_rent, rent_low, rent_high,
+    SELECT id, address, zip_code, price AS listing_price, estimated_rent, rent_low, rent_high,
            COALESCE(primary_photo, images->>0) AS primary_photo,
            ((geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326))) AS dist
     FROM listings
@@ -50,7 +50,7 @@ export function buildSpotlightQuery(loc: SpotlightLoc): { sql: string; params: u
   return { sql, params: [loc.zip, loc.lng, loc.lat] };
 }
 
-export function shapeSpotlight(row: Record<string, unknown>, metroZip: string): Spotlight | null {
+export function shapeSpotlight(row: Record<string, unknown>): Spotlight | null {
   const price = Number(row.listing_price);
   const rent = Number(row.estimated_rent);
   if (!(price > 0) || !(rent > 0)) return null;
@@ -63,6 +63,6 @@ export function shapeSpotlight(row: Record<string, unknown>, metroZip: string): 
     rent_low: row.rent_low != null ? Number(row.rent_low) : null,
     rent_high: row.rent_high != null ? Number(row.rent_high) : null,
     primary_photo: row.primary_photo != null ? String(row.primary_photo) : null,
-    metroZip,
+    zip: String(row.zip_code),
   };
 }

@@ -87,7 +87,7 @@ export function FirstDealHero({ initialMetroLabel }: { initialMetroLabel?: strin
                   <p className="text-[13px]" style={{ color: 'var(--mute)' }}>
                     {usd0.format(deal.listing_price)} · est. rent {usd0.format(deal.estimated_rent)}/mo
                   </p>
-                  <Link href={`/search?q=${deal.metroZip}`}
+                  <Link href={`/search?q=${deal.zip}`}
                     className="mt-3 inline-flex h-10 items-center justify-center rounded-[6px] px-4 text-[14px] font-semibold"
                     style={{ background: 'var(--brass)', color: 'var(--ink)' }}>
                     See more like this →

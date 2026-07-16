@@ -11,7 +11,7 @@ vi.mock('next/image', () => ({
 
 const deal = {
   id: '42', address: '123 Yield St', listing_price: 190000, estimated_rent: 2200,
-  ratio: 2200 / 190000, rent_low: 2000, rent_high: 2400, primary_photo: 'p.jpg', metroZip: '77002',
+  ratio: 2200 / 190000, rent_low: 2000, rent_high: 2400, primary_photo: 'p.jpg', zip: '77002',
 };
 
 beforeEach(() => {

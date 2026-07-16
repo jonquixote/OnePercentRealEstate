@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   try {
     const { sql, params } = buildSpotlightQuery({ zip: metro.zip, lat: metro.lat, lng: metro.lng });
     const res = await pool.query(sql, params);
-    const deal = res.rows[0] ? shapeSpotlight(res.rows[0], metro.zip) : null;
+    const deal = res.rows[0] ? shapeSpotlight(res.rows[0]) : null;
     const body = { metro: { label: metro.label, zip: metro.zip }, deal };
     cache.set(metro.zip, { at: Date.now(), body });
     return NextResponse.json(body);
