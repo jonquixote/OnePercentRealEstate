@@ -10,6 +10,10 @@ describe('intrinsicValue (income approach)', () => {
   it('returns 0 for a non-positive cap rate (avoid divide-by-zero blowups)', () => {
     expect(intrinsicValue({ monthlyRent: 2000, opexRatio: 0.45, marketCapRate: 0 })).toBe(0);
   });
+  it('returns 0 when opex ratio >= 1 (non-positive NOI, no negative value)', () => {
+    expect(intrinsicValue({ monthlyRent: 2000, opexRatio: 1, marketCapRate: 0.066 })).toBe(0);
+    expect(intrinsicValue({ monthlyRent: 2000, opexRatio: 1.2, marketCapRate: 0.066 })).toBe(0);
+  });
 });
 
 describe('marginOfSafety', () => {

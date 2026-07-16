@@ -82,7 +82,7 @@ export async function fetchValuationRow(id: string): Promise<Record<string, unkn
             NULLIF(max(hpi) FILTER (WHERE year = (SELECT max(year) FROM fhfa_zip_hpi h2 WHERE h2.zip5 = l.zip_code)), 0)
             / NULLIF(max(hpi) FILTER (WHERE year = (SELECT max(year) - 5 FROM fhfa_zip_hpi h3 WHERE h3.zip5 = l.zip_code)), 0),
             1.0/5) - 1 FROM fhfa_zip_hpi f WHERE f.zip5 = l.zip_code) AS hpi_cagr_5yr
-     FROM l, LATERAL resolve_rule(l.property_type, 'standard', 'buy_hold') r`,
+     FROM l LEFT JOIN LATERAL resolve_rule(l.property_type, 'standard', 'buy_hold') r ON true`,
     [id],
   );
   return res.rows[0] ?? null;

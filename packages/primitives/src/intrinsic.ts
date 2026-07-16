@@ -13,12 +13,12 @@ export type IntrinsicInput = {
 export function intrinsicValue({ monthlyRent, opexRatio, marketCapRate }: IntrinsicInput): number {
   if (!(marketCapRate > 0) || !(monthlyRent > 0)) return 0;
   const noi = monthlyRent * 12 * (1 - opexRatio);
-  return noi / marketCapRate;
+  return noi > 0 ? noi / marketCapRate : 0;
 }
 
 /** Cushion between value and price, as a fraction of value. Positive = discount. */
 export function marginOfSafety(intrinsic: number, price: number): number {
-  if (!(intrinsic > 0)) return 0;
+  if (!(intrinsic > 0) || !(price > 0)) return 0;
   return (intrinsic - price) / intrinsic;
 }
 
@@ -58,8 +58,9 @@ function remainingBalance(principal: number, annualRate: number, monthsPaid: num
  * equityMultiple = (final equity + cumulative cash flow) / cash invested.
  */
 export function ownerReturn10yr(i: OwnerReturnInput): OwnerReturn {
-  const loan = i.price * (1 - i.downPct);
-  const cashInvested = i.price * i.downPct;
+  const downPct = Math.max(0, Math.min(1, i.downPct));
+  const loan = i.price * (1 - downPct);
+  const cashInvested = i.price * downPct;
   const annualDebtService = monthlyPayment(loan, i.mortgageRate) * 12;
 
   const years: OwnerReturnYear[] = [];
