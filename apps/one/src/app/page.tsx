@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { SavedSearches } from '@/components/SavedSearches';
 import { FirstDealHero } from '@/components/home/FirstDealHero';
+import { HomeHero } from '@/components/home/HomeHero';
 import { FeaturedDeals } from '@/components/home/FeaturedDeals';
 import { useSessionUser } from '@/lib/useSessionUser';
 import { COMPARE_FREE_MAX, COMPARE_MAX } from '@/components/compare/useCompare';
@@ -71,6 +72,21 @@ export default function Dashboard() {
   const strategy = asStrategy(qs.strat);
   const stratMeta = STRATEGY_BY_ID[strategy];
   const { data: stats } = useStats(strategy);
+  const [priceCuts, setPriceCuts] = useState<number | undefined>(undefined);
+  const [medianRent, setMedianRent] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/stats/cuts')
+      .then((r) => r.json())
+      .then((d) => { if (alive) setPriceCuts(typeof d?.priceCuts === 'number' ? d.priceCuts : undefined); })
+      .catch(() => {});
+    fetch('/api/stats/median-rent')
+      .then((r) => r.json())
+      .then((d) => { if (alive) setMedianRent(typeof d?.medianRent === 'number' ? d.medianRent : null); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast, ToastView } = useToast();
 
@@ -141,9 +157,8 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-ink font-sans text-foreground">
-      {/* First-Deal Magic: ten-second deal reveal leads; the full tool is one
-          scroll away below. */}
-      <FirstDealHero />
+      {/* Editorial hero (top of page) */}
+      <HomeHero stats={stats ?? null} priceCuts={priceCuts} medianRent={medianRent} />
       <FeaturedDeals strategy={strategy} rentCalcPending={stats?.rentCalcPending ?? 0} />
       <ReducedRail />
       {stats && (
@@ -331,6 +346,10 @@ export default function Dashboard() {
           </div>
         </div>
       </section>
+
+      {/* First-Deal Magic: ten-second deal reveal, placed low on the page so
+          the editorial hero leads and the full tool follows the rail. */}
+      <FirstDealHero />
 
       <footer className="border-t border-line bg-ink">
         <div className="mx-auto max-w-7xl px-6 py-7 lg:px-8">

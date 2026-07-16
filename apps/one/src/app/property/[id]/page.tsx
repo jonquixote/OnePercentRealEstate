@@ -19,6 +19,10 @@ import { NeighborhoodPanel } from '@/components/property/sections/NeighborhoodPa
 import { MarketContextPanel } from '@/components/property/sections/MarketContextPanel';
 import { MiniMap } from '@/components/property/sections/MiniMap';
 import VerdictRailClient from '@/components/property/sections/VerdictRailClient';
+import { ValuationPanel } from '@/components/property/ValuationPanel';
+import { fetchValuationRow, computeValuation } from '@/lib/valuation';
+import { shapeResponse } from '@/app/api/valuation/[id]/route';
+import { getSessionUser } from '@/lib/auth';
 import Breadcrumbs from '@/components/Breadcrumbs';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -71,9 +75,15 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     if (!property) return <NotFound />;
 
     const zip = property.raw_data?.zip_code;
-    const [hudData, demographics] = await Promise.all([
+    const [hudData, demographics, valuation] = await Promise.all([
         zip ? getHudBenchmark(zip).catch(() => null) : null,
         zip ? getDemographics(zip).catch(() => null) : null,
+        (async () => {
+            const row = await fetchValuationRow(id).catch(() => null);
+            if (!row) return null;
+            const isPro = (await getSessionUser())?.tier === 'pro';
+            return shapeResponse(computeValuation(row), isPro);
+        })(),
     ]);
 
     const raw = property.raw_data || {};
@@ -398,6 +408,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                             capRate={capRate}
                             cashOnCash={cashOnCash}
                         />
+                        <ValuationPanel valuation={valuation} />
                     </aside>
                 </div>
             </div>

@@ -65,8 +65,9 @@ export default function Header() {
   const closeMobile = useCallback(() => setMobileOpen(false), []);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-line bg-ink/85 backdrop-blur supports-[backdrop-filter]:bg-ink/70">
-      <nav className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6 lg:px-8" aria-label="Global">
+    <>
+      <header className="sticky top-0 z-50 border-b border-line bg-ink/85 backdrop-blur supports-[backdrop-filter]:bg-ink/70">
+        <nav className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-6 lg:px-8" aria-label="Global">
         {/* Brand — the line runs through the diamond */}
         <Link href="/" className="-m-1.5 p-1.5 flex items-center gap-2" aria-label="OnePercent home">
           <span aria-hidden className="relative inline-flex h-4 w-4 items-center">
@@ -135,23 +136,26 @@ export default function Header() {
           </button>
         </div>
       </nav>
+      </header>
 
-      {/* Mobile sheet */}
+      {/* Mobile sheet — rendered OUTSIDE the sticky/blurred header so it is a
+          top-level fixed overlay (the header's backdrop-blur+z-50 would
+          otherwise trap it in a stacking context below page content). */}
       {mobileOpen && (
         <div
           id="mobile-sheet"
           role="dialog"
           aria-modal="true"
           aria-label="Menu"
-          className="fixed inset-0 z-[60] lg:hidden"
+          className="fixed inset-0 z-[100] lg:hidden"
           ref={sheetRef}
         >
           <div
-            className="absolute inset-0 bg-[rgba(42,37,32,0.3)]"
+            className="absolute inset-0 bg-[rgba(42,37,32,0.5)]"
             onClick={closeMobile}
             aria-hidden
           />
-          <div className="absolute inset-y-0 right-0 flex w-[84%] max-w-sm flex-col bg-ink shadow-[var(--shadow-pop)] border-l border-line">
+          <div className="absolute inset-y-0 right-0 flex w-[84%] max-w-sm flex-col bg-ink-panel shadow-[0_24px_70px_rgba(42,37,32,0.35)] border-l border-line">
             <div className="flex items-center justify-between border-b border-line px-6 py-4">
               <span className="text-[15px] font-semibold text-foreground">OnePercent</span>
               <button
@@ -234,6 +238,6 @@ export default function Header() {
           </div>
         </div>
       )}
-    </header>
+    </>
   );
 }
