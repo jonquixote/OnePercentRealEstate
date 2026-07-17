@@ -45,4 +45,15 @@ describe('useMetroRotation', () => {
     expect(rm.result.current.index).toBe(0);
     expect(single.result.current.index).toBe(0);
   });
+
+  it('startIndex leads the tour; remaining entries still all appear', () => {
+    const { result } = renderHook(() => useMetroRotation(4, { intervalMs: 6000, startIndex: 2 }));
+    expect(result.current.order[result.current.index]).toBe(2);
+    const seen = new Set<number>();
+    for (let k = 0; k < 4; k++) {
+      seen.add(result.current.order[result.current.index]);
+      act(() => { vi.advanceTimersByTime(6000); });
+    }
+    expect(seen).toEqual(new Set([0, 1, 2, 3]));
+  });
 });
