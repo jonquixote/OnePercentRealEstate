@@ -18,16 +18,32 @@ export function FirstDealHero() {
   useEffect(() => {
     setReduceMotion(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
   }, []);
-  const rot = useMetroRotation(entries.length, { reduceMotion });
+  const [startIndex, setStartIndex] = useState<number | undefined>(undefined);
+  const rot = useMetroRotation(entries.length, { reduceMotion, startIndex });
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch('/api/spotlight?all=1');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (alive) setEntries((data.metros ?? []).filter((e: SpotlightEntry) => e.deal));
+        // The geo fetch carries the browser's IP through nginx, which injects
+        // the visitor's x-geo-* headers server-side — so we learn the local
+        // metro without trusting anything client-supplied. It runs in parallel
+        // with the batch; the batch render never waits on it.
+        const [allRes, geoRes] = await Promise.allSettled([
+          fetch('/api/spotlight?all=1'),
+          fetch('/api/spotlight'),
+        ]);
+        if (!alive) return;
+        if (allRes.status === 'fulfilled' && allRes.value.ok) {
+          const data = await allRes.value.json();
+          const loaded = (data.metros ?? []).filter((e: SpotlightEntry) => e.deal);
+          setEntries(loaded);
+          if (geoRes.status === 'fulfilled' && geoRes.value.ok) {
+            const g = await geoRes.value.json();
+            const i = loaded.findIndex((e: SpotlightEntry) => e.metro.zip === g.metro?.zip);
+            if (i >= 0) setStartIndex(i);
+          }
+        }
       } catch (err) {
         console.error('Failed to load spotlight metros:', err);
       } finally {

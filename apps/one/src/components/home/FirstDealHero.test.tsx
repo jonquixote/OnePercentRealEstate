@@ -55,4 +55,20 @@ describe('FirstDealHero carousel', () => {
     await act(async () => { vi.advanceTimersByTime(30000); });
     expect(document.querySelector('h2 em')!.textContent).toBe('Los Angeles'); // pinned
   });
+  it('starts the tour on the geo-resolved metro', async () => {
+    // Geo call resolves to Cleveland; the batch (all=1) is Houston, Cleveland.
+    // random=0.6 makes shuffle keep order [Houston, Cleveland] so index 0 is
+    // Houston WITHOUT geo-start — that isolates the geo-start behavior.
+    vi.spyOn(Math, 'random').mockReturnValue(0.6);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      ({ ok: true, json: async () => (String(url).includes('all=1')
+        ? ALL
+        : { metro: { label: 'Cleveland', zip: '44102' }, deal: ALL.metros[1].deal }) }) as Response));
+    render(<FirstDealHero />);
+    // Flush only the load microtasks — do NOT advance the 6s rotation timer.
+    await act(async () => { await Promise.resolve(); });
+    // Without geo-start the first city would be Houston (index 0); with it,
+    // the tour opens on Cleveland regardless of shuffle order.
+    expect(document.querySelector('h2 em')!.textContent).toBe('Cleveland');
+  });
 });

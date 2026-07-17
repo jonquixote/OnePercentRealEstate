@@ -1,10 +1,24 @@
 import { DEFAULT_METRO, nearestMetro, type Metro } from './metros';
 
-export function metroFromHeaders(h: Headers): Metro {
-  const lat = Number(h.get('x-vercel-ip-latitude'));
-  const lng = Number(h.get('x-vercel-ip-longitude'));
-  if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
-    return nearestMetro(lat, lng);
+function coordsFrom(h: Headers, latKey: string, lngKey: string): { lat: number; lng: number } | null {
+  const latRaw = h.get(latKey);
+  const lngRaw = h.get(lngKey);
+  // h.get() → null or '' both become NaN/0; require finite and not the 0,0
+  // "null island", and reject empty strings so nginx's spoof-proof overwrite
+  // (which sets "" on a miss) reads as "no geo".
+  if (latRaw === null || latRaw === '' || lngRaw === null || lngRaw === '') return null;
+  const lat = Number(latRaw);
+  const lng = Number(lngRaw);
+  if (Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)) {
+    return { lat, lng };
   }
-  return DEFAULT_METRO;
+  return null;
+}
+
+export function metroFromHeaders(h: Headers): Metro {
+  // nginx-injected (self-hosted prod; spoof-proof — nginx overwrites inbound
+  // values) first, Vercel edge headers (preview deploys) second.
+  const geo = coordsFrom(h, 'x-geo-latitude', 'x-geo-longitude')
+    ?? coordsFrom(h, 'x-vercel-ip-latitude', 'x-vercel-ip-longitude');
+  return geo ? nearestMetro(geo.lat, geo.lng) : DEFAULT_METRO;
 }

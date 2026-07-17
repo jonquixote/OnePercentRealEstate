@@ -22,11 +22,25 @@ function shuffle(n: number): number[] {
 
 export function useMetroRotation(
   count: number,
-  opts?: { intervalMs?: number; reduceMotion?: boolean }
+  opts?: { intervalMs?: number; reduceMotion?: boolean; startIndex?: number }
 ): Rotation {
   const intervalMs = opts?.intervalMs ?? 6000;
   const reduceMotion = opts?.reduceMotion ?? false;
-  const order = useMemo(() => shuffle(Math.max(1, count)), [count]);
+  const startIndex = opts?.startIndex;
+  const order = useMemo(() => {
+    const o = shuffle(Math.max(1, count));
+    if (startIndex != null && startIndex >= 0 && startIndex < o.length) {
+      // Move the requested entry to the front; everything else keeps its
+      // shuffled relative order, so the tour still feels random after the
+      // local opener.
+      const at = o.indexOf(startIndex);
+      if (at > 0) {
+        o.splice(at, 1);
+        o.unshift(startIndex);
+      }
+    }
+    return o;
+  }, [count, startIndex]);
   const [index, setIndex] = useState(0);
   const [pinned, setPinned] = useState(false);
   const [paused, setPaused] = useState(false);

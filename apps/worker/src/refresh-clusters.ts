@@ -86,6 +86,33 @@ async function refreshOnce(): Promise<void> {
   }
 }
 
+// Wave: homepage markets grid. Unlike the cluster tiles (which only change on
+// listing inserts/price edits), market medians move on their own cadence, so
+// this refreshes on its OWN timer (~30 min) — it does NOT reuse the tiles
+// high-water gate. CONCURRENTLY needs the unique index from
+// 2026_07_17_mv_market_grid.sql; before that migration runs the refresh warns
+// and is a no-op.
+const MARKET_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+
+async function refreshMarketsOnce(log2: ReturnType<typeof withTrace>): Promise<void> {
+  const start = Date.now();
+  try {
+    await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_market_grid');
+    log2.info({ duration_ms: Date.now() - start }, 'market grid MV refreshed');
+  } catch (err) {
+    // 42P01 = view doesn't exist yet (migration not applied). Warn only.
+    const code = (err as { code?: string })?.code;
+    if (code === '42P01') {
+      log2.warn('mv_market_grid not found (migration pending); skipping');
+    } else {
+      log2.error(
+        { err: (err as Error).message, duration_ms: Date.now() - start },
+        'market grid MV refresh failed',
+      );
+    }
+  }
+}
+
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -118,6 +145,15 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     void refreshOnce();
   }, env.CLUSTER_REFRESH_INTERVAL_MS);
+
+  // Markets grid: own ~30-min timer, independent of the tiles high-water gate.
+  await new Promise((r) => setTimeout(r, 60_000));
+  if (shuttingDown) return;
+  await refreshMarketsOnce(withTrace(log, newTraceId()));
+  setInterval(() => {
+    if (shuttingDown) return;
+    void refreshMarketsOnce(withTrace(log, newTraceId()));
+  }, MARKET_REFRESH_INTERVAL_MS);
 }
 
 void main().catch((err) => {
