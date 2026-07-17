@@ -141,7 +141,12 @@ def main() -> None:
         with conn.cursor() as cur:
             execute_values(
                 cur,
-                """INSERT INTO fhfa_zip_hpi (zip5, year, hpi, annual_change_pct)
+                # Row tuples are (zip5, year, CHANGE, HPI-LEVEL) — see parse_*'s
+                # result.append order. The original column list here was
+                # (zip5, year, hpi, annual_change_pct), which SWAPPED the two
+                # metrics in the DB (hpi held the annual %-change; annual_change_pct
+                # held the index level) and silently corrupted every HPI consumer.
+                """INSERT INTO fhfa_zip_hpi (zip5, year, annual_change_pct, hpi)
                    VALUES %s
                    ON CONFLICT (zip5, year) DO UPDATE SET
                        hpi = COALESCE(EXCLUDED.hpi, fhfa_zip_hpi.hpi),
