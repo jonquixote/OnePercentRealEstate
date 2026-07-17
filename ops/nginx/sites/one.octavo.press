@@ -9,6 +9,7 @@ server {
     location /api/auth/ {
         limit_req zone=oper_auth burst=5 nodelay;
         include /etc/nginx/snippets/proxy-params.conf;
+        include /etc/nginx/snippets/geo-headers.conf;
         proxy_pass http://127.0.0.1:3001;
         proxy_read_timeout 60s;
     }
@@ -17,12 +18,14 @@ server {
     location /api/ {
         limit_req zone=oper_api burst=60 nodelay;
         include /etc/nginx/snippets/proxy-params.conf;
+        include /etc/nginx/snippets/geo-headers.conf;
         proxy_pass http://127.0.0.1:3001;
         proxy_read_timeout 60s;
     }
 
     location / {
         include /etc/nginx/snippets/proxy-params.conf;
+        include /etc/nginx/snippets/geo-headers.conf;
         proxy_pass http://127.0.0.1:3001;
         proxy_read_timeout 60s;
     }

@@ -19,6 +19,13 @@
 - **Tests:** `pnpm --filter @oper/one test <path>`, `pnpm --filter @oper/worker test <path>`; TSX tests carry `// @vitest-environment jsdom`.
 - **Design/copy:** no visual changes beyond the hero starting on the local metro; keep all existing carousel behavior (6s tour, pause, pin, reduced-motion) intact.
 
+## Execution Notes (validated against `docs/local-first-plan` @ 58f7547)
+
+- **Worker file is `apps/worker/src/refresh-clusters.ts`** (NOT `refresh.ts`). The matview refresh lives there; the `worker-refresh` docker service in compose maps to the systemd unit `oper-worker-refresh.service`.
+- **nginx snippet goes in ALL THREE proxied locations** of `ops/nginx/sites/one.uctavo.press` (`/api/auth/`, `/api/`, `/`) — each already `include /etc/nginx/snippets/proxy-params.conf;`. Add `include /etc/nginx/snippets/geo-headers.conf;` in all three. Deploy the snippet to `/etc/nginx/snippets/geo-headers.conf`.
+- **Prod is systemd, NOT docker** (the docker-compose stack is dormant). Deploy = `psql` the migration → `pnpm --filter @oper/one build && systemctl restart oper-app.service` → `pnpm --filter @oper/worker build && systemctl restart oper-worker-refresh.service` → nginx runbook. Ignore `infrastructure/deploy.sh` (docker-only).
+- **MV refresh = own 30-min unconditional timer** in `refresh-clusters.ts`. Do NOT reuse the `tilesInputChanged` high-water gate (that's for tiles, which only change on inserts/price edits). Add a separate `setInterval(~30min)` refreshing `mv_market_grid CONCURRENTLY`, own try/catch, warn-only on `42P01`.
+
 ## Current State (verified 2026-07-16/17 on prod)
 
 - nginx 1.28.3, module **not** installed; `apt-cache policy libnginx-mod-http-geoip2` → candidate `1:3.4-7build3`. Proxy blocks for one.octavo.press pass to `127.0.0.1:3001` (`/etc/nginx/sites-enabled/one.octavo.press`).
@@ -43,7 +50,7 @@
 | `apps/one/src/components/home/FirstDealHero.test.tsx` (modify) | Local-start case. |
 | `infrastructure/migrations/2026_07_17_mv_market_grid.sql` (create) | The matview + unique index. |
 | `apps/one/src/app/api/markets/route.ts` (modify) | Read the matview (fallback to live aggregation if mv missing). |
-| `apps/worker/src/refresh.ts` (modify) | Add `mv_market_grid` to the refresh loop. |
+| `apps/worker/src/refresh-clusters.ts` (modify) | Add `mv_market_grid` to a new 30-min unconditional refresh timer (do NOT reuse the tiles high-water gate). |
 
 ---
 
@@ -345,7 +352,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS mv_market_grid_zip ON mv_market_grid (zip_code
 
 wrapped so a missing relation (error code `42P01`, fresh envs before the migration runs) falls back to the previous live aggregation SQL (keep it in the file as `LIVE_AGGREGATION_SQL` — one constant, one fallback call). Everything else (cache, stale-while-revalidate, shaping) unchanged.
 
-- [ ] **Step 3: Worker refresh** — in `apps/worker/src/refresh.ts`, add `mv_market_grid` next to the existing `mv_cluster_tiles` refresh (same cadence structure; if the file refreshes on one timer, refresh both in sequence; ~30 min is fine — follow the file's existing interval config pattern). Wrap in its own try/catch so a missing mv (pre-migration) only warns.
+- [ ] **Step 3: Worker refresh** — in `apps/worker/src/refresh-clusters.ts`, add a **separate** `setInterval` (~30 min) that refreshes `mv_market_grid` CONCURRENTLY. Do NOT gate it on `tilesInputChanged` (markets move daily; the high-water check keys off listing inserts/price edits and would wrongly skip). Wrap in its own try/catch so a missing mv (pre-migration, error `42P01`) only warns. Keep the existing `mv_cluster_tiles` logic untouched.
 
 - [ ] **Step 4: Tests + typecheck**
 
