@@ -75,6 +75,9 @@ async function refreshMarkets(): Promise<void> {
               CASE WHEN h.five_ago > 0 THEN round(((h.latest - h.five_ago) / h.five_ago * 100)::numeric, 1) ELSE NULL END AS hpi5y
       FROM top t
       LEFT JOIN LATERAL (
+        -- hpi is the FHFA index LEVEL (annual_change_pct carries the yearly %).
+        -- NB: the loader used to write these two columns swapped; fixed together
+        -- with a one-time column-swap repair on prod (load_fhfa_hpi.py, same PR).
         SELECT max(hpi) FILTER (WHERE year = (SELECT max(year) FROM fhfa_zip_hpi WHERE zip5 = t.zip_code)) AS latest,
                max(hpi) FILTER (WHERE year = (SELECT max(year) FROM fhfa_zip_hpi WHERE zip5 = t.zip_code) - 5) AS five_ago
         FROM fhfa_zip_hpi WHERE zip5 = t.zip_code
