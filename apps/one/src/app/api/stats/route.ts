@@ -58,7 +58,10 @@ export async function GET(req: Request) {
         // Only count rent ratios for rows where:
         //   1. rent_calc_status = 'done' (rent has been computed)
         //   2. property type is rentable (not land/vacant/farm)
-        // Total stays unfiltered so users see the full inventory size.
+        // `total` counts ACTIVE for-sale inventory: the base CTE applies the
+        // Listing Truth lifecycle filter (issue #51), so sold/stale/misfiled
+        // rows — including the ~2,800 misfiled rentals — no longer inflate the
+        // count, the 1% tally, the median, or the histogram.
         // Per-distinct-property-type resolved target for the selected strategy
         // (resolve_rule is called ~13× here, then joined — not 688k× per row).
         const sql = `
@@ -87,6 +90,7 @@ export async function GET(req: Request) {
             WHERE l.listing_type = 'for_sale'
               AND l.sale_type = 'standard'
               AND l.price > 10000
+              AND l.listing_status NOT IN ('sold','stale','rental_misfiled')
           )
           SELECT
             count(*)::int AS total,

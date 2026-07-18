@@ -167,6 +167,7 @@ export async function GET(req: NextRequest) {
       zip_code
     FROM listings
     WHERE listing_type = 'for_sale'
+      AND listing_status NOT IN ('sold','stale','rental_misfiled')
       AND ${saleTypeDefault} (${compiled.whereSql})
     ORDER BY ${orderBySql}
     LIMIT ${PRO_LIMIT}

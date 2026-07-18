@@ -37,7 +37,8 @@ export default async function MarketOpengraphImage({
               percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent)
                 FILTER (WHERE estimated_rent > 0)::numeric(10,2) AS median_rent
        FROM listings
-       WHERE zip_code = $1 AND listing_type = 'for_sale' AND sale_type = 'standard' AND price > 10000`,
+       WHERE zip_code = $1 AND listing_type = 'for_sale' AND sale_type = 'standard' AND price > 10000
+         AND listing_status NOT IN ('sold','stale','rental_misfiled')`,
       [zip],
     );
     const placeRes = await pool.query(

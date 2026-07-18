@@ -47,6 +47,16 @@ export async function GET(req: Request) {
 
     const placeholders = idArray.map((_, i) => `$${i + 1}`).join(', ');
 
+    // ── ADR: compare-by-id is INTENTIONALLY not lifecycle-filtered ──────────
+    // Every other read surface defaults to
+    //   `listing_status NOT IN ('sold','stale','rental_misfiled')`
+    // (Listing Truth plan). This route does NOT, on purpose: `?ids=` is the
+    // Compare path — the user named these exact rows by id. Compare must never
+    // silently drop a row the user explicitly asked to compare just because it
+    // went sold/stale/misfiled; a blank column reads as a bug. Instead we
+    // SELECT `listing_status AS status` and surface the state so the UI can
+    // render a SOLD/OFF-MARKET treatment while still showing the row.
+    // Do NOT add a lifecycle filter here — see issue #50 / DEF-LT-5.
     const client = await pool.connect();
     try {
       const result = await withSpan(

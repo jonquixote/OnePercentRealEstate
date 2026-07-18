@@ -14,6 +14,7 @@ export async function GET() {
                   AND sale_type = 'standard'
                   AND price > 10000
                   AND price_cut_pct > 0
+                  AND listing_status NOT IN ('sold','stale','rental_misfiled')
             `);
             return NextResponse.json({ count: result.rows[0]?.count ?? 0 });
         } finally {

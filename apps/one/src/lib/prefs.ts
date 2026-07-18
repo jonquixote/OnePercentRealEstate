@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { parsePrefs, DEFAULT_PREFS, type InvestorPrefs, type Strategy } from './prefs-shared';
 
-export { parsePrefs, DEFAULT_PREFS, type InvestorPrefs, type Strategy } from './prefs-shared';
+// Re-export the shared prefs surface from the single import above so client
+// consumers can pull everything from '@/lib/prefs' without a second reference
+// to './prefs-shared' (D1: dedupe the client/server state duplication).
+export { parsePrefs, DEFAULT_PREFS, type InvestorPrefs, type Strategy };
 
 /** Client hook: fetch prefs on mount, optimistic save, loading flag. */
 

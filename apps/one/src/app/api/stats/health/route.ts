@@ -21,6 +21,10 @@ export async function GET() {
           max(updated_at) FILTER (WHERE rent_calc_status = 'done') AS last_completed
         FROM listings
         WHERE listing_type = 'for_sale'
+          -- Lifecycle filter (issue #51): health tracks the ACTIVE backfill
+          -- queue. Off-market rows (sold/stale/rental_misfiled) no longer need
+          -- a rent estimate, so excluding them keeps pending/done/failed honest.
+          AND listing_status NOT IN ('sold','stale','rental_misfiled')
       `;
       const result = await client.query(sql);
       const row = result.rows[0] ?? {};

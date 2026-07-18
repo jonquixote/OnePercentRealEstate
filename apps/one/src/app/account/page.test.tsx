@@ -23,22 +23,33 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 
+/**
+ * Install the shared account-page fetch mock (auth/me, saved-searches,
+ * watchlists, prefs GET). PUT /api/prefs captures the request body; the
+ * returned getter exposes it once the save fires. Both tests drove identical
+ * setup before — this is the single source (D2 cleanup).
+ */
+function installFetchMock(): () => unknown {
+  let savedBody: unknown = null;
+  global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/api/auth/me')) return { ok: true, status: 200, json: async () => ({ user: { id: 'u1', email: 'a@b.co', tier: 'free' } }) } as Response;
+    if (url.includes('/api/saved-searches')) return { ok: true, status: 200, json: async () => [] } as Response;
+    if (url.includes('/api/watchlists')) return { ok: true, status: 200, json: async () => [] } as Response;
+    if (url.includes('/api/prefs') && (!init || init.method === undefined || init.method === 'GET')) {
+      return { ok: true, status: 200, json: async () => ({ financing: { ratePct: 6.5, downPct: 20, termYears: 30, taxRatePct: null, insuranceMoYr: null, mgmtPct: 8, vacancyPct: 8 }, areas: [], strategy: 'buy_hold' }) } as Response;
+    }
+    if (url.includes('/api/prefs') && init?.method === 'PUT') {
+      savedBody = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    }
+    return { ok: false, status: 404, json: async () => ({}) } as Response;
+  }) as unknown as typeof fetch;
+  return () => savedBody;
+}
+
 describe('AccountPage presets', () => {
   it('renders defaults, edits rate, and saves clamped value via usePrefs', async () => {
-    let savedBody: unknown = null;
-    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.includes('/api/auth/me')) return { ok: true, status: 200, json: async () => ({ user: { id: 'u1', email: 'a@b.co', tier: 'free' } }) } as Response;
-      if (url.includes('/api/saved-searches')) return { ok: true, status: 200, json: async () => [] } as Response;
-      if (url.includes('/api/watchlists')) return { ok: true, status: 200, json: async () => [] } as Response;
-      if (url.includes('/api/prefs') && (!init || init.method === undefined || init.method === 'GET')) {
-        return { ok: true, status: 200, json: async () => ({ financing: { ratePct: 6.5, downPct: 20, termYears: 30, taxRatePct: null, insuranceMoYr: null, mgmtPct: 8, vacancyPct: 8 }, areas: [], strategy: 'buy_hold' }) } as Response;
-      }
-      if (url.includes('/api/prefs') && init?.method === 'PUT') {
-        savedBody = JSON.parse(String(init.body));
-        return { ok: true, status: 200, json: async () => ({}) } as Response;
-      }
-      return { ok: false, status: 404, json: async () => ({}) } as Response;
-    }) as unknown as typeof fetch;
+    const getSavedBody = installFetchMock();
 
     render(<AccountPage />);
     const rate = await screen.findByLabelText(/rate/i) as HTMLInputElement;
@@ -51,27 +62,14 @@ describe('AccountPage presets', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /save presets/i }));
 
-    await waitFor(() => expect(savedBody).not.toBeNull());
-    const body = savedBody as SavedPrefs;
+    await waitFor(() => expect(getSavedBody()).not.toBeNull());
+    const body = getSavedBody() as SavedPrefs;
     expect(body.financing.ratePct).toBe(15); // clamped to ≤15
     expect(screen.getByText(/saved ✓/i)).toBeTruthy();
   });
 
   it('preserves null market-default sentinel (tax/insurance) on save without edit', async () => {
-    let savedBody: unknown = null;
-    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.includes('/api/auth/me')) return { ok: true, status: 200, json: async () => ({ user: { id: 'u1', email: 'a@b.co', tier: 'free' } }) } as Response;
-      if (url.includes('/api/saved-searches')) return { ok: true, status: 200, json: async () => [] } as Response;
-      if (url.includes('/api/watchlists')) return { ok: true, status: 200, json: async () => [] } as Response;
-      if (url.includes('/api/prefs') && (!init || init.method === undefined || init.method === 'GET')) {
-        return { ok: true, status: 200, json: async () => ({ financing: { ratePct: 6.5, downPct: 20, termYears: 30, taxRatePct: null, insuranceMoYr: null, mgmtPct: 8, vacancyPct: 8 }, areas: [], strategy: 'buy_hold' }) } as Response;
-      }
-      if (url.includes('/api/prefs') && init?.method === 'PUT') {
-        savedBody = JSON.parse(String(init.body));
-        return { ok: true, status: 200, json: async () => ({}) } as Response;
-      }
-      return { ok: false, status: 404, json: async () => ({}) } as Response;
-    }) as unknown as typeof fetch;
+    const getSavedBody = installFetchMock();
 
     render(<AccountPage />);
     // tax/insurance fields should render empty (market default), not "0".
@@ -79,8 +77,8 @@ describe('AccountPage presets', () => {
     expect(tax.value).toBe('');
 
     fireEvent.click(screen.getByRole('button', { name: /save presets/i }));
-    await waitFor(() => expect(savedBody).not.toBeNull());
-    const body = savedBody as SavedPrefs;
+    await waitFor(() => expect(getSavedBody()).not.toBeNull());
+    const body = getSavedBody() as SavedPrefs;
     // The null sentinel must survive a save with no edits — must NOT become 0.
     expect(body.financing.taxRatePct).toBeNull();
     expect(body.financing.insuranceMoYr).toBeNull();

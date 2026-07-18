@@ -19,6 +19,7 @@ async function fetchZipCodes(): Promise<string[]> {
                 SELECT zip_code
                 FROM listings
                 WHERE listing_type = 'for_sale' AND sale_type = 'standard' AND zip_code ~ '^\\d{5}$'
+                  AND listing_status NOT IN ('sold','stale','rental_misfiled')
                 GROUP BY zip_code
                 ORDER BY count(*) DESC
                 LIMIT 2000

@@ -139,7 +139,13 @@ export async function POST(req: NextRequest) {
   // Lifecycle default: hide off-market inventory. `includeSold` relaxes only the
   // sold exclusion (stale + rental_misfiled always stay hidden). Both branches
   // are fixed server strings — no user value is interpolated.
-  const lifecycleFilter = body.includeSold
+  //
+  // Dual acceptance (issue #54): the Listing Truth plan's Global Constraints
+  // named a `?include_sold=1` query param; the implementation shipped a body
+  // `includeSold` boolean. Accept BOTH so either caller shape opts in.
+  const includeSold =
+    body.includeSold === true || req.nextUrl.searchParams.get('include_sold') === '1';
+  const lifecycleFilter = includeSold
     ? `listing_status NOT IN ('stale','rental_misfiled')`
     : `listing_status NOT IN ('sold','stale','rental_misfiled')`;
   const orderBySql = buildOrderBy(body.orderBy);

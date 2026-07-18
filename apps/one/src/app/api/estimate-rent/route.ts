@@ -79,7 +79,13 @@ export async function POST(req: Request) {
                 ? runQuery(`SELECT safmr FROM hud_safmr WHERE zip_code = $1 AND bedrooms = $2 ORDER BY fy DESC LIMIT 1`, [targetZip, (beds || 3)])
                 : emptyRows,
             targetZip
-                ? runQuery(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent) AS comps_median FROM listings WHERE zip_code = $1 AND estimated_rent IS NOT NULL AND estimated_rent > 0 AND (id::text != $2 OR $2 IS NULL)`, [targetZip, listingId || ''])
+                // Lifecycle filter (issue #51): rent comps come from ACTIVE
+                // inventory only — sold/stale/rental_misfiled rows (notably the
+                // misfiled $12k/mo rentals) must not skew the zip comps median.
+                // The by-id lookups above stay unfiltered on purpose: they
+                // resolve the specific listing being valued, which may itself be
+                // off-market (compare-by-id semantics, cf. issue #50).
+                ? runQuery(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent) AS comps_median FROM listings WHERE zip_code = $1 AND estimated_rent IS NOT NULL AND estimated_rent > 0 AND listing_status NOT IN ('sold','stale','rental_misfiled') AND (id::text != $2 OR $2 IS NULL)`, [targetZip, listingId || ''])
                 : emptyRows,
         ]);
 
