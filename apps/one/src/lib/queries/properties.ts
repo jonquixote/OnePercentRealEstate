@@ -137,6 +137,10 @@ export function shapeListingRow(row: any): any {
 
   return {
     ...row,
+    // primary_photo the column is ~0.3% populated — photos live in images.
+    // SearchCard (and anything card-shaped) reads primary_photo, so surface
+    // the first image there; the images[] array above already prefers jsonb.
+    primary_photo: row.primary_photo ?? images[0] ?? null,
     listing_price: row.listing_price != null ? Number(row.listing_price) : null,
     estimated_rent: Math.round(rent),
     days_on_market: row.days_on_market != null ? Number(row.days_on_market) : null,
