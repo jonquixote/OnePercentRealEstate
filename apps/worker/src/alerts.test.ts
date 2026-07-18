@@ -250,6 +250,35 @@ describe('runAlertTick tier split', () => {
     // prefs absent → no area matches → only watchlist rows (none here) → 0 events.
     expect(res.eventsInserted).toBe(0);
   });
+
+  it('skips a non-numeric listing_id without crashing the bulk insert', async () => {
+    const { runAlertTick } = await import('./alerts');
+    const { pool, query: origQuery } = makePool({
+      [wmSql]: { rows: [{ last_seen_at: new Date(0) }] },
+      [candSql]: {
+        rows: [
+          // Bad id — must be skipped, not abort the whole batch.
+          { id: 'not-a-num', address: 'Bad', zip_code: '77002', price: 120000, estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(500) },
+          // Good id — must still insert.
+          { id: 42, address: '9 Deal St', zip_code: '77002', price: 120000, estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(1000) },
+        ],
+      },
+      [mkSql]: {
+        rows: [{ id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'] }, email: 'p1@x.com' }],
+      },
+      [insSql]: { rows: [], rowCount: 1 },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: 1 },
+    });
+    pool.connect = async () => ({ query: pool.query, release: () => {} });
+    pool.query = (async (text: string, p?: any[]) => origQuery(text, p)) as any;
+
+    // Must NOT throw on the bad id.
+    const res = await runAlertTick(pool, { info: () => {}, warn: () => {}, error: () => {} } as any);
+    // Watermark advances past both candidates; good row still inserted.
+    expect(res.candidates).toBe(2);
+    expect(res.eventsInserted).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe('evalWatchlistQuery (pure, mirrors compileWatchlistQuery)', () => {
