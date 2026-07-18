@@ -4,7 +4,9 @@ import { describe, it, expect, beforeAll } from 'vitest';
 // does too), so DATABASE_URL must be present before the modules are imported.
 beforeAll(() => {
   process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://test/test';
-  process.env.RESEND_API_KEY = 'dummy_key_for_dev'; // gate instant email off
+  // Use a non-dummy key so instant-email fanout is exercised (fetch is stubbed
+  // per-test). The 'dummy_key_for_dev' sentinel in code disables sending.
+  process.env.RESEND_API_KEY = process.env.RESEND_API_KEY || 're_test_key';
 });
 
 describe('alerts SQL shape', () => {
@@ -81,8 +83,8 @@ describe('runAlertTick tier split', () => {
     return { pool, query };
   }
 
-    const mkSql = 'SELECT id, subscription_tier, prefs';
-    const mkNoPrefsSql = 'SELECT id, subscription_tier';
+  const mkSql = 'SELECT id, subscription_tier, prefs, email';
+  const mkNoPrefsSql = 'SELECT id, subscription_tier, email';
     const candSql = 'last_seen_at >';
   const wmSql = 'SELECT last_seen_at FROM alert_state';
   const setWmSql = 'INSERT INTO alert_state';
@@ -92,6 +94,13 @@ describe('runAlertTick tier split', () => {
   it('instant-fans out pro users and leaves free users untouched', async () => {
     const { runAlertTick } = await import('./alerts');
     const calls: string[] = [];
+    const resendRecipients: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: any, init: any) => {
+      const body = JSON.parse(init.body);
+      resendRecipients.push(body.to);
+      return { ok: true, text: async () => 'ok' } as any;
+    }) as any;
     const { pool, query } = makePool({
       [wmSql]: { rows: [{ last_seen_at: new Date(0) }] },
       [candSql]: {
@@ -102,8 +111,8 @@ describe('runAlertTick tier split', () => {
       },
       [mkSql]: {
         rows: [
-          { id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'] } },
-          { id: 'free1', subscription_tier: 'free', prefs: { areas: ['77002'] } },
+          { id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'] }, email: 'pro1@example.com' },
+          { id: 'free1', subscription_tier: 'free', prefs: { areas: ['77002'] }, email: 'free1@example.com' },
         ],
       },
       [insSql]: { rows: [], rowCount: 1 },
@@ -125,6 +134,79 @@ describe('runAlertTick tier split', () => {
     expect(markCalls.length).toBe(1);
     // Free user must never be stamped delivered.
     expect(markCalls.join(' ')).not.toContain('free1');
+    // Instant email must go to the pro user's ADDRESS, not their id.
+    expect(resendRecipients).toEqual(['pro1@example.com']);
+    globalThis.fetch = realFetch;
+  });
+
+  it('matches candidates to watchlists in memory (no N×M queries)', async () => {
+    const { runAlertTick } = await import('./alerts');
+    const sqlSeen: string[] = [];
+    const { pool, query: origQuery } = makePool({
+      [wmSql]: { rows: [{ last_seen_at: new Date(0) }] },
+      [candSql]: {
+        rows: [{
+          id: 42, address: '9 Deal St', zip_code: '77002', price: 120000, city: 'Houston',
+          estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(1000),
+        }],
+      },
+      // Two pro users, neither with areas; matches come from watchlists.
+      [mkSql]: {
+        rows: [
+          { id: 'pro1', subscription_tier: 'pro', prefs: {}, email: 'p1@x.com' },
+          { id: 'pro2', subscription_tier: 'pro', prefs: {}, email: 'p2@x.com' },
+        ],
+      },
+      [insSql]: { rows: [], rowCount: 1 },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: 1 },
+      'SELECT user_id, name, query_json FROM watchlists': {
+        rows: [
+          { user_id: 'pro1', name: 'Houston deals', query_json: { city: 'Houston' } },
+          { user_id: 'pro2', name: 'Dallas deals', query_json: { city: 'Dallas' } },
+        ],
+      },
+    });
+    pool.connect = async () => ({ query: pool.query, release: () => {} });
+    pool.query = (async (text: string, p?: any[]) => {
+      sqlSeen.push(text);
+      return origQuery(text, p);
+    }) as any;
+    const res = await runAlertTick(pool, { info: () => {}, warn: () => {}, error: () => {} } as any);
+    // Only ONE watchlists fetch, then pure in-memory eval (no per-candidate query).
+    const watchlistFetches = sqlSeen.filter((s) => s.includes('FROM watchlists')).length;
+    expect(watchlistFetches).toBe(1);
+    // pro1's 'Houston deals' matches; pro2's 'Dallas deals' does not.
+    expect(res.eventsInserted).toBe(1);
+  });
+
+  it('skips instant email when pro user has no email', async () => {
+    const { runAlertTick } = await import('./alerts');
+    const resendRecipients: string[] = [];
+    globalThis.fetch = (async (_url: any, _init: any) => {
+      resendRecipients.push('CALLED');
+      return { ok: true, text: async () => 'ok' } as any;
+    }) as any;
+    const { pool } = makePool({
+      [wmSql]: { rows: [{ last_seen_at: new Date(0) }] },
+      [candSql]: {
+        rows: [{
+          id: 42, address: '9 Deal St', zip_code: '77002', price: 120000,
+          estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(1000),
+        }],
+      },
+      [mkSql]: {
+        rows: [{ id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'] }, email: null }],
+      },
+      [insSql]: { rows: [], rowCount: 1 },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: 1 },
+    });
+    pool.connect = async () => ({ query: pool.query, release: () => {} });
+    const res = await runAlertTick(pool, { info: () => {}, warn: () => {}, error: () => {} } as any);
+    expect(res.instantSent).toBe(0);
+    expect(resendRecipients).toHaveLength(0);
+    globalThis.fetch = (async () => ({} as any)) as any;
   });
 
   it('degrades (not throws) when profiles.prefs column is absent (42703)', async () => {
@@ -165,5 +247,26 @@ describe('runAlertTick tier split', () => {
     expect(res.candidates).toBe(1);
     // prefs absent → no area matches → only watchlist rows (none here) → 0 events.
     expect(res.eventsInserted).toBe(0);
+  });
+});
+
+describe('evalWatchlistQuery (pure, mirrors compileWatchlistQuery)', () => {
+  it('matches equality, IN, and range semantics', async () => {
+    const { evalWatchlistQuery } = await import('./watchlist-alerts');
+    const c = { price: 100000, city: 'Houston', bedrooms: 3 };
+    expect(evalWatchlistQuery({ city: 'Houston' }, c)).toBe(true);
+    expect(evalWatchlistQuery({ city: 'Dallas' }, c)).toBe(false);
+    expect(evalWatchlistQuery({ city: ['Houston', 'Dallas'] }, c)).toBe(true);
+    expect(evalWatchlistQuery({ city: ['Austin'] }, c)).toBe(false);
+    expect(evalWatchlistQuery({ price: { min: 50000, max: 150000 } }, c)).toBe(true);
+    expect(evalWatchlistQuery({ price: { min: 200000 } }, c)).toBe(false);
+    expect(evalWatchlistQuery({ bedrooms: 3, price: { max: 150000 } }, c)).toBe(true);
+    expect(evalWatchlistQuery({}, c)).toBe(true); // empty query = match all
+  });
+
+  it('treats missing candidate columns as non-matching', async () => {
+    const { evalWatchlistQuery } = await import('./watchlist-alerts');
+    // candidate lacks `state` → condition can never be satisfied.
+    expect(evalWatchlistQuery({ state: 'TX' }, { city: 'Houston' })).toBe(false);
   });
 });

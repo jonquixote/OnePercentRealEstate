@@ -416,12 +416,56 @@ async function tick(): Promise<void> {
 }
 
 /**
+ * Evaluate a watchlist's query_json against a candidate IN MEMORY.
+ *
+ * Replicates the exact operator semantics of compileWatchlistQuery
+ * (IN array, range {min,max}, simple equality) and the column whitelist
+ * (validateWatchlistColumn), so the alert tick and the watchlist tick never
+ * drift. Used by runAlertTick to avoid the O(candidates × users × watchlists)
+ * DB-query storm the old per-pair `matchWatchlists` produced.
+ *
+ * Columns NOT present on the candidate evaluate as "no match" for that
+ * condition — the candidate simply lacks the data, so it cannot satisfy the
+ * predicate. Callers must ensure candidates carry the watchlist columns they
+ * care about (see CANDIDATES_SQL in alerts.ts).
+ *
+ * @returns true when the candidate satisfies every condition in queryJson.
+ */
+export function evalWatchlistQuery(
+  queryJson: Record<string, any>,
+  candidate: Record<string, any>,
+): boolean {
+  for (const [key, value] of Object.entries(queryJson)) {
+    if (!validateWatchlistColumn(key)) {
+      // Same contract as compileWatchlistQuery — reject unknown columns.
+      throw new Error(`Invalid column in watchlist query: ${key}`);
+    }
+    const actual = candidate[key];
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+      if (!value.includes(actual)) return false;
+    } else if (typeof value === 'object' && value !== null) {
+      if (value.min !== undefined && !(actual >= value.min)) return false;
+      if (value.max !== undefined && !(actual <= value.max)) return false;
+    } else {
+      if (actual !== value) return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Match a single listing candidate against one of a user's watchlists.
  *
  * Reuses the SAME compilation path the watchlist tick uses (compileWatchlistQuery)
  * so the two never drift. Returns the watchlist name when the candidate satisfies
  * the watchlist's query_json, otherwise null. Pure w.r.t. the DB — it does not
  * insert alert rows (the caller owns the alert_events ledger).
+ *
+ * @deprecated Prefer batching: select all watchlists once and call
+ * evalWatchlistQuery in memory (see runAlertTick). This per-pair helper still
+ * exists for callers that need a single user/candidate match.
  *
  * `pool` is a pg Pool; we take a short-lived client to run the compiled SQL with
  * the candidate bound as a row. Compile errors (invalid column) reject, surfacing

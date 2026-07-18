@@ -18,7 +18,7 @@
 import { Pool, type PoolClient } from 'pg';
 import { loadEnv } from './env.js';
 import { getLogger, type WorkerLogger } from './logger.js';
-import { matchWatchlists } from './watchlist-alerts.js';
+import { evalWatchlistQuery } from './watchlist-alerts.js';
 
 type Logger = WorkerLogger;
 
@@ -39,7 +39,9 @@ const logger = getLogger(env.LOG_LEVEL);
  * this constant is the optimistic form and the runtime keeps a fallback.
  */
 export const CANDIDATES_SQL = `
-  SELECT id, address, zip_code, price, estimated_rent, rent_price_ratio
+  SELECT id, address, zip_code, price, estimated_rent, rent_price_ratio,
+         bedrooms, bathrooms, sqft, year_built, state, city,
+         sale_type, price_cut_pct, days_on_market, property_type
   FROM listings
   WHERE last_seen_at > $1
     AND rent_price_ratio >= 0.01
@@ -53,7 +55,9 @@ export const CANDIDATES_SQL = `
 
 /** Same as CANDIDATES_SQL but without the listing_status predicate (fallback). */
 export const CANDIDATES_SQL_NO_LIFECYCLE = `
-  SELECT id, address, zip_code, price, estimated_rent, rent_price_ratio
+  SELECT id, address, zip_code, price, estimated_rent, rent_price_ratio,
+         bedrooms, bathrooms, sqft, year_built, state, city,
+         sale_type, price_cut_pct, days_on_market, property_type
   FROM listings
   WHERE last_seen_at > $1
     AND rent_price_ratio >= 0.01
@@ -72,14 +76,14 @@ export const CANDIDATES_SQL_NO_LIFECYCLE = `
  * and treats every user's areas as empty `[]`.
  */
 export const USERS_SQL = `
-  SELECT id, subscription_tier, prefs
+  SELECT id, subscription_tier, prefs, email
   FROM profiles
   WHERE subscription_tier IS NOT NULL
 `;
 
 /** Same as USERS_SQL but without the prefs column (fallback when it's absent). */
 export const USERS_SQL_NO_PREFS = `
-  SELECT id, subscription_tier
+  SELECT id, subscription_tier, email
   FROM profiles
   WHERE subscription_tier IS NOT NULL
 `;
@@ -275,7 +279,7 @@ export async function runAlertTick(
       }
     }
 
-    let users: Array<{ id: string; subscription_tier?: string; prefs?: unknown }> = [];
+    let users: Array<{ id: string; subscription_tier?: string; prefs?: unknown; email?: string | null }> = [];
     try {
       const usersRes = await client.query(USERS_SQL);
       users = usersRes.rows;
@@ -300,19 +304,44 @@ export async function runAlertTick(
       })),
     );
 
+    // Watchlist match — fetch ALL watchlists once (not per user/candidate),
+    // then evaluate each candidate in memory. The old code called
+    // matchWatchlists(pool, user, candidate) for every (candidate × user)
+    // pair, which issued ~candidates×users×watchlists DB queries per tick.
     const watchlistRows: AlertRow[] = [];
-    for (const c of candidates) {
-      for (const u of users) {
-        const match = await matchWatchlists(pool, u.id, c as any);
-        if (match) {
-          watchlistRows.push({
-            user_id: u.id,
-            listing_id: c.id,
-            source: 'watchlist',
-            source_label: match.name,
-            ratio: c.rent_price_ratio,
-            price: c.price,
-          });
+    let watchlists: Array<{ user_id: string; name: string; query_json: Record<string, any> }> = [];
+    try {
+      const wlRes = await client.query(
+        `SELECT user_id, name, query_json FROM watchlists`,
+      );
+      watchlists = wlRes.rows;
+    } catch (err: any) {
+      // watchlists table may not exist yet (Investor's Shelf plan owns it).
+      // Degrade to no watchlist matches rather than failing the whole tick.
+      if (err?.code === '42P01') {
+        log.warn('watchlists table missing; skipping watchlist matches');
+      } else {
+        throw err;
+      }
+    }
+    if (watchlists.length > 0) {
+      for (const c of candidates) {
+        for (const wl of watchlists) {
+          try {
+            if (evalWatchlistQuery(wl.query_json ?? {}, c as any)) {
+              watchlistRows.push({
+                user_id: wl.user_id,
+                listing_id: c.id,
+                source: 'watchlist',
+                source_label: wl.name,
+                ratio: c.rent_price_ratio,
+                price: c.price,
+              });
+            }
+          } catch (err) {
+            // Misconfigured watchlist (invalid column) — skip, don't fail tick.
+            log.warn({ err, userId: wl.user_id, name: wl.name }, 'Skipping uncompilable watchlist');
+          }
         }
       }
     }
@@ -344,9 +373,13 @@ export async function runAlertTick(
         for (const row of fresh) {
           const c = candidates.find((x) => String(x.id) === String(row.listing_id));
           if (!c) continue;
+          if (!u.email) {
+            log.warn({ userId: u.id }, 'No email on profile; skipping instant alert');
+            continue;
+          }
           try {
             await sendResendEmail(
-              u.id,
+              u.email,
               `New deal in your areas: ${c.address ?? 'property'}`,
               instantEmailHtml(row, c),
             );
