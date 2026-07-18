@@ -86,6 +86,18 @@ describe('buildListingsQuery — parameterization', () => {
   });
 });
 
+describe('buildListingsQuery — lifecycle filter', () => {
+  it('hides sold/stale/rental_misfiled by default', () => {
+    const { sql } = buildListingsQuery({}, 'newest', 1, 100, null);
+    expect(sql).toMatch(/listing_status NOT IN \('sold','stale','rental_misfiled'\)/);
+  });
+  it('surfaces sold rows when includeSold is set, still hiding stale + misfiled', () => {
+    const { sql } = buildListingsQuery({ includeSold: true }, 'newest', 1, 100, null);
+    expect(sql).toMatch(/listing_status NOT IN \('stale','rental_misfiled'\)/);
+    expect(sql).not.toMatch(/'sold'/);
+  });
+});
+
 describe('buildListingsQuery — cursor vs offset', () => {
   it('uses keyset (id < cursor) on newest sort', () => {
     const { sql, params } = buildListingsQuery({}, 'newest', 1, 100, '999');

@@ -42,6 +42,7 @@ export function buildSnapshotQuery(metros: IndexMetro[]): { sql: string; params:
     FROM listings l
     JOIN metro_zip mz ON mz.zip3 = left(l.zip_code, 3)
     WHERE l.listing_type = 'for_sale' AND public.is_rentable(l.property_type)
+      AND l.listing_status = 'active'
       AND l.price > 0 AND l.estimated_rent > 0
     GROUP BY mz.metro_slug`;
   return { sql, params };

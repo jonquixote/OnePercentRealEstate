@@ -107,7 +107,11 @@ _FOR_SALE_STATUSES = {
 }
 
 
-def route_row_type(row_status, is_combined, req_listing_type):
+def is_rental_url(url):
+    return bool(url) and "/rentals/details/" in str(url)
+
+
+def route_row_type(row_status, is_combined, req_listing_type, property_url=None):
     """Decide which table a scraped row belongs to.
 
     For a combined (list) query, homeharvest tags each row with its own
@@ -118,6 +122,10 @@ def route_row_type(row_status, is_combined, req_listing_type):
     fall back to 'for_sale' (the listings table) but the caller should log
     them so an upstream vocabulary change is visible rather than silent.
     """
+    # Realtor's pending/contingent (and rarely for_sale) searches return rental
+    # rows whose list_price is the MONTHLY RENT. The URL is authoritative.
+    if is_rental_url(property_url):
+        return 'for_rent'
     if not is_combined:
         return req_listing_type
     s = str(row_status or '').strip().lower()
@@ -289,7 +297,7 @@ def scrape_listings(req: ScrapeRequest):
                 row_status = str(row.get('status') or '').strip().lower()
                 if is_combined and row_status not in _FOR_SALE_STATUSES and 'rent' not in row_status and row_status != 'sold':
                     print(f"WARN: unexpected combined-row status '{row_status}' -> routing to listings (for_sale)")
-                row_type = route_row_type(row_status, is_combined, req.listing_type)
+                row_type = route_row_type(row_status, is_combined, req.listing_type, row.get('property_url'))
                 is_rental = row_type == 'for_rent'
                 is_sold = row_type == 'sold'
 
@@ -406,7 +414,8 @@ def scrape_listings(req: ScrapeRequest):
                             assessed_value, estimated_value, description, style, new_construction,
                             list_date, price_per_sqft, hoa_fee, tax_annual_amount, property_url,
                             parking_garage, lot_sqft,
-                            stories, nearby_schools, agent_info, tax_history
+                            stories, nearby_schools, agent_info, tax_history,
+                            last_seen_at
                         )
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s,
@@ -419,7 +428,8 @@ def scrape_listings(req: ScrapeRequest):
                             n.address_norm,
                             md5(coalesce(n.address_norm, '') || '|' || coalesce(lower(%s), '') || '|' || coalesce(lower(%s), '')),
                             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s
+                            %s, %s, %s, %s,
+                            now()
                         FROM classify_sale_type(%s::jsonb, %s) c,
                              LATERAL (
                                  SELECT NULLIF(regexp_replace(regexp_replace(lower(trim(%s)), '[.,#]', '', 'g'), '\\s+', ' ', 'g'), '') AS address_norm
@@ -462,6 +472,7 @@ def scrape_listings(req: ScrapeRequest):
                             nearby_schools = COALESCE(EXCLUDED.nearby_schools, listings.nearby_schools),
                             agent_info = COALESCE(EXCLUDED.agent_info, listings.agent_info),
                             tax_history = COALESCE(EXCLUDED.tax_history, listings.tax_history),
+                            last_seen_at = now(),
                             updated_at = NOW()
                         WHERE (EXCLUDED.price IS NOT NULL AND listings.price IS DISTINCT FROM EXCLUDED.price)
                            OR (EXCLUDED.bedrooms IS NOT NULL AND listings.bedrooms IS DISTINCT FROM EXCLUDED.bedrooms)
@@ -495,6 +506,11 @@ def scrape_listings(req: ScrapeRequest):
                            OR (EXCLUDED.nearby_schools IS NOT NULL AND listings.nearby_schools IS DISTINCT FROM EXCLUDED.nearby_schools)
                            OR (EXCLUDED.agent_info IS NOT NULL AND listings.agent_info IS DISTINCT FROM EXCLUDED.agent_info)
                            OR (EXCLUDED.tax_history IS NOT NULL AND listings.tax_history IS DISTINCT FROM EXCLUDED.tax_history)
+                           -- Re-seen-but-unchanged listings must still advance last_seen_at
+                           -- (the reaper keys entirely off it; a frozen value false-stales a
+                           -- healthy listing). Bounded to once/day to cap write amplification.
+                           -- NOTE: this refresh path also bumps updated_at (accepted tradeoff).
+                           OR listings.last_seen_at < now() - interval '1 day'
                         RETURNING id, (xmax = 0) as was_inserted
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,

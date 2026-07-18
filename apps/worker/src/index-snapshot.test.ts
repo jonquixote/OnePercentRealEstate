@@ -1,10 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { shapeSnapshotRows } from './index-snapshot';
+import { shapeSnapshotRows, buildSnapshotQuery } from './index-snapshot';
 
 const metros = [
   { slug: 'houston', label: 'Houston', zip3: ['770'], repZip: '77002' },
   { slug: 'tampa', label: 'Tampa', zip3: ['336'], repZip: '33604' },
 ];
+
+describe('buildSnapshotQuery', () => {
+  it('counts only active (live) inventory — sold/stale/misfiled never inflate the index', () => {
+    const { sql, params } = buildSnapshotQuery(metros);
+    expect(sql).toMatch(/listing_status\s*=\s*'active'/i);
+    // zip3/metro pairs remain fully parameterized (index-friendly VALUES join).
+    expect(params).toEqual(['770', 'houston', '336', 'tampa']);
+  });
+});
 
 describe('shapeSnapshotRows', () => {
   it('computes pct_clearing, attaches labels, and zero-fills absent metros (no gaps)', () => {

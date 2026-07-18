@@ -48,6 +48,14 @@ export interface WorkerEnv {
   // Tasks 2.1 & 2.2 — saved-search daily digest + weekly ZIP market brief
   readonly UNSUBSCRIBE_SECRET: string;
   readonly DIGEST_PUBLIC_URL: string;
+  // Task 3 — listing lifecycle tick (stale reaper, sold matcher, recheck enqueue)
+  readonly LIFECYCLE_TICK_MS: number;
+  readonly STALE_AFTER_DAYS: number;
+  readonly PENDING_VERIFY_AFTER_DAYS: number;
+  readonly RECHECK_BATCH: number;
+  // Fraction in [0,1] — the max share of worker claims that may pull a
+  // zip_recheck job before a normal job, so rechecks never starve the crawl.
+  readonly RECHECK_MAX_SHARE: number;
 }
 
 function readString(name: string, fallback?: string): string {
@@ -83,6 +91,19 @@ function readStringOpt(name: string): string | null {
   const v = process.env[name];
   if (v && v.length > 0) return v;
   return null;
+}
+
+// A probability in [0,1] (e.g. the recheck claim share). Rejects out-of-range
+// and non-finite values so a fat-fingered "20" (meaning 20%) fails fast rather
+// than making random() < share always true.
+function readFraction(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 1) {
+    throw new Error(`Invalid fraction (expected 0..1) for ${name}: ${raw}`);
+  }
+  return n;
 }
 
 export function loadEnv(): WorkerEnv {
@@ -158,5 +179,18 @@ export function loadEnv(): WorkerEnv {
       process.env.NODE_ENV !== 'production' ? 'dev-unsub-secret-change-me' : undefined,
     ),
     DIGEST_PUBLIC_URL: readString('DIGEST_PUBLIC_URL', 'https://octavo.press'),
+    // Task 3 — listing lifecycle tick. 6h cadence keeps the four bulk UPDATEs
+    // off the hot path. A for_sale row unseen for STALE_AFTER_DAYS days is
+    // demoted to stale; an aged PENDING/CONTINGENT row after
+    // PENDING_VERIFY_AFTER_DAYS days becomes pending_verify; the busiest
+    // RECHECK_BATCH pending_verify ZIPs get a zip_recheck crawl job.
+    LIFECYCLE_TICK_MS: readInt('LIFECYCLE_TICK_MS', 6 * 60 * 60 * 1000),
+    STALE_AFTER_DAYS: readInt('STALE_AFTER_DAYS', 10),
+    PENDING_VERIFY_AFTER_DAYS: readInt('PENDING_VERIFY_AFTER_DAYS', 7),
+    RECHECK_BATCH: readInt('RECHECK_BATCH', 40),
+    // Stored as a float in [0,1]. The claim loop pulls a zip_recheck job first
+    // only when random() < this; otherwise normal jobs win. Either path falls
+    // back to the other kind, so whichever queue has work still drains.
+    RECHECK_MAX_SHARE: readFraction('RECHECK_MAX_SHARE', 0.2),
   };
 }

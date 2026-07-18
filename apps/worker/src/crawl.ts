@@ -33,6 +33,7 @@ import { isBlockError, isTransientScraperError } from './crawl-errors.js';
 import { getLogger, newTraceId, withTrace, type WorkerLogger } from './logger.js';
 import { ScraperPool, type Outcome } from './scraper-pool.js';
 import { formatEndpointMetrics } from './metrics.js';
+import { runLifecycleTick } from './lifecycle.js';
 
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
@@ -101,15 +102,29 @@ let shuttingDown = false;
 // Claim the NEXT pending job, atomically. FOR UPDATE SKIP LOCKED lets many
 // concurrent runners (and multiple worker instances) pull distinct rows
 // without racing. Returns null when the pending queue is empty.
+//
+// Recheck-share cap: the lifecycle tick (lifecycle.ts) enqueues 'zip_recheck'
+// jobs that must drain WITHOUT starving the (much larger) normal crawl backlog.
+// We bias claims toward normal jobs — only ~RECHECK_MAX_SHARE of claims try a
+// recheck first. Each path falls back to the other kind when its preferred
+// queue is empty, so whichever queue has work still drains: a pure-recheck
+// queue drains via the fallback (just at the normal-first cadence), and a
+// normal job is never passed over for a recheck when the coin says "normal".
 // ---------------------------------------------------------------------------
 
-async function claimNextJob(): Promise<CrawlJob | null> {
+type ClaimKind = 'normal' | 'recheck';
+
+// Claim the next pending job of one kind. 'recheck' == region_type
+// 'zip_recheck'; 'normal' == every other region_type (the seeded ZIP backlog).
+async function claimJobOfKind(kind: ClaimKind): Promise<CrawlJob | null> {
+  const regionPred = kind === 'recheck' ? "region_type = 'zip_recheck'" : "region_type <> 'zip_recheck'";
   const claim = await pool.query<CrawlJob>(
     `UPDATE crawl_jobs
         SET status = 'processing', started_at = NOW()
       WHERE id = (
         SELECT id FROM crawl_jobs
          WHERE status = 'pending'
+           AND ${regionPred}
          ORDER BY id
          FOR UPDATE SKIP LOCKED
          LIMIT 1
@@ -117,6 +132,12 @@ async function claimNextJob(): Promise<CrawlJob | null> {
       RETURNING id::text AS id, region_type, region_value`,
   );
   return claim.rowCount === 0 ? null : claim.rows[0];
+}
+
+async function claimNextJob(): Promise<CrawlJob | null> {
+  const recheckFirst = Math.random() < env.RECHECK_MAX_SHARE;
+  const order: readonly [ClaimKind, ClaimKind] = recheckFirst ? ['recheck', 'normal'] : ['normal', 'recheck'];
+  return (await claimJobOfKind(order[0])) ?? (await claimJobOfKind(order[1]));
 }
 
 // ---------------------------------------------------------------------------
@@ -626,6 +647,31 @@ function startMetricsLoop(parentLog: WorkerLogger): void {
 }
 
 // ---------------------------------------------------------------------------
+// Listing lifecycle tick (lifecycle.ts). A slow (LIFECYCLE_TICK_MS, ~6h) timer
+// that ages stale inventory, reconciles sold matches, flags aged
+// pending/contingent rows, and enqueues capped zip_recheck jobs. Mirrors the
+// metrics loop: unref()'d so it never keeps the process alive on its own, and
+// explicitly cleared on shutdown. Guarded so a DB hiccup logs and retries next
+// tick rather than crashing the worker — it is a background reconciler, not on
+// the crawl hot path.
+// ---------------------------------------------------------------------------
+
+let lifecycleTimer: NodeJS.Timeout | null = null;
+
+function startLifecycleLoop(parentLog: WorkerLogger): void {
+  lifecycleTimer = setInterval(() => {
+    void runLifecycleTick(pool, parentLog, {
+      staleAfterDays: env.STALE_AFTER_DAYS,
+      pendingVerifyAfterDays: env.PENDING_VERIFY_AFTER_DAYS,
+      recheckBatch: env.RECHECK_BATCH,
+    }).catch((err) => {
+      parentLog.warn({ err: (err as Error).message }, 'lifecycle tick failed');
+    });
+  }, env.LIFECYCLE_TICK_MS);
+  lifecycleTimer.unref();
+}
+
+// ---------------------------------------------------------------------------
 // Graceful shutdown: stop new work, drain in-flight, close, exit.
 // ---------------------------------------------------------------------------
 
@@ -637,6 +683,10 @@ async function shutdown(signal: string): Promise<void> {
   if (metricsTimer) {
     clearInterval(metricsTimer);
     metricsTimer = null;
+  }
+  if (lifecycleTimer) {
+    clearInterval(lifecycleTimer);
+    lifecycleTimer = null;
   }
 
   const deadline = Date.now() + 30_000;
@@ -679,6 +729,7 @@ async function main(): Promise<void> {
   // runners are the source of truth for pulling work — they never starve on
   // the static seed backlog the way a NOTIFY-only design did.
   startMetricsLoop(log);
+  startLifecycleLoop(log);
   const runners = Array.from({ length: concurrency }, (_, i) => runnerLoop(i, log));
   await Promise.all([listenLoop(log), reaperLoop(log), ...runners]);
 }
