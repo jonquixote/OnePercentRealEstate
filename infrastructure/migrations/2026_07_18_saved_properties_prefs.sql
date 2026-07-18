@@ -19,5 +19,15 @@ CREATE INDEX IF NOT EXISTS idx_saved_properties_user ON saved_properties (user_i
 
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS prefs jsonb NOT NULL DEFAULT '{}'::jsonb;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON saved_properties TO oper_app;
-GRANT USAGE, SELECT ON SEQUENCE saved_properties_id_seq TO oper_app;
+-- The role is created by the out-of-band db_roles migration, which the CI
+-- dry-run applies AFTER this file. Guard so migrations-dry-run doesn't fail
+-- with 'role "oper_app" does not exist'. On prod the role exists and the
+-- GRANTs apply; verify the live role name in /etc/oper.env.
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'oper_app') THEN
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON saved_properties TO oper_app';
+    EXECUTE 'GRANT USAGE, SELECT ON SEQUENCE saved_properties_id_seq TO oper_app';
+  END IF;
+END
+$$;
