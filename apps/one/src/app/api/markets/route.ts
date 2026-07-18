@@ -116,10 +116,12 @@ async function refreshMarkets(): Promise<void> {
     `);
     cached = { at: Date.now(), body: { markets: await shapeRows(rows) } };
   } catch (error) {
-    // Missing view (fresh env before the migration runs — SQLSTATE 42P01):
-    // fall back to the live aggregation so behavior is unchanged.
+    // Missing view (SQLSTATE 42P01 — fresh env before the migration runs, or
+    // the view dropped at runtime): fall back to the live aggregation so
+    // behavior is unchanged. Always re-aggregate on 42P01 (don't skip just
+    // because a stale cache exists) so a runtime view-drop self-heals.
     const code = (error as { code?: string })?.code;
-    if (code === '42P01' && !cached) {
+    if (code === '42P01') {
       try {
         const live = await pool.query<{
           zip_code: string;
