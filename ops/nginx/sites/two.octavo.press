@@ -16,6 +16,12 @@ server {
     # The terminal's OWN APIs live on apps/two (3002). Exact-match blocks win
     # over the generic /api/ prefix, so route them to 3002 before the catch-all
     # (which proxies to apps/one/3001). Without these, screens/alerts/charts 404.
+    location = /api/layouts {
+        limit_req zone=oper_api burst=60 nodelay;
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://127.0.0.1:3002;
+        proxy_read_timeout 60s;
+    }
     location = /api/screens {
         limit_req zone=oper_api burst=60 nodelay;
         include /etc/nginx/snippets/proxy-params.conf;
