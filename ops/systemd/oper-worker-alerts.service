@@ -16,7 +16,10 @@ EnvironmentFile=-/etc/oper-role-worker.env
 ExecStart=/usr/bin/node apps/worker/dist/alerts-main.js
 Restart=on-failure
 RestartSec=5
-MemoryMax=192M
+# Fanout holds the tick's candidates + watchlists in memory; 192M could be
+# approached at large matched-row volume (#42). 384M gives headroom while the
+# ALERT_WATCHLIST_BATCH cap (#41) keeps the watchlist set bounded per tick.
+MemoryMax=384M
 
 [Install]
 WantedBy=multi-user.target

@@ -232,7 +232,7 @@ async function runScreenAlertQuery(
                     THEN estimated_rent / price ELSE NULL END AS ratio,
                primary_photo
         FROM listings
-        WHERE listing_type = 'for_sale'
+        WHERE listing_type = 'for_sale' AND listing_status = 'active'
           AND ${saleTypeDefault} (${whereSql})
           AND created_at > $1
         ORDER BY created_at DESC
@@ -327,7 +327,7 @@ async function sendDailyDigestForUser(
                     THEN estimated_rent / price ELSE NULL END AS ratio,
                primary_photo
         FROM listings
-        WHERE listing_type = 'for_sale'
+        WHERE listing_type = 'for_sale' AND listing_status = 'active'
           AND created_at > $1
           AND ${sql}
         ORDER BY created_at DESC
@@ -463,10 +463,10 @@ async function fetchZipStats(client: any, zip: string): Promise<ZipStats> {
     `
       SELECT
         percentile_cont(0.5) WITHIN GROUP (ORDER BY price) FILTER (
-          WHERE listing_type = 'for_sale' AND created_at > now() - interval '7 days'
+          WHERE listing_type = 'for_sale' AND listing_status = 'active' AND created_at > now() - interval '7 days'
         ) AS median_now,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY price) FILTER (
-          WHERE listing_type = 'for_sale'
+          WHERE listing_type = 'for_sale' AND listing_status = 'active'
             AND created_at > now() - interval '14 days'
             AND created_at <= now() - interval '7 days'
         ) AS median_prev
@@ -480,7 +480,7 @@ async function fetchZipStats(client: any, zip: string): Promise<ZipStats> {
     `
       SELECT
         (SELECT count(*)::int FROM listings
-           WHERE zip_code = $1 AND listing_type = 'for_sale'
+           WHERE zip_code = $1 AND listing_type = 'for_sale' AND listing_status = 'active'
              AND created_at > now() - interval '7 days') AS new_count,
         (SELECT count(*)::int FROM sold_listings
            WHERE zip_code = $1 AND sold_date > now() - interval '7 days') AS sold_count
@@ -496,11 +496,11 @@ async function fetchZipStats(client: any, zip: string): Promise<ZipStats> {
     `
       SELECT
         percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent / NULLIF(sqft, 0)) FILTER (
-          WHERE listing_type = 'for_sale' AND created_at > now() - interval '7 days'
+          WHERE listing_type = 'for_sale' AND listing_status = 'active' AND created_at > now() - interval '7 days'
             AND sqft > 0 AND estimated_rent > 0
         ) AS rent_now,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent / NULLIF(sqft, 0)) FILTER (
-          WHERE listing_type = 'for_sale'
+          WHERE listing_type = 'for_sale' AND listing_status = 'active'
             AND created_at > now() - interval '14 days'
             AND created_at <= now() - interval '7 days'
             AND sqft > 0 AND estimated_rent > 0

@@ -577,6 +577,9 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
       WHERE rent_calc_status = 'pending'
         AND public.is_rentable(property_type)
         AND latitude IS NOT NULL AND longitude IS NOT NULL
+        -- Lifecycle (#52): don't spend ML recompute on off-market rows.
+        -- NOT IN (not = 'active') keeps pending_verify scoreable.
+        AND listing_status NOT IN ('sold','stale','rental_misfiled')
       ORDER BY id
       LIMIT $1`,
     [env.RENT_BATCH_SIZE],

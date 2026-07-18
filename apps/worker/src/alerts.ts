@@ -38,6 +38,15 @@ const logger = getLogger(env.LOG_LEVEL);
  * spotlight sanity filter. `listing_status` may not exist yet (Listing Truth
  * plan adds it); `runAlertTick` feature-detects and re-issues without it, so
  * this constant is the optimistic form and the runtime keeps a fallback.
+ *
+ * INDEX (#43): the `last_seen_at > $1 … ORDER BY last_seen_at` scan is served
+ * by the PARTIAL index `idx_listings_last_seen ON listings (last_seen_at)
+ * WHERE listing_type='for_sale' AND listing_status IN ('active','pending_verify')`
+ * from migration 2026_07_18_listing_lifecycle.sql. This query's predicates
+ * (`listing_type='for_sale'` + `listing_status='active'`) are a strict SUBSET
+ * of that index predicate, so the planner can use it — keep both predicates
+ * here. (The NO_LIFECYCLE fallback below runs only pre-migration, when neither
+ * the column nor the index exist, so its lack of an index match is moot.)
  */
 export const CANDIDATES_SQL = `
   SELECT id, address, zip_code, price, estimated_rent, rent_price_ratio,
@@ -253,6 +262,12 @@ function instantEmailHtml(row: AlertRow, candidate: Candidate): string {
 export interface AlertTickConfig {
   /** Max rows to consider per tick (sanity cap). */
   limit?: number;
+  /**
+   * Max watchlists to load per tick (#41). Keeps the fanout's in-memory
+   * candidate×watchlist evaluation bounded. Defaults to
+   * env.ALERT_WATCHLIST_BATCH (2000).
+   */
+  watchlistBatch?: number;
 }
 
 /**
@@ -273,7 +288,7 @@ export interface AlertTickConfig {
 export async function runAlertTick(
   pool: Pool,
   log: Logger,
-  _cfg?: AlertTickConfig,
+  cfg?: AlertTickConfig,
 ): Promise<{ candidates: number; eventsInserted: number; instantSent: number }> {
   const client: PoolClient = await pool.connect();
   try {
@@ -326,11 +341,24 @@ export async function runAlertTick(
     // pair, which issued ~candidates×users×watchlists DB queries per tick.
     const watchlistRows: AlertRow[] = [];
     let watchlists: Array<{ user_id: string; name: string; query_json: Record<string, any> }> = [];
+    // Bounded fetch (#41): loading the whole watchlists table per tick grows
+    // memory + CPU unbounded at scale. Cap at ALERT_WATCHLIST_BATCH (override
+    // via cfg for tests). ORDER BY id makes the cap deterministic; a warn fires
+    // when the cap is hit so we notice before watchlists silently stop being
+    // evaluated and can shard/paginate this path.
+    const watchlistBatch = cfg?.watchlistBatch ?? env.ALERT_WATCHLIST_BATCH;
     try {
       const wlRes = await client.query(
-        `SELECT user_id, name, query_json FROM watchlists`,
+        `SELECT user_id, name, query_json FROM watchlists ORDER BY id LIMIT $1`,
+        [watchlistBatch],
       );
       watchlists = wlRes.rows;
+      if (watchlists.length >= watchlistBatch) {
+        log.warn(
+          { cap: watchlistBatch, fetched: watchlists.length },
+          'watchlists fetch hit ALERT_WATCHLIST_BATCH cap — some watchlists were not evaluated this tick',
+        );
+      }
     } catch (err: any) {
       // watchlists table may not exist yet (Investor's Shelf plan owns it).
       // Degrade to no watchlist matches rather than failing the whole tick.
