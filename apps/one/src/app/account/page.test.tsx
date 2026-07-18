@@ -3,6 +3,20 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import AccountPage from './page';
 
+interface SavedPrefs {
+  financing: {
+    ratePct: number;
+    downPct: number;
+    termYears: number;
+    taxRatePct: number | null;
+    insuranceMoYr: number | null;
+    mgmtPct: number;
+    vacancyPct: number;
+  };
+  areas: unknown[];
+  strategy: string;
+}
+
 afterEach(() => cleanup());
 
 beforeEach(() => {
@@ -38,7 +52,8 @@ describe('AccountPage presets', () => {
     fireEvent.click(screen.getByRole('button', { name: /save presets/i }));
 
     await waitFor(() => expect(savedBody).not.toBeNull());
-    expect((savedBody as any).financing.ratePct).toBe(15); // clamped to ≤15
+    const body = savedBody as SavedPrefs;
+    expect(body.financing.ratePct).toBe(15); // clamped to ≤15
     expect(screen.getByText(/saved ✓/i)).toBeTruthy();
   });
 
@@ -65,8 +80,9 @@ describe('AccountPage presets', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /save presets/i }));
     await waitFor(() => expect(savedBody).not.toBeNull());
+    const body = savedBody as SavedPrefs;
     // The null sentinel must survive a save with no edits — must NOT become 0.
-    expect((savedBody as any).financing.taxRatePct).toBeNull();
-    expect((savedBody as any).financing.insuranceMoYr).toBeNull();
+    expect(body.financing.taxRatePct).toBeNull();
+    expect(body.financing.insuranceMoYr).toBeNull();
   });
 });

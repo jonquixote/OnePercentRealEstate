@@ -63,8 +63,12 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'login required' }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({}));
-    const listingId = Number(body?.listingId);
-    if (!Number.isInteger(listingId) || listingId <= 0) {
+    const rawId = body?.listingId;
+    const listingId =
+      typeof rawId === 'string'
+        ? rawId
+        : (typeof rawId === 'number' && Number.isSafeInteger(rawId) && rawId > 0 ? String(rawId) : '');
+    if (!/^[1-9]\d{0,17}$/.test(listingId)) {
       return NextResponse.json({ error: 'listingId required' }, { status: 400 });
     }
     const note = typeof body?.note === 'string' ? body.note.slice(0, 1000) : null;
@@ -100,7 +104,7 @@ export async function DELETE(request: NextRequest) {
   // The client (SaveButton) only knows the listing id; support it directly so
   // a save can always be unsaved by the same id it was saved with. The PK `id`
   // is also accepted for callers that have it (e.g. the shelf batch remove).
-  if (listingId && /^\d{1,18}$/.test(listingId)) {
+  if (listingId && /^[1-9]\d{0,17}$/.test(listingId)) {
     try {
       const res = await pool.query(
         'DELETE FROM saved_properties WHERE listing_id = $1 AND user_id = $2',
@@ -112,7 +116,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'failed to delete saved property' }, { status: 500 });
     }
   }
-  if (id && /^\d{1,18}$/.test(id)) {
+  if (id && /^[1-9]\d{0,17}$/.test(id)) {
     try {
       const res = await pool.query(
         'DELETE FROM saved_properties WHERE id = $1 AND user_id = $2',

@@ -1,6 +1,6 @@
 import { intrinsicValue, marginOfSafety, ownerReturn10yr, type OwnerReturn } from '@oper/primitives';
 import pool from '@/lib/db';
-import { parsePrefs, type InvestorPrefs } from '@/lib/prefs';
+import { parsePrefs, type InvestorPrefs } from '@/lib/prefs-shared';
 
 // Documented defaults when an underwriting_rules row or metro stat is absent.
 const DEFAULT_OPEX = 0.5;        // 50% rule

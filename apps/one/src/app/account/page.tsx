@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, parsePrefs } from '@/lib/prefs';
 import { METROS } from '@/lib/metros';
 
 interface SavedSearch {
@@ -206,7 +206,9 @@ function PresetsEditor() {
   }, [loading, prefs]);
 
   async function persist() {
-    const ok = await save(draft);
+    const cleaned = parsePrefs(draft);
+    setDraft(cleaned);
+    const ok = await save(cleaned);
     setSaved(ok);
     if (ok) setTimeout(() => setSaved(false), 1500);
   }

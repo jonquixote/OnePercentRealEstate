@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePrefs, DEFAULT_PREFS } from './prefs';
+import { parsePrefs, DEFAULT_PREFS } from './prefs-shared';
 
 describe('parsePrefs', () => {
   it('empty input returns DEFAULT_PREFS', () => {
@@ -50,5 +50,12 @@ describe('parsePrefs', () => {
     const p = parsePrefs({ financing: { taxRatePct: 'x', insuranceMoYr: 1200 } });
     expect(p.financing.taxRatePct).toBeNull();
     expect(p.financing.insuranceMoYr).toBe(1200);
+  });
+
+  it('clamps taxRatePct 0-20 and insuranceMoYr 0-1000000', () => {
+    expect(parsePrefs({ financing: { taxRatePct: 999 } }).financing.taxRatePct).toBe(20);
+    expect(parsePrefs({ financing: { taxRatePct: -5 } }).financing.taxRatePct).toBe(0);
+    expect(parsePrefs({ financing: { insuranceMoYr: -100 } }).financing.insuranceMoYr).toBe(0);
+    expect(parsePrefs({ financing: { insuranceMoYr: 9e9 } }).financing.insuranceMoYr).toBe(1000000);
   });
 });

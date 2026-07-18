@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
-import { parsePrefs } from '@/lib/prefs';
+import { parsePrefs } from '@/lib/prefs-shared';
 
 /**
  * Session-scoped investor prefs (profiles.prefs jsonb). GET returns the parsed
@@ -28,14 +28,20 @@ export async function PUT(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'login required' }, { status: 401 });
   try {
-    const body = await request.json().catch(() => null);
+    const body = await request.json();
     const cleaned = parsePrefs(body); // never store raw client json
-    await pool.query('UPDATE profiles SET prefs = $1 WHERE id = $2', [
+    const res = await pool.query('UPDATE profiles SET prefs = $1 WHERE id = $2', [
       JSON.stringify(cleaned),
       user.id,
     ]);
+    if (res.rowCount === 0) {
+      return NextResponse.json({ error: 'profile not found' }, { status: 404 });
+    }
     return NextResponse.json(cleaned);
   } catch (err) {
+    if (err instanceof SyntaxError) {
+      return NextResponse.json({ error: 'invalid json' }, { status: 400 });
+    }
     console.error('PUT /api/prefs error:', err);
     return NextResponse.json({ error: 'failed to save prefs' }, { status: 500 });
   }

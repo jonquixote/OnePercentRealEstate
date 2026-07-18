@@ -71,4 +71,21 @@ describe('PUT /api/prefs', () => {
     const written = JSON.parse(String((query.mock.calls[0] as unknown as unknown[][])?.[1]?.[0]));
     expect(written.areas).toHaveLength(1);
   });
+
+  it('400 on malformed JSON body', async () => {
+    const req = new NextRequest('http://x/api/prefs', {
+      method: 'PUT',
+      body: '{ not valid json',
+    });
+    const res = await PUT(req);
+    expect(res.status).toBe(400);
+  });
+
+  it('404 when no profiles row is updated', async () => {
+    query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = await PUT(putReq({ financing: { ratePct: 7 } }));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe('profile not found');
+  });
 });
