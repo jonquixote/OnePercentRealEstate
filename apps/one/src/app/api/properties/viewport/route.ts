@@ -153,6 +153,9 @@ export async function GET(request: NextRequest) {
         FROM listings
         WHERE
           geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+          -- Lifecycle: cluster only live inventory (mirrors mv_cluster_tiles,
+          -- which the no-filter fast-path above reads from).
+          AND listing_status = 'active'
           ${clause}
         GROUP BY ST_SnapToGrid(geom, $${values.length + 5})
       `;
@@ -194,6 +197,8 @@ export async function GET(request: NextRequest) {
         FROM listings
         WHERE
           geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+          -- Lifecycle: only live pins (no sold/stale/rental_misfiled markers).
+          AND listing_status = 'active'
           ${clause}
         LIMIT 2000
       `;

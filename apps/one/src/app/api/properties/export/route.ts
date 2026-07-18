@@ -47,6 +47,11 @@ const ExportBodySchema = z.object({
   // Optional label for the download filename (built-in / live path; the
   // screenId path derives the name from the saved row).
   name: z.string().max(120).optional(),
+  // Lifecycle opt-in — mirrors /api/properties/query so the CSV row set equals
+  // the on-screen row set. Default hides off-market rows (sold/stale/
+  // rental_misfiled); includeSold surfaces sold rows. Stale + misfiled always
+  // stay hidden.
+  includeSold: z.boolean().optional(),
 });
 
 const MAX_ROWS = 10_000;
@@ -179,6 +184,9 @@ export async function POST(req: NextRequest) {
   const saleTypeDefault = compiled.usedColumns.includes('sale_type')
     ? ''
     : `sale_type = 'standard' AND`;
+  const lifecycleFilter = body.includeSold
+    ? `listing_status NOT IN ('stale','rental_misfiled')`
+    : `listing_status NOT IN ('sold','stale','rental_misfiled')`;
   const orderBySql = buildOrderBy(body.orderBy);
   const sql = `
     SELECT
@@ -201,6 +209,7 @@ export async function POST(req: NextRequest) {
       zip_code
     FROM listings
     WHERE listing_type = 'for_sale'
+      AND ${lifecycleFilter}
       AND ${saleTypeDefault} (${compiled.whereSql})
     ORDER BY ${orderBySql}
     LIMIT ${MAX_ROWS}

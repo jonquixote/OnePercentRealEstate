@@ -161,6 +161,7 @@ export async function POST(req: NextRequest) {
       COALESCE(primary_photo, images->>0) AS primary_photo,
       sale_type,
       listing_status,
+      listing_status as status,
       sold_price,
       sold_date::text AS sold_date,
       days_on_market,

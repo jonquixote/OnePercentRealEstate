@@ -287,3 +287,24 @@ export async function runLifecycleTick(pool: Pool, log: WorkerLogger, cfg: Lifec
 **Placeholder scan:** every SQL/Python/TS block is complete; the two integration points described in prose (per-row call site passing `property_url`; claimNextJob share cap) name exact functions and the mechanism to use.
 
 **Type consistency:** `LifecycleCfg/LifecycleStats` defined once (T3); lifecycle vocabulary identical across migration CHECK (T1), scraper (T2 routes, doesn't write status), worker SQL (T3), and reader filters (T4); `sold_price/sold_date` columns created in T1 and consumed in T3 (write) / T4 (read).
+
+---
+
+## Batch-2 review fix (post-4477500) — user-facing surface leaks
+
+The batch-2 review approved Tasks 3+4 at the gate but flagged three
+REQUIRED-BEFORE-MERGE leaks where off-market rows still surfaced, plus a minor
+field-name divergence. Applied as one commit on top of 4477500.
+
+**Fixes:**
+- **Featured** (`apps/one/src/app/api/featured/route.ts`) — the ratio-DESC "clears the line" strip now `AND l.listing_status = 'active'` (the original complaint surface: misfiled rentals dominate ratio-DESC).
+- **Viewport** (`apps/one/src/app/api/properties/viewport/route.ts`) — `AND listing_status = 'active'` added to BOTH the cluster query and the individual-pin query.
+- **Cluster MV** (`infrastructure/migrations/2026_07_18_mv_cluster_tiles_lifecycle.sql`, new) — DROP + recreate `mv_cluster_tiles` with `AND l.listing_status = 'active'::text` in the `buckets` CTE; recreates all 3 indexes verbatim; plain `REFRESH`; DO-guarded `OWNER TO oper_worker` (mirrors `mv_market_grid_lifecycle.sql`). The `worker-refresh` service refreshes it `CONCURRENTLY` (refresh-clusters.ts:77), so the unique index + ownership must survive.
+- **Export** (`apps/one/src/app/api/properties/export/route.ts`) — added `lifecycleFilter` mirroring the query route (`NOT IN ('sold','stale','rental_misfiled')` default; `NOT IN ('stale','rental_misfiled')` when `includeSold`), injected into the WHERE. CSV row-set now matches `/api/properties/query`.
+- **Alias symmetry** (`apps/one/src/app/api/properties/query/route.ts`) — SELECT emits BOTH `listing_status,` and `listing_status as status,` (keeps `.listing_status` consumers like PortfolioCharts/csvColumns working while resolving `.status`). `SearchCard.tsx` comment corrected to name the properties shaper.
+
+**Verify:** `pnpm --filter @oper/one typecheck` clean; `pnpm --filter @oper/one test` → 68 pass.
+
+**Known remaining gaps (out of batch-2 scope, follow-up wave):** `stats/route.ts`, `sitemap.ts`, `market/[zip]/page.tsx`, `v1/listings/route.ts` still read `FROM listings` without a lifecycle filter. Named in Global Constraints but not in Task 4's file-edit list; flagged by the implementing agent as a later wave. `/api/properties` (compare-by-id) intentionally unfiltered.
+
+**Param note:** plan's Global Constraints say `?include_sold=1` (query param) while Task 4 Step 2 says body `includeSold: true`. Implementation uses body `includeSold` (query + export); no `?include_sold=1` param exists. Internal plan inconsistency resolved toward body.

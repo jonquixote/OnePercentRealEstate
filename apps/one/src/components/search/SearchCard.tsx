@@ -21,7 +21,7 @@ interface SearchCardProps {
     days_on_market?: number | null;
     is_rentable?: boolean | null;
     target_ratio?: number | null;
-    // Lifecycle: `status` mirrors listings.listing_status (aliased in the query).
+    // Lifecycle: `status` mirrors listings.listing_status (aliased in the properties shaper, property.ts), and now also in /api/properties/query.
     // Only reachable as 'sold' when the caller opted into sold inventory.
     status?: string | null;
     sold_price?: number | null;
