@@ -22,6 +22,11 @@ interface SearchCardProps {
     days_on_market?: number | null;
     is_rentable?: boolean | null;
     target_ratio?: number | null;
+    // Lifecycle: `status` mirrors listings.listing_status (aliased in the properties shaper, property.ts), and now also in /api/properties/query.
+    // Only reachable as 'sold' when the caller opted into sold inventory.
+    status?: string | null;
+    sold_price?: number | null;
+    sold_date?: string | null;
   };
   /** Split-view sync: list -> map hover. */
   onHover?: (id: string | null) => void;
@@ -33,11 +38,15 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
   const {
     id, address, listing_price, estimated_rent, rent_low, rent_high,
     primary_photo, property_type, price_cut_pct, days_on_market, is_rentable,
-    target_ratio,
+    target_ratio, status, sold_price, sold_date,
   } = property;
 
   const compare = useCompare();
   const inCompare = compare.has(id);
+
+  // Lifecycle: a sold row (only present when the user opted into sold inventory)
+  // gets a SOLD ribbon over the mat and a muted CTA — it's a comp, not a buyable.
+  const isSold = status === 'sold';
 
   const price = listing_price ?? 0;
   const rent = estimated_rent ?? 0;
@@ -89,6 +98,16 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
               </div>
             </div>
           )}
+          {/* SOLD ribbon — lifecycle: an off-market comp the user opted to see */}
+          {isSold && (
+            <div
+              className="prov absolute inset-x-0 bottom-0 flex items-center justify-center px-2 py-1.5 text-[11px] uppercase tracking-wider"
+              style={{ background: 'rgba(10,10,10,.72)', color: 'var(--paper, #faf7f2)' }}
+            >
+              Sold{sold_date ? ` ${sold_date}` : ''}
+              {sold_price != null && sold_price > 0 ? ` · ${usd0.format(sold_price)}` : ''}
+            </div>
+          )}
           {/* brass cut overlay */}
           {cutPct != null && cutPct > 0 && (
             <span
@@ -138,7 +157,7 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
             </>
           );
         })()}
-  
+
           {/* address + DOM */}
         <p className="mt-2 truncate text-[13px]" style={{ color: 'var(--haze)' }}>
           {address}<span style={{ color: 'var(--mute)' }}>{dom != null ? ` · ${dom} DOM` : ''}</span>
@@ -153,7 +172,7 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
       >
         <SaveButton listingId={id} />
       </div>
-      {/* compare toggle — visible on hover, focus, or when selected */}
+      {/* compare toggle — visible on hover, focus, or when selected; muted for sold comps */}
       <button
         type="button"
         onClick={(e) => {
@@ -161,7 +180,7 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
           e.stopPropagation();
           compare.toggle(id);
         }}
-        className={`absolute right-3 top-3 z-10 rounded-full border px-2.5 py-1 text-[11px] font-semibold backdrop-blur transition-opacity ${inCompare ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 focus-visible:opacity-100'}`}
+        className={`absolute right-3 top-3 z-10 rounded-full border px-2.5 py-1 text-[11px] font-semibold backdrop-blur transition-opacity ${isSold ? 'opacity-40 group-hover:opacity-70' : inCompare ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 focus-visible:opacity-100'}`}
         style={
           inCompare
             ? { background: 'var(--pass)', borderColor: 'var(--pass)', color: 'var(--ink)' }

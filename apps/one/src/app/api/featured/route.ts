@@ -66,6 +66,10 @@ export async function GET(req: Request) {
             FROM listings l
             WHERE l.listing_type = 'for_sale'
               AND l.sale_type = 'standard'
+              -- Lifecycle: rank only live inventory. Without this, misfiled
+              -- rentals (whose "rent" is really the list price) post absurd
+              -- ratios and dominate this ratio-DESC strip — the original complaint.
+              AND l.listing_status = 'active'
               AND l.price > 10000
               AND l.primary_photo IS NOT NULL
               AND public.is_rentable(l.property_type)

@@ -38,6 +38,7 @@ export function buildSpotlightQuery(loc: SpotlightLoc): { sql: string; params: u
            COALESCE(primary_photo, images->>0) AS primary_photo
     FROM listings
     WHERE listing_type = 'for_sale'
+      AND listing_status = 'active'
       AND price >= 30000
       AND estimated_rent > 0
       AND rent_price_ratio >= 0.01

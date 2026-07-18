@@ -18,6 +18,8 @@ describe('buildSpotlightQuery', () => {
     expect(sql).toMatch(/rent_price_ratio\s*>=\s*0.01/i);
     expect(sql).toMatch(/rent_price_ratio\s*<=\s*0.05/i);
     expect(sql).toMatch(/ST_DWithin/i);
+    // Lifecycle: the hero must be a live listing — never a sold/stale/misfiled row.
+    expect(sql).toMatch(/listing_status\s*=\s*'active'/i);
   });
 });
 
