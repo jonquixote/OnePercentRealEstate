@@ -145,7 +145,10 @@ export async function POST(req: NextRequest) {
       sqft,
       estimated_rent,
       year_built,
-      primary_photo,
+      -- primary_photo is ~0.3% populated; photos live in the images jsonb.
+      -- Same COALESCE as the spotlight query — without it search cards said
+      -- "Photo pending" while the property page (which reads images) had photos.
+      COALESCE(primary_photo, images->>0) AS primary_photo,
       sale_type,
       listing_status,
       days_on_market,

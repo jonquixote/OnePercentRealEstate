@@ -71,6 +71,10 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
               width={480}
               height={360}
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+              // Scraper-sourced URL from arbitrary hosts (images->>0 fallback);
+              // the optimizer 400s hosts outside remotePatterns. Same call the
+              // FirstDealHero made — skip the optimizer, keep the allowlist tight.
+              unoptimized
             />
           </div>
         ) : (
