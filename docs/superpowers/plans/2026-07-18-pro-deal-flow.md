@@ -85,7 +85,7 @@ GRANT USAGE, SELECT ON SEQUENCE alert_events_id_seq TO oper_worker;
 ## Task 2: Worker alert tick
 
 **Interfaces (apps/worker/src/alerts.ts):**
-- `CANDIDATES_SQL` — new 1%-clearers since a watermark: `created_at > $1`, `rent_price_ratio >= 0.01`, `price >= 30000`, ratio `<= 0.05` (the spotlight sanity bounds), lifecycle-active when the column exists.
+- `CANDIDATES_SQL` — 1%-clearers seen since a watermark: `last_seen_at > $1` (NOT `created_at` — a price cut can turn an old listing into a fresh deal and `created_at` would miss it), `rent_price_ratio >= 0.01`, `price >= 30000`, ratio `<= 0.05` (the spotlight sanity bounds), lifecycle-active when the column exists. Over-matching re-seen rows is harmless: the `alert_events` UNIQUE (user, listing) dedup absorbs them.
 - `matchAreas(candidates, users): AlertRow[]` — pure: user areas are ZIP prefixes-exact matches (`zip === candidate.zip_code`).
 - `runAlertTick(pool, log, cfg)` — waterline from `worker_state` (key/value table pattern the worker already uses — verify name; else a tiny `alert_state(id=1, last_created_at)` created in the migration), candidates → per-user matches from (a) `profiles.prefs->'areas'` (b) watchlists via the SAME evaluation path the existing watchlist tick uses (call that function — do not re-implement query-lang), → `INSERT … ON CONFLICT DO NOTHING` into `alert_events`, → fanout: pro users' fresh rows get instant email/Telegram (when configured) and `delivered_at=now()`; free rows are left for the digest job, which appends "New in your areas" to the existing daily email and stamps `delivered_at`.
 
