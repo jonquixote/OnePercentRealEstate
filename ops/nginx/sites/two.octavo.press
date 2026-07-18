@@ -39,6 +39,15 @@ server {
         proxy_pass http://127.0.0.1:3002;
         proxy_read_timeout 60s;
     }
+    # Watchlists are served by apps/one (3001) — the WatchlistPane in the
+    # terminal reads them here. Explicit exact-match so it is never shadowed
+    # by a future two-side /api/ route.
+    location = /api/watchlists {
+        limit_req zone=oper_api burst=60 nodelay;
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://127.0.0.1:3001;
+        proxy_read_timeout 60s;
+    }
 
     location /api/ {
         limit_req zone=oper_api burst=60 nodelay;

@@ -26,6 +26,7 @@ import type { PropertyRow } from "@/lib/types";
 import { PropertyTable } from "@/components/PropertyTable";
 import { StatBar } from "@/components/StatBar";
 import { ChartPane } from "@/components/ChartPane";
+import { X } from "lucide-react";
 
 export type BottomPane = "map" | "chart" | null;
 
@@ -44,6 +45,14 @@ interface WorkspaceProps {
   latencyMs?: number | null;
   /** Name of the active screen, or a fallback label for ad-hoc/live modes. */
   screenName?: string | null;
+  /**
+   * W4: applies a saved layout (its column ids + optional sort) chosen from
+   * the layout bar. The page owns column/sort state, so the bar only emits.
+   */
+  onApplyLayout?: (layout: { columns: string[]; sort?: { col: string; dir: "asc" | "desc" } | null }) => void;
+  /** When true, the layout bar is allowed to show the "Save as…" affordance
+   * (Pro only). Free users can still load built-in layouts but not save. */
+  canSaveLayout?: boolean;
 }
 
 const SPLIT_KEY = "two:workspace-split";
@@ -61,6 +70,8 @@ export function Workspace({
   bottomPane,
   latencyMs,
   screenName,
+  onApplyLayout,
+  canSaveLayout = true,
 }: WorkspaceProps) {
   const [split, setSplit] = React.useState(DEFAULT_SPLIT);
   const splitRef = React.useRef<HTMLDivElement>(null);
@@ -112,6 +123,12 @@ export function Workspace({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <LayoutBar
+        onApplyLayout={onApplyLayout}
+        canSaveLayout={canSaveLayout}
+        currentColumns={columns.map((c) => c.id)}
+        currentSort={sort}
+      />
       <StatBar rows={rows} latencyMs={latencyMs} screenName={screenName} />
       <div ref={splitRef} className="flex min-h-0 flex-1 flex-col">
         {/* Top: the table region. A focusable wrapper so `esc` can return
@@ -153,6 +170,191 @@ export function Workspace({
           </>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * W4 layout bar — a single row above the grid with a saved-layout dropdown,
+ * a "Save as…" input, and (for the active layout) a delete control. It talks
+ * to /api/layouts directly and emits a chosen layout to the page via
+ * `onApplyLayout` (the page owns column/sort state, so the bar never mutates
+ * it). The last-used layout name is persisted to localStorage and re-fetched
+ * from the server on mount so a saved screen survives reloads.
+ *
+ * NOTE: saving is a Pro affordance; `canSaveLayout=false` hides the save
+ * input (the server also 403s free users, so this is cosmetic only).
+ */
+const LAYOUT_LS_KEY = "two:last-layout";
+
+interface SavedLayout {
+  id: number;
+  name: string;
+  layout: {
+    columns?: { key: string; visible?: boolean; width?: number }[];
+    sort?: { key?: string; dir?: "asc" | "desc" } | null;
+  };
+  updated_at: string;
+}
+
+function LayoutBar({
+  onApplyLayout,
+  canSaveLayout,
+  currentColumns,
+  currentSort,
+}: {
+  onApplyLayout?: (layout: { columns: string[]; sort?: { col: string; dir: "asc" | "desc" } | null }) => void;
+  canSaveLayout: boolean;
+  currentColumns: string[];
+  currentSort: ScreenSort | null;
+}) {
+  const [layouts, setLayouts] = React.useState<SavedLayout[]>([]);
+  const [activeName, setActiveName] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [saveName, setSaveName] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/layouts", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as SavedLayout[];
+      const list = Array.isArray(data) ? data : [];
+      setLayouts(list);
+      // Re-apply the last-used layout on mount (server is source of truth).
+      const last = window.localStorage.getItem(LAYOUT_LS_KEY);
+      const match = last ? list.find((l) => l.name === last) : undefined;
+      if (match && onApplyLayout) applyLayout(match);
+    } catch {
+      /* best-effort */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onApplyLayout]);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  const applyLayout = React.useCallback(
+    (l: SavedLayout) => {
+      const cols = (l.layout.columns ?? [])
+        .filter((c) => c.visible !== false)
+        .map((c) => c.key);
+      const sort = l.layout.sort?.key
+        ? { col: l.layout.sort.key, dir: (l.layout.sort.dir ?? "desc") as "asc" | "desc" }
+        : null;
+      onApplyLayout?.({ columns: cols, sort });
+      setActiveName(l.name);
+      try {
+        window.localStorage.setItem(LAYOUT_LS_KEY, l.name);
+      } catch {
+        /* ignore */
+      }
+    },
+    [onApplyLayout],
+  );
+
+  const onSelect = (name: string) => {
+    const l = layouts.find((x) => x.name === name);
+    if (l) applyLayout(l);
+  };
+
+  const onSave = async () => {
+    const name = saveName.trim();
+    if (!name) return;
+    setSaving(true);
+    const payload = {
+      name,
+      layout: {
+        columns: currentColumns.map((key) => ({ key, visible: true })),
+        sort: currentSort ? { key: currentSort.col, dir: currentSort.dir } : null,
+      },
+    };
+    try {
+      const res = await fetch("/api/layouts", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setSaveName("");
+        await load();
+        setActiveName(name);
+        try {
+          window.localStorage.setItem(LAYOUT_LS_KEY, name);
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* best-effort */
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDelete = async (id: number) => {
+    try {
+      const res = await fetch(`/api/layouts?id=${id}`, { method: "DELETE" });
+      if (res.ok) await load();
+    } catch {
+      /* best-effort */
+    }
+  };
+
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/60 bg-zinc-950 px-3 py-1.5">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">Layout</span>
+      <select
+        aria-label="Saved layouts"
+        value={activeName ?? ""}
+        onChange={(e) => onSelect(e.target.value)}
+        className="max-w-[12rem] rounded-sm border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-[12px] text-zinc-200 focus:outline-none focus:ring-1 focus:ring-primary"
+      >
+        <option value="">— default —</option>
+        {layouts.map((l) => (
+          <option key={l.id} value={l.name}>
+            {l.name}
+          </option>
+        ))}
+      </select>
+      {activeName && (
+        <button
+          type="button"
+          aria-label="Delete active layout"
+          onClick={() => {
+            const l = layouts.find((x) => x.name === activeName);
+            if (l) {
+              void onDelete(l.id);
+              setActiveName(null);
+            }
+          }}
+          className="text-zinc-600 hover:text-rose-400"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {canSaveLayout && (
+        <span className="ml-auto flex items-center gap-1">
+          <input
+            type="text"
+            value={saveName}
+            placeholder="Save as…"
+            onChange={(e) => setSaveName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void onSave();
+            }}
+            className="w-32 rounded-sm border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <button
+            type="button"
+            onClick={() => void onSave()}
+            disabled={saving || !saveName.trim()}
+            className="rounded-sm border border-zinc-700 px-2 py-1 font-mono text-[11px] text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
+          >
+            Save
+          </button>
+        </span>
+      )}
     </div>
   );
 }

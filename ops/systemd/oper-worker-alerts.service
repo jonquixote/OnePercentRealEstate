@@ -1,0 +1,22 @@
+[Unit]
+Description=OnePercent Pro Deal Flow Alert Worker
+After=oper-postgres.service
+Requires=oper-postgres.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+EnvironmentFile=-/etc/oper-role-worker.env
+# alerts-main does NOT import @oper/query-lang, so it runs through plain node
+# (dist is emitted by `pnpm --filter @oper/worker build` -> tsc). Do NOT use tsx
+# here — that runtime is reserved for digest/watchlist which pull in query-lang.
+# tsx is a prod dep of @oper/worker. WorkingDirectory is /opt/onepercent.
+ExecStart=/usr/bin/node apps/worker/dist/alerts-main.js
+Restart=on-failure
+RestartSec=5
+MemoryMax=192M
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
 import UserNav from './UserNav';
+import AlertsBell from './AlertsBell';
 import GlobalSearch from './GlobalSearch';
 import {
   PRIMARY_LINKS,
@@ -117,11 +118,13 @@ export default function Header() {
           >
             Pricing
           </Link>
+          <AlertsBell />
           <UserNav />
         </div>
 
         {/* Mobile toggle */}
         <div className="ml-auto flex items-center gap-3 lg:hidden">
+          <AlertsBell />
           <UserNav />
           <button
             ref={mobileToggleRef}

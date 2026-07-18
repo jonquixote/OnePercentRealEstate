@@ -129,3 +129,36 @@ GRANT USAGE, SELECT ON SEQUENCE alert_events_id_seq TO oper_worker;
 **Placeholder scan:** schemas + SQL + component contracts complete; the four verify-on-site points (worker state-table name, live role names, digest sendEmail helper name, two's nginx /api/watchlists route) are named with exact fallback actions.
 
 **Type consistency:** `alert_events` columns match the worker INSERT and the inbox GET; `ColumnDef/ColumnConfig` single-sourced in `columns.ts` for picker + grid + layout validation; tier values (`pro`) read from the same `profiles.subscription_tier` the compare gate uses.
+
+## Deferred / Non-blocking follow-ups
+
+Captured from the final deep-review pass on PR #39 (pro-deal-flow). These were
+judged non-blocking and consciously left for later — NOT bugs in the shipped code.
+
+1. **Unbounded `SELECT … FROM watchlists` in `runAlertTick`**
+   The tick fetches the entire `watchlists` table once per run, then evaluates
+   each candidate in memory (O(candidates × watchlists)). Fine at current
+   volume; at thousands of watchlists this grows memory + CPU per tick.
+   Follow-up: cap/paginate the fetch (e.g. shard by `user_id` or `LIMIT`+offset)
+   before this path sees production scale.
+
+2. **`MemoryMax=192M` headroom on `oper-worker-alerts.service`**
+   The fanout loop holds all candidates + watchlists in memory. At large scale
+   could approach the 192M cap. Follow-up: raise the cap or stream batches if
+   matched-row volume grows.
+
+3. **Verify `listings(last_seen_at)` index exists**
+   `CANDIDATES_SQL` filters/sorts on `last_seen_at` (`WHERE last_seen_at > $1
+   ORDER BY last_seen_at ASC LIMIT 2000`). Confirm a matching index pre-exists
+   (or add one) so the tick stays index-only at scale.
+
+4. **Free users are inbox-only by design (product limitation, not a bug)**
+   `alert_events` rows for free-tier users are written but never emailed — the
+   digest worker does NOT consume `alert_events` (documented in
+   `apps/worker/src/alerts.ts`). Free users get in-app deal alerts only.
+   If email-for-free is later desired, wire a digest pass that reads
+   `alert_events WHERE delivered_at IS NULL` grouped by user.
+
+NOTE: implementation deviation — `alert_events.user_id` and `terminal_layouts.user_id`
+are `text` (matching `profiles.id` which is TEXT), not `uuid` as the original
+plan sketch suggested. Intentional; consistent with `2026_07_12_api_keys.sql`.
