@@ -308,3 +308,13 @@ field-name divergence. Applied as one commit on top of 4477500.
 **Known remaining gaps (out of batch-2 scope, follow-up wave):** `stats/route.ts`, `sitemap.ts`, `market/[zip]/page.tsx`, `v1/listings/route.ts` still read `FROM listings` without a lifecycle filter. Named in Global Constraints but not in Task 4's file-edit list; flagged by the implementing agent as a later wave. `/api/properties` (compare-by-id) intentionally unfiltered.
 
 **Param note:** plan's Global Constraints say `?include_sold=1` (query param) while Task 4 Step 2 says body `includeSold: true`. Implementation uses body `includeSold` (query + export); no `?include_sold=1` param exists. Internal plan inconsistency resolved toward body.
+
+## Deferred (from Listing Truth plan + batch-2 review)
+
+- [ ] **DEF-LT-1 — read surfaces still leak off-market rows.** `stats/route.ts`, `sitemap.ts`, `market/[zip]/page.tsx`, `v1/listings/route.ts`, and valuation `estimate-rent/route.ts` query `FROM listings` without a `listing_status` filter, so sold/stale/rental_misfiled rows still surface in counts, sitemap, ZIP pages, the public v1 API, and rent comps. Global Constraints named these as default-filter surfaces; Task 4's file list didn't enumerate them. Follow-up wave.
+- [ ] **DEF-LT-2 — worker alert/digest surfaces unfiltered.** `watchlist-alerts.ts`, `digest.ts`, `rent-estimator.ts` read `for_sale` without a lifecycle filter, so notifications/recomputes can fire on quarantined rows.
+- [ ] **DEF-LT-3 — no UI toggle for `includeSold`.** The SOLD band is only reachable via the API `includeSold` flag; the search page has no user control. Add a surface toggle (out of scope per brief).
+- [ ] **DEF-LT-4 — `include_sold` param/body inconsistency.** Plan Global Constraints + Task 4 Step 3 say `?include_sold=1` query param; implementation uses body `includeSold` (query + export). No `?include_sold=1` exists. Reconcile plan text or add the param.
+- [ ] **DEF-LT-5 — `/api/properties` compare-by-id intentionally unfiltered.** Kept opt-in-by-id so Compare never hides a named row. Documented decision, not a bug (note for future reviewers).
+- [ ] **DEF-LT-6 — `runLifecycleTick` not integration-tested.** Only SQL strings asserted; `rowCount` aggregation + step ordering unexercised against a live DB. Acceptable per brief.
+- [ ] **DEF-LT-7 — prod `last_seen_at` NULL verification.** After the daily-bounded no-op guard fix (1d7f01c), run `SELECT count(*) FROM listings WHERE last_seen_at IS NULL` on prod; NULL rows would never daily-refresh and could be wrongly aged to stale.
