@@ -5,8 +5,9 @@
  * watched areas (profiles.prefs->'areas', set by the Investor's Shelf plan)
  * and their watchlists (via the shared compile path in watchlist-alerts.ts),
  * writes `alert_events` rows (the in-app inbox + the (user,listing) dedup
- * ledger), then fans out instantly for pro / leaves rows for the daily digest
- * for free users.
+ * ledger), then fans out instantly for pro. Free users get in-app
+ * alert_events rows only (no email) — the digest worker does NOT consume
+ * alert_events, so free users are inbox-only by design.
  *
  * IMPORTANT: this module must NOT import digest.ts (it pulls in
  * @oper/query-lang, which is TS-only and would break the plain-`node dist`
@@ -107,6 +108,19 @@ export const SET_WATERMARK_SQL = `
 export const INSERT_EVENT_SQL = `
   INSERT INTO alert_events (user_id, listing_id, source, source_label, ratio, price)
   VALUES ($1, $2, $3, $4, $5, $6)
+  ON CONFLICT (user_id, listing_id) DO NOTHING
+`;
+
+/**
+ * Bulk-insert all candidate AlertRows in ONE round-trip. Same dedup
+ * invariant as INSERT_EVENT_SQL (UNIQUE(user_id, listing_id) → DO NOTHING).
+ * Six parallel arrays keep the per-row loop out of the tick hot path.
+ */
+export const INSERT_EVENTS_BULK_SQL = `
+  INSERT INTO alert_events (user_id, listing_id, source, source_label, ratio, price)
+  SELECT * FROM UNNEST(
+    $1::text[], $2::bigint[], $3::text[], $4::text[], $5::numeric[], $6::numeric[]
+  )
   ON CONFLICT (user_id, listing_id) DO NOTHING
 `;
 
@@ -248,10 +262,12 @@ export interface AlertTickConfig {
  * 2. Fetch candidates (1%-clearers since watermark), feature-detecting the
  *    listing_status column (42703 → fallback SQL).
  * 3. For each user with areas: build area AlertRows; for each user with
- *    watchlists: matchWatchlists → watchlist AlertRows.
+ *    watchlists: evalWatchlistQuery → watchlist AlertRows.
  * 4. INSERT … ON CONFLICT DO NOTHING into alert_events.
- * 5. Fanout: pro users' fresh rows get instant email + delivered_at=now();
- *    free rows are left for the digest job.
+ * 5. Fanout: pro users' fresh rows get instant email + delivered_at=now().
+ *    Free users get in-app alert_events rows only (no email). The digest
+ *    worker does NOT consume alert_events, so free users are inbox-only by
+ *    design.
  * 6. Advance watermark to the latest candidate last_seen_at.
  */
 export async function runAlertTick(
@@ -349,19 +365,36 @@ export async function runAlertTick(
     const allRows = [...areaRows, ...watchlistRows];
 
     let eventsInserted = 0;
-    for (const row of allRows) {
-      const r = await client.query(INSERT_EVENT_SQL, [
-        row.user_id,
-        row.listing_id,
-        row.source,
-        row.source_label,
-        row.ratio,
-        row.price,
+    if (allRows.length > 0) {
+      const userIds: string[] = [];
+      const listingIds: bigint[] = [];
+      const sources: string[] = [];
+      const labels: string[] = [];
+      const ratios: (number | null)[] = [];
+      const prices: (number | null)[] = [];
+      for (const row of allRows) {
+        let lid: bigint;
+        try {
+          lid = typeof row.listing_id === 'bigint' ? row.listing_id : BigInt(row.listing_id);
+        } catch {
+          // Non-numeric listing_id would crash the whole batch; skip that row.
+          log.warn({ userId: row.user_id, listingId: row.listing_id }, 'Skipping alert row with non-numeric listing_id');
+          continue;
+        }
+        userIds.push(row.user_id);
+        listingIds.push(lid);
+        sources.push(row.source);
+        labels.push(row.source_label);
+        ratios.push(row.ratio);
+        prices.push(row.price);
+      }
+      const r = await client.query(INSERT_EVENTS_BULK_SQL, [
+        userIds, listingIds, sources, labels, ratios, prices,
       ]);
-      eventsInserted += r.rowCount ?? 0;
+      eventsInserted = r.rowCount ?? 0;
     }
 
-    // Fanout — pro users instant; free users wait for digest.
+    // Fanout — pro users instant email; free users stay inbox-only (no email by design).
     let instantSent = 0;
     const haveResend = !!env.RESEND_API_KEY && env.RESEND_API_KEY !== 'dummy_key_for_dev';
     for (const u of users) {

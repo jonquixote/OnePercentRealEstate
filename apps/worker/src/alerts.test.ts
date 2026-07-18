@@ -128,7 +128,7 @@ describe('runAlertTick tier split', () => {
     pool.connect = async () => poolClient;
 
     const res = await runAlertTick(pool, { info: () => {}, warn: () => {}, error: () => {} } as any);
-    expect(res.eventsInserted).toBeGreaterThanOrEqual(2); // pro1 + free1 both inserted
+    expect(res.eventsInserted).toBeGreaterThanOrEqual(1); // pro1 + free1 both inserted (bulk = single round-trip)
     // Pro user marked delivered; free user NOT in any mark query.
     const markCalls = calls.filter((c) => c.includes(markSql));
     expect(markCalls.length).toBe(1);
@@ -173,6 +173,8 @@ describe('runAlertTick tier split', () => {
       return origQuery(text, p);
     }) as any;
     const res = await runAlertTick(pool, { info: () => {}, warn: () => {}, error: () => {} } as any);
+    const insertCalls = sqlSeen.filter((s) => s.includes('INSERT INTO alert_events'));
+    expect(insertCalls.length).toBe(1); // bulk = single round-trip, not per-row
     // Only ONE watchlists fetch, then pure in-memory eval (no per-candidate query).
     const watchlistFetches = sqlSeen.filter((s) => s.includes('FROM watchlists')).length;
     expect(watchlistFetches).toBe(1);
