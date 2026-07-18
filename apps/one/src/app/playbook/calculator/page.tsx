@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo, useId } from 'react';
+import { useState, useMemo, useId, useEffect, useRef } from 'react';
 import { evaluateRules, compositeScore, type PropertyInputs, type RuleConfig } from '@oper/primitives';
 import Link from 'next/link';
+import { usePrefs } from '@/lib/prefs';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const fpct = (v: number) => `${(v * 100).toFixed(1)}%`;
@@ -15,6 +16,10 @@ const STRATEGY_LABELS: Record<string, string> = {
 };
 
 export default function CalculatorPage() {
+  const { prefs, loading: prefsLoading } = usePrefs();
+  // Manual edits win: once a field is touched it is locked out of preset sync.
+  const dirty = useRef<Set<string>>(new Set());
+
   const [price, setPrice] = useState(200_000);
   const [rent, setRent] = useState(2_000);
   const [sqft, setSqft] = useState(1_500);
@@ -28,6 +33,24 @@ export default function CalculatorPage() {
   const [arv, setArv] = useState(250_000);
   const [rehabBudget, setRehabBudget] = useState(50_000);
   const [strAdr, setStrAdr] = useState(200);
+  const [loanTerm, setLoanTerm] = useState(30);
+
+  // Pre-fill from prefs on first load — only fields the user hasn't touched.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (prefsLoading || seeded.current) return;
+    seeded.current = true;
+    const f = prefs.financing;
+    if (!dirty.current.has('downPct')) setDownPct(f.downPct / 100);
+    if (!dirty.current.has('interestRate')) setInterestRate(f.ratePct / 100);
+    if (!dirty.current.has('taxRate') && f.taxRatePct != null) setTaxRate(f.taxRatePct / 100);
+    if (!dirty.current.has('insurance') && f.insuranceMoYr != null) setInsurance(f.insuranceMoYr);
+    if (!dirty.current.has('strategy')) setStrategy(prefs.strategy);
+    if (!dirty.current.has('loanTerm')) setLoanTerm(prefs.financing.termYears ?? 30);
+  }, [prefsLoading, prefs]);
+
+  // Mark a field touched so preset pre-fill won't overwrite a manual edit.
+  const markDirty = (key: string) => () => { dirty.current.add(key); };
 
   const showArv = strategy === 'flip' || strategy === 'brrrr';
   const showAdr = strategy === 'str';
@@ -48,7 +71,7 @@ export default function CalculatorPage() {
       strategy,
       downPaymentPct: downPct,
       interestRate,
-      loanTermYears: 30,
+      loanTermYears: loanTerm,
       closingCostPct: 0.03,
       propertyTaxRate: taxRate,
       insuranceAnnual: insurance,
@@ -68,7 +91,7 @@ export default function CalculatorPage() {
     const ev = evaluateRules(inputs, cfg, { strategy });
     const score = compositeScore(inputs, ev);
     return { ev, score };
-  }, [price, rent, sqft, hoa, taxRate, insurance, strategy, downPct, interestRate, opexPct, arv, rehabBudget, strAdr, showArv, showAdr]);
+  }, [price, rent, sqft, hoa, taxRate, insurance, strategy, downPct, interestRate, opexPct, arv, rehabBudget, strAdr, loanTerm, showArv, showAdr]);
 
   return (
     <div className="min-h-screen">
@@ -88,7 +111,7 @@ export default function CalculatorPage() {
             <NumInput label="Monthly rent (gross)" value={rent} onChange={(v) => setRent(v || 0)} prefix="$" />
             <NumInput label="Square footage" value={sqft} onChange={(v) => setSqft(v || 0)} />
             <NumInput label="HOA fee / mo" value={hoa} onChange={(v) => setHoa(v || 0)} prefix="$" />
-            <NumInput label="Annual insurance" value={insurance} onChange={(v) => setInsurance(v || 0)} prefix="$" />
+            <NumInput label="Annual insurance" value={insurance} onChange={(v) => { markDirty('insurance')(); setInsurance(v || 0); }} prefix="$" />
 
             <div>
               <label htmlFor="tax-rate" className="text-xs text-haze mb-1">Property tax rate</label>
@@ -100,7 +123,7 @@ export default function CalculatorPage() {
                   max={0.025}
                   step={0.001}
                   value={taxRate}
-                  onChange={(e) => setTaxRate(Number(e.target.value))}
+                  onChange={(e) => { markDirty('taxRate')(); setTaxRate(Number(e.target.value)); }}
                   className="flex-1 accent-[var(--pass)]"
                 />
                 <span className="figure text-sm tabular-nums w-14 text-right">{fpct(taxRate)}</span>
@@ -113,7 +136,7 @@ export default function CalculatorPage() {
                 {(['buy_hold', 'brrrr', 'flip', 'str'] as const).map((s) => (
                   <button
                     key={s}
-                    onClick={() => setStrategy(s)}
+                    onClick={() => { markDirty('strategy')(); setStrategy(s); }}
                     className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
                       strategy === s ? 'border-pass bg-pass/10 text-pass' : 'border-line text-haze hover:text-foreground'
                     }`}
@@ -135,9 +158,10 @@ export default function CalculatorPage() {
               <NumInput label="Average daily rate (ADR)" value={strAdr} onChange={(v) => setStrAdr(v || 0)} prefix="$" />
             )}
 
-            <Slider label="Down payment" value={downPct} onChange={setDownPct} format={fpct} min={0.05} max={0.5} step={0.05} />
-            <Slider label="Interest rate" value={interestRate} onChange={setInterestRate} format={fpct} min={0.03} max={0.10} step={0.005} />
-            <Slider label="Opex ratio (50% rule)" value={opexPct} onChange={setOpexPct} format={fpct} min={0.3} max={0.7} step={0.05} />
+            <Slider label="Down payment" value={downPct} onChange={(v) => { markDirty('downPct')(); setDownPct(v); }} format={fpct} min={0.05} max={0.5} step={0.05} />
+            <Slider label="Interest rate" value={interestRate} onChange={(v) => { markDirty('interestRate')(); setInterestRate(v); }} format={fpct} min={0.03} max={0.10} step={0.005} />
+            <Slider label="Opex ratio (50% rule)" value={opexPct} onChange={(v) => { markDirty('opexPct')(); setOpexPct(v); }} format={fpct} min={0.3} max={0.7} step={0.05} />
+            <Slider label="Loan term (years)" value={loanTerm} onChange={(v) => { markDirty('loanTerm')(); setLoanTerm(v); }} format={(v) => `${v.toFixed(0)} yrs`} min={5} max={40} step={5} />
           </div>
 
           {/* Results */}

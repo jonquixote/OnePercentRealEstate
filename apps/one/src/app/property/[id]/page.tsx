@@ -20,7 +20,7 @@ import { MarketContextPanel } from '@/components/property/sections/MarketContext
 import { MiniMap } from '@/components/property/sections/MiniMap';
 import VerdictRailClient from '@/components/property/sections/VerdictRailClient';
 import { ValuationPanel } from '@/components/property/ValuationPanel';
-import { fetchValuationRow, computeValuation } from '@/lib/valuation';
+import { fetchValuationRow, computeValuation, getSessionPrefs } from '@/lib/valuation';
 import { shapeResponse } from '@/app/api/valuation/[id]/route';
 import { getSessionUser } from '@/lib/auth';
 import Breadcrumbs from '@/components/Breadcrumbs';
@@ -81,8 +81,10 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
         (async () => {
             const row = await fetchValuationRow(id).catch(() => null);
             if (!row) return null;
-            const isPro = (await getSessionUser())?.tier === 'pro';
-            return shapeResponse(computeValuation(row), isPro);
+            const user = await getSessionUser();
+            const isPro = user?.tier === 'pro';
+            const prefs = user ? await getSessionPrefs(user.id) : null;
+            return shapeResponse(computeValuation(row, prefs), isPro);
         })(),
     ]);
 

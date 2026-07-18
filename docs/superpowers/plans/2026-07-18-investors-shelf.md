@@ -156,3 +156,10 @@ SELECT sp.id AS save_id, sp.note, sp.created_at AS saved_at,
 **Placeholder scan:** all schemas/types/SQL complete; the two verify-on-site integration points (primitives override signature, live DB role name for GRANTs) are named precisely with the fallback behavior specified.
 
 **Type consistency:** `InvestorPrefs` defined once (T2) and consumed by account/calculator/valuation (T5); `saved_properties` columns match the GET hydration SQL (T3) and the shelf cards (T4); compare contract stays `?ids=` (T4 links only — no compare-page changes).
+
+## Deferred (from PR #40 review + session)
+
+- [ ] **DEF-1 — saved-properties GET/DELETE test coverage.** `route.test.ts` covers only POST after the review rework; GET hydration + DELETE (`?id=` and `?listingId=`) are untested on this branch. Restore coverage.
+- [ ] **DEF-2 — Shelf status badge pending Listing Truth.** GET guards `listing_status`/`sold_*` behind a 42703 fallback; those columns don't exist yet, so the badge is always absent. Wire to the Listing Truth plan when it ships.
+- [ ] **DEF-3 — prefs shared-state dedup (D1).** `prefs-shared.ts` extraction left potential client/server state duplication; revisit when presets expand.
+- [ ] **DEF-4 — account cosmetic test (D2).** Minor test-shape cleanup in `account/page.test.tsx` deferred as low-value.

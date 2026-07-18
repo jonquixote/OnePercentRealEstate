@@ -10,6 +10,7 @@ import { SearchCard } from '@/components/search/SearchCard';
 import { ResultsTable } from '@/components/search/ResultsTable';
 import { WatchSearchButton } from '@/components/WatchSearchButton';
 import { FirstRunCoach } from '@/components/search/FirstRunCoach';
+import { usePrefs } from '@/lib/prefs';
 import {
   PropertyFilters,
   propertyFilterParsers,
@@ -62,6 +63,13 @@ export default function SearchPage() {
 
   const [qs, setQs] = useQueryStates(propertyFilterParsers, { history: 'replace', shallow: true });
   const filters = useMemo(() => toFilterState(qs), [qs]);
+
+  const { prefs } = usePrefs();
+  const myAreas = prefs.areas;
+
+  function applyArea(zip: string) {
+    setQs({ q: zip });
+  }
 
   // Split-view sync (A2): hover both directions + viewport-bound list.
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null); // list -> map
@@ -259,6 +267,20 @@ export default function SearchPage() {
 
       {/* Content: cards + map */}
       <div className="mx-auto max-w-7xl px-6 py-6 pb-24 lg:px-8 lg:pb-6">
+        {myAreas.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="prov">my areas</span>
+            {myAreas.map((a) => (
+              <button
+                key={`${a.zip}`}
+                onClick={() => applyArea(a.zip)}
+                className="rounded-full border border-line px-3 py-1 text-xs font-semibold text-haze transition-colors hover:border-pass hover:text-pass"
+              >
+                {a.label} <span className="tabular-nums">{a.zip}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className={`grid gap-6 ${showMap ? 'grid-cols-1 lg:grid-cols-[1fr_45%] lg:gap-8' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'}`}>
 
           {/* Cards */}

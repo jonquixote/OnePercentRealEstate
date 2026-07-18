@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import SaveButton from '@/components/SaveButton';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -27,8 +28,6 @@ export default function VerdictRailClient({
   taxAnnual, insurance, hoa,
   monthlyCashflow, capRate, cashOnCash,
 }: Props) {
-  const [watched, setWatched] = useState(false);
-  const [savingWatch, setSavingWatch] = useState(false);
   const [mortgageRate, setMortgageRate] = useState<number | null>(null);
 
   useEffect(() => {
@@ -36,40 +35,7 @@ export default function VerdictRailClient({
       .then(r => r.json())
       .then(d => setMortgageRate(d.rate ?? null))
       .catch(() => {});
-    fetch('/api/watchlists')
-      .then(r => r.ok ? r.json() : [])
-      .then((list) => {
-        if (Array.isArray(list) && list.some((w: any) => w.name === `Property: ${property.address}`)) setWatched(true);
-      })
-      .catch(() => {});
-  }, [property.address]);
-
-  const toggleWatch = async () => {
-    setSavingWatch(true);
-    try {
-      if (watched) {
-        const list = await fetch('/api/watchlists').then(r => r.ok ? r.json() : []);
-        const existing = Array.isArray(list) ? list.find((w: any) => w.name === `Property: ${property.address}`) : null;
-        if (existing?.id) await fetch(`/api/watchlists?id=${existing.id}`, { method: 'DELETE' });
-        setWatched(false);
-      } else {
-        const resp = await fetch('/api/watchlists', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: `Property: ${property.address}`,
-            query_json: {
-              zip_code: property.raw_data?.zip_code,
-              price: { max: price * 1.05 },
-              bedrooms: property.financial_snapshot?.bedrooms ? { min: property.financial_snapshot.bedrooms - 1, max: property.financial_snapshot.bedrooms + 1 } : undefined,
-            },
-          }),
-        });
-        if (resp.ok) setWatched(true);
-      }
-    } catch { /* silent */ }
-    setSavingWatch(false);
-  };
+  }, []);
 
   return (
     <div className="rounded-[var(--r-panel)] p-6" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
@@ -122,14 +88,9 @@ export default function VerdictRailClient({
         </div>
       </dl>
 
-      <button
-        onClick={toggleWatch}
-        disabled={savingWatch}
-        className="mt-6 w-full rounded-full py-2.5 text-[14px] font-semibold transition-colors disabled:opacity-50"
-        style={{ background: watched ? 'var(--line-hi)' : 'var(--pass)', color: watched ? 'var(--text)' : '#fff' }}
-      >
-        {savingWatch ? 'Saving…' : watched ? 'Watching' : 'Watch this property'}
-      </button>
+      <div className="mt-6 flex justify-center">
+        <SaveButton listingId={property.id ?? property.financial_snapshot?.id ?? ''} />
+      </div>
       <p className="mt-3 text-center text-[11px]" style={{ color: 'var(--mute)' }}>
         financing: 20% down · {mortgageRate != null ? `${mortgageRate.toFixed(2)}%` : '—'} (FRED, live) · 30yr
       </p>
@@ -145,14 +106,9 @@ export default function VerdictRailClient({
             {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '—'} · rent {hasRent ? usd0.format(rent) : '—'}
           </p>
         </div>
-        <button
-          onClick={toggleWatch}
-          disabled={savingWatch}
-          className="ml-auto shrink-0 rounded-full px-5 py-2.5 text-[14px] font-semibold transition-colors disabled:opacity-50"
-        style={{ background: watched ? 'var(--line-hi)' : 'var(--pass)', color: watched ? 'var(--text)' : 'var(--ink)' }}
-        >
-          {watched ? 'Watching' : 'Watch'}
-        </button>
+        <div className="ml-auto shrink-0">
+          <SaveButton listingId={property.id ?? property.financial_snapshot?.id ?? ''} />
+        </div>
       </div>
     </div>
   );
