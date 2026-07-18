@@ -58,13 +58,18 @@ UPDATE listings SET last_seen_at = updated_at WHERE last_seen_at IS NULL;
 
 -- Normalize legacy status value, then constrain the vocabulary.
 UPDATE listings SET listing_status = 'active' WHERE listing_status = 'watch' OR listing_status IS NULL;
+-- NULL silently passes a CHECK (UNKNOWN) — lock the column down first.
+ALTER TABLE listings ALTER COLUMN listing_status SET NOT NULL;
+ALTER TABLE listings ALTER COLUMN listing_status SET DEFAULT 'active';
 ALTER TABLE listings DROP CONSTRAINT IF EXISTS listings_lifecycle_chk;
 ALTER TABLE listings ADD CONSTRAINT listings_lifecycle_chk
   CHECK (listing_status IN ('active','pending_verify','sold','stale','rental_misfiled'));
 
 -- Quarantine: the URL is authoritative. 2,865 rows at authoring time.
+-- property_url is a first-class column (verified 100% populated on prod) —
+-- avoid deserializing raw_data JSONB across 1.1M rows.
 UPDATE listings SET listing_status = 'rental_misfiled'
-WHERE raw_data->>'property_url' LIKE '%/rentals/details/%';
+WHERE property_url LIKE '%/rentals/details/%';
 
 -- Sold columns denormalized onto the listing when reconciled (Task 3).
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS sold_price numeric;
@@ -175,8 +180,10 @@ describe('lifecycle SQL', () => {
     expect(STALE_SQL).toMatch(/last_seen_at\s*<\s*now\(\)\s*-\s*\(\$1\s*\|\|\s*' days'\)::interval/i);
     expect(STALE_SQL).toMatch(/SET\s+listing_status\s*=\s*'stale'/i);
   });
-  it('sold match: address-normalized join to sold_listings, copies price/date', () => {
-    expect(SOLD_MATCH_SQL).toMatch(/lower\(.*address.*\)/i);
+  it('sold match: exact address join to sold_listings, copies price/date', () => {
+    // Both tables build address with the SAME scraper normalization, so raw
+    // equality is index-friendly (no lower/trim wrappers defeating indexes).
+    expect(SOLD_MATCH_SQL).toMatch(/l\.address\s*=\s*s\.address/i);
     expect(SOLD_MATCH_SQL).toMatch(/SET\s+listing_status\s*=\s*'sold',\s*sold_price/i);
   });
   it('pending flag: aged PENDING/CONTINGENT clearers become pending_verify', () => {
@@ -209,7 +216,7 @@ export const SOLD_MATCH_SQL = `
     FROM sold_listings s
    WHERE l.listing_type = 'for_sale'
      AND l.listing_status IN ('active','pending_verify','stale')
-     AND lower(trim(l.address)) = lower(trim(s.address))
+     AND l.address = s.address
      AND s.sold_date >= l.created_at::date`;
 
 export const PENDING_FLAG_SQL = `
