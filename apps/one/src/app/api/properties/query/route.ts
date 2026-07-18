@@ -133,6 +133,9 @@ export async function POST(req: NextRequest) {
     ? ''
     : `sale_type = 'standard' AND`;
   const orderBySql = buildOrderBy(body.orderBy);
+  // primary_photo is ~0.3% populated; photos live in the images jsonb — the
+  // COALESCE below is the same fix the spotlight query needed (without it,
+  // search cards said "Photo pending" while the property page had photos).
   const sql = `
     SELECT
       id::text AS id,
@@ -145,7 +148,7 @@ export async function POST(req: NextRequest) {
       sqft,
       estimated_rent,
       year_built,
-      primary_photo,
+      COALESCE(primary_photo, images->>0) AS primary_photo,
       sale_type,
       listing_status,
       days_on_market,
