@@ -10,7 +10,7 @@ const fpct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
 const STRATEGY_LABELS: Record<string, string> = {
   buy_hold: 'Buy & Hold',
-  brrr: 'BRRRR',
+  brrrr: 'BRRRR',
   flip: 'Buy & Flip',
   str: 'Short-Term',
 };
@@ -33,6 +33,7 @@ export default function CalculatorPage() {
   const [arv, setArv] = useState(250_000);
   const [rehabBudget, setRehabBudget] = useState(50_000);
   const [strAdr, setStrAdr] = useState(200);
+  const [loanTerm, setLoanTerm] = useState(30);
 
   // Pre-fill from prefs on first load — only fields the user hasn't touched.
   const seeded = useRef(false);
@@ -45,6 +46,7 @@ export default function CalculatorPage() {
     if (!dirty.current.has('taxRate') && f.taxRatePct != null) setTaxRate(f.taxRatePct / 100);
     if (!dirty.current.has('insurance') && f.insuranceMoYr != null) setInsurance(f.insuranceMoYr);
     if (!dirty.current.has('strategy')) setStrategy(prefs.strategy);
+    if (!dirty.current.has('loanTerm')) setLoanTerm(prefs.financing.termYears ?? 30);
   }, [prefsLoading, prefs]);
 
   // Mark a field touched so preset pre-fill won't overwrite a manual edit.
@@ -69,7 +71,7 @@ export default function CalculatorPage() {
       strategy,
       downPaymentPct: downPct,
       interestRate,
-      loanTermYears: 30,
+      loanTermYears: loanTerm,
       closingCostPct: 0.03,
       propertyTaxRate: taxRate,
       insuranceAnnual: insurance,
@@ -89,7 +91,7 @@ export default function CalculatorPage() {
     const ev = evaluateRules(inputs, cfg, { strategy });
     const score = compositeScore(inputs, ev);
     return { ev, score };
-  }, [price, rent, sqft, hoa, taxRate, insurance, strategy, downPct, interestRate, opexPct, arv, rehabBudget, strAdr, showArv, showAdr]);
+  }, [price, rent, sqft, hoa, taxRate, insurance, strategy, downPct, interestRate, opexPct, arv, rehabBudget, strAdr, loanTerm, showArv, showAdr]);
 
   return (
     <div className="min-h-screen">
@@ -159,6 +161,7 @@ export default function CalculatorPage() {
             <Slider label="Down payment" value={downPct} onChange={(v) => { markDirty('downPct')(); setDownPct(v); }} format={fpct} min={0.05} max={0.5} step={0.05} />
             <Slider label="Interest rate" value={interestRate} onChange={(v) => { markDirty('interestRate')(); setInterestRate(v); }} format={fpct} min={0.03} max={0.10} step={0.005} />
             <Slider label="Opex ratio (50% rule)" value={opexPct} onChange={(v) => { markDirty('opexPct')(); setOpexPct(v); }} format={fpct} min={0.3} max={0.7} step={0.05} />
+            <Slider label="Loan term (years)" value={loanTerm} onChange={(v) => { markDirty('loanTerm')(); setLoanTerm(v); }} format={(v) => `${v.toFixed(0)} yrs`} min={5} max={40} step={5} />
           </div>
 
           {/* Results */}

@@ -107,13 +107,17 @@ export default function ShelfPage() {
   async function removeSelected() {
     const ids = selected;
     try {
-      await Promise.all(
-        ids.map((id) =>
-          fetch(`/api/saved-properties?id=${saves.find((s) => s.id === id)?.save_id}`, { method: 'DELETE' }),
-        ),
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const saveId = saves.find((s) => s.id === id)?.save_id;
+          if (saveId == null) return [id, false] as const;
+          const res = await fetch(`/api/saved-properties?id=${saveId}`, { method: 'DELETE' });
+          return [id, res.ok] as const;
+        }),
       );
-      setSaves((prev) => prev.filter((s) => !ids.includes(s.id)));
-      setSelected([]);
+      const okIds = new Set(results.filter(([, ok]) => ok).map(([id]) => id));
+      setSaves((prev) => prev.filter((s) => !okIds.has(s.id)));
+      setSelected((prev) => prev.filter((id) => !okIds.has(id)));
     } catch {
       // noop
     }
@@ -261,7 +265,7 @@ export default function ShelfPage() {
       </div>
 
       {/* Sticky compare bar */}
-      {compareHref ? (
+      {selected.length > 0 ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur">
           <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-3">
             <span className="text-sm text-haze">{selected.length} selected (max {MAX_SELECT})</span>
@@ -272,12 +276,14 @@ export default function ShelfPage() {
               >
                 Remove
               </button>
-              <Link
-                href={compareHref}
-                className="rounded-full bg-pass px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-              >
-                Compare ({selected.length}) →
-              </Link>
+              {compareHref && (
+                <Link
+                  href={compareHref}
+                  className="rounded-full bg-pass px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  Compare ({selected.length}) →
+                </Link>
+              )}
             </div>
           </div>
         </div>

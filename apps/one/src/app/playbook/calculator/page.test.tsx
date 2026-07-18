@@ -40,4 +40,26 @@ describe('CalculatorPage pre-fill', () => {
     // preset sync must NOT clobber it
     expect(rate.value).toBe('0.08');
   });
+
+  it('seeds loan term from prefs.financing.termYears', async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url.includes('/api/prefs')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            financing: { ratePct: 5.5, downPct: 25, termYears: 15, taxRatePct: 1.1, insuranceMoYr: 1500, mgmtPct: 8, vacancyPct: 8 },
+            areas: [],
+            strategy: 'buy_hold',
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    }) as unknown as typeof fetch;
+
+    render(<CalculatorPage />);
+    const term = (await screen.findByLabelText(/loan term/i)) as HTMLInputElement;
+    await waitFor(() => expect(term.value).toBe('15'));
+    expect(term.value).toBe('15');
+  });
 });

@@ -14,8 +14,12 @@ const WATCHLISTS = [
   { id: 1, name: 'Cheap Houston', query_json: {}, created_at: '2026-01-01' },
 ];
 
-function mockFetchFor(savedBody: unknown, watchlistsBody: unknown) {
-  return vi.fn(async (url: string) => {
+function mockFetchFor(savedBody: unknown, watchlistsBody: unknown, opts: { deleteOk?: boolean } = {}) {
+  const deleteOk = opts.deleteOk ?? true;
+  return vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/api/saved-properties') && init?.method === 'DELETE') {
+      return { ok: deleteOk, status: deleteOk ? 200 : 500, json: async () => ({}) } as Response;
+    }
     if (url.includes('/api/saved-properties')) {
       return { ok: true, status: 200, json: async () => savedBody } as Response;
     }
@@ -57,5 +61,33 @@ describe('ShelfPage', () => {
     global.fetch = mockFetchFor([], WATCHLISTS) as unknown as typeof fetch;
     render(<ShelfPage />);
     expect(await screen.findByRole('heading', { name: /Watched searches/i })).toBeTruthy();
+  });
+
+  it('shows sticky bar with Remove (no compare link) for a single selected save', async () => {
+    global.fetch = mockFetchFor(SAVED, WATCHLISTS) as unknown as typeof fetch;
+    render(<ShelfPage />);
+
+    expect(await screen.findByText('111 First St')).toBeTruthy();
+    const checkboxes = screen.getAllByRole('checkbox');
+    fireEvent.click(checkboxes[0]);
+
+    // Sticky bar visible, Remove present, no compare link (needs >=2).
+    expect(await screen.findByRole('button', { name: /Remove/i })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Compare/i })).toBeNull();
+  });
+
+  it('keeps a card when DELETE returns 4xx', async () => {
+    global.fetch = mockFetchFor(SAVED, WATCHLISTS, { deleteOk: false }) as unknown as typeof fetch;
+    render(<ShelfPage />);
+
+    expect(await screen.findByText('111 First St')).toBeTruthy();
+    const checkboxes = screen.getAllByRole('checkbox');
+    fireEvent.click(checkboxes[0]);
+
+    const removeBtn = await screen.findByRole('button', { name: /Remove/i });
+    fireEvent.click(removeBtn);
+
+    // Card remains because the server rejected the delete.
+    expect(screen.getByText('111 First St')).toBeTruthy();
   });
 });
