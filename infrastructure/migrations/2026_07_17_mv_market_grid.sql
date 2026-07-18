@@ -35,6 +35,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS mv_market_grid_zip ON mv_market_grid (zip_code
 
 -- The worker refresh loop connects as oper_worker (see oper-worker-refresh.service
 -- env). REFRESH MATERIALIZED VIEW CONCURRENTLY requires ownership, so hand it over.
--- Without this, the 30-min refresh fails with "must be owner" — and a future
--- migration that recreates this view as postgres would silently revert it.
-ALTER MATERIALIZED VIEW mv_market_grid OWNER TO oper_worker;
+-- Wrapped in a DO block: the role exists on prod (created by the out-of-band
+-- db_roles migration) but NOT in CI/local dry-runs, where a bare ALTER would fail
+-- the migration runner (role "oper_worker" does not exist).
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'oper_worker') THEN
+    ALTER MATERIALIZED VIEW mv_market_grid OWNER TO oper_worker;
+  END IF;
+END
+$$;
