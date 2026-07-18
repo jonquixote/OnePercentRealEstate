@@ -17,6 +17,10 @@ export interface PropertyFilters {
   domMin?: number;
   hasPriceCut?: boolean;
   minRentConfidence?: number; // 0..1; 1 - band_spread/rent, clamped
+  // Lifecycle opt-in. Default (false/undefined) hides off-market inventory
+  // (sold/stale/rental_misfiled); true surfaces sold rows so a SOLD band can
+  // render. Stale + misfiled stay hidden regardless.
+  includeSold?: boolean;
   q?: string; // free-text / ZIP search
   // Split-view map sync: restrict the list to the visible viewport.
   bounds?: { north: number; south: number; east: number; west: number };
@@ -71,6 +75,8 @@ const LISTING_SELECT = `
   COALESCE(latitude, (raw_data->>'latitude')::numeric) as latitude,
   COALESCE(longitude, (raw_data->>'longitude')::numeric) as longitude,
   listing_status as status,
+  sold_price,
+  sold_date::text as sold_date,
   sale_type,
   (SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, 'buy_hold')) as target_ratio,
   primary_photo,
@@ -148,6 +154,9 @@ export function shapeListingRow(row: any): any {
     price_cut_count: row.price_cut_count != null ? Number(row.price_cut_count) : null,
     rent_low: row.rent_low != null ? Number(row.rent_low) : null,
     rent_high: row.rent_high != null ? Number(row.rent_high) : null,
+    // Lifecycle: sold_date is already 'YYYY-MM-DD' text (cast in LISTING_SELECT
+    // to dodge node-pg Date/TZ drift); sold_price is numeric-as-string from pg.
+    sold_price: row.sold_price != null ? Number(row.sold_price) : null,
     motivated_score: row.motivated_score != null ? Number(row.motivated_score) : null,
     financial_snapshot: {
       bedrooms: Number(row.bedrooms) || 0,
@@ -200,6 +209,15 @@ export function buildListingsQuery(
   const whereClauses = ["listing_type = 'for_sale'", 'price > 10000'];
   const params: unknown[] = [];
   let paramIndex = 1;
+
+  // Lifecycle default: hide off-market inventory. `includeSold` relaxes only the
+  // sold exclusion (stale + rental_misfiled always stay hidden). Both branches
+  // are fixed server strings — no user value is interpolated.
+  whereClauses.push(
+    filters?.includeSold
+      ? `listing_status NOT IN ('stale','rental_misfiled')`
+      : `listing_status NOT IN ('sold','stale','rental_misfiled')`,
+  );
 
   // Canonical display: default to standard inventory unless the user opts
   // into a distress type. Strategy drives which rule thresholds apply.

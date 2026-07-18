@@ -27,6 +27,10 @@ const QueryBodySchema = z.object({
       dir: z.enum(['asc', 'desc']),
     })
     .optional(),
+  // Lifecycle opt-in. By default the terminal hides off-market rows
+  // (sold/stale/rental_misfiled); includeSold surfaces sold rows so they can
+  // render with a SOLD band. Stale + misfiled stay hidden regardless.
+  includeSold: z.boolean().optional(),
 });
 
 const MAX_LIMIT = 1000;
@@ -132,6 +136,12 @@ export async function POST(req: NextRequest) {
   const saleTypeDefault = compiled.usedColumns.includes('sale_type')
     ? ''
     : `sale_type = 'standard' AND`;
+  // Lifecycle default: hide off-market inventory. `includeSold` relaxes only the
+  // sold exclusion (stale + rental_misfiled always stay hidden). Both branches
+  // are fixed server strings — no user value is interpolated.
+  const lifecycleFilter = body.includeSold
+    ? `listing_status NOT IN ('stale','rental_misfiled')`
+    : `listing_status NOT IN ('sold','stale','rental_misfiled')`;
   const orderBySql = buildOrderBy(body.orderBy);
   // primary_photo is ~0.3% populated; photos live in the images jsonb — the
   // COALESCE below is the same fix the spotlight query needed (without it,
@@ -151,6 +161,8 @@ export async function POST(req: NextRequest) {
       COALESCE(primary_photo, images->>0) AS primary_photo,
       sale_type,
       listing_status,
+      sold_price,
+      sold_date::text AS sold_date,
       days_on_market,
       price_cut_pct,
       rent_low,
@@ -160,6 +172,7 @@ export async function POST(req: NextRequest) {
       zip_code
     FROM listings
     WHERE listing_type = 'for_sale'
+      AND ${lifecycleFilter}
       AND ${saleTypeDefault} (${compiled.whereSql})
     ORDER BY ${orderBySql}
     LIMIT ${effectiveLimit}
