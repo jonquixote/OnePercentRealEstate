@@ -1,5 +1,6 @@
 import { intrinsicValue, marginOfSafety, ownerReturn10yr, type OwnerReturn } from '@oper/primitives';
 import pool from '@/lib/db';
+import { parsePrefs, type InvestorPrefs } from '@/lib/prefs';
 
 // Documented defaults when an underwriting_rules row or metro stat is absent.
 const DEFAULT_OPEX = 0.5;        // 50% rule
@@ -14,6 +15,21 @@ export type ValuationInputs = {
   appreciationRate: number; rentGrowthRate: number; mortgageRate: number; downPct: number;
   provenance: string[];
 };
+
+/**
+ * Server-side prefs read (the session user's profiles.prefs). Prefs are
+ * defaults, not overrides — only rate/down are consumed by valuation. Returns
+ * null when no session; callers fall back to documented defaults.
+ */
+export async function getSessionPrefs(userId: string): Promise<InvestorPrefs | null> {
+  try {
+    const res = await pool.query('SELECT prefs FROM profiles WHERE id = $1', [userId]);
+    const raw = res.rows[0]?.prefs;
+    return raw ? parsePrefs(raw) : null;
+  } catch {
+    return null;
+  }
+}
 export type Valuation = { intrinsic: number; marginOfSafety: number; ownerReturn: OwnerReturn; inputs: ValuationInputs };
 
 function num(v: unknown, fallback: number): { value: number; wasDefault: boolean } {
@@ -21,30 +37,42 @@ function num(v: unknown, fallback: number): { value: number; wasDefault: boolean
   return Number.isFinite(n) ? { value: n, wasDefault: false } : { value: fallback, wasDefault: true };
 }
 
-export function assembleInputs(row: Record<string, unknown>): ValuationInputs {
+export function assembleInputs(row: Record<string, unknown>, prefs?: InvestorPrefs | null): ValuationInputs {
   const provenance: string[] = [];
   const price = Number(row.price) || 0;
   const monthlyRent = Number(row.estimated_rent) || 0;
 
   const opex = num(row.opex_ratio, DEFAULT_OPEX);
   provenance.push(opex.wasDefault ? 'opex: 50% default' : 'opex: underwriting_rules');
-  const down = num(row.down_payment_pct, DEFAULT_DOWN);
-  provenance.push(down.wasDefault ? 'down: 20% default' : 'down: underwriting_rules');
+
+  // Prefs (investor defaults) override the down-payment default ONLY when the
+  // row itself has no underwriting_rules value. Manual edits always win.
+  const downRow = num(row.down_payment_pct, DEFAULT_DOWN);
+  const downPct = downRow.wasDefault && prefs ? prefs.financing.downPct / 100 : downRow.value;
+  provenance.push(
+    downRow.wasDefault
+      ? prefs ? `down: ${prefs.financing.downPct}% preset` : 'down: 20% default'
+      : 'down: underwriting_rules',
+  );
+
   const cap = num(row.metro_cap_rate, DEFAULT_CAP);
   provenance.push(cap.wasDefault ? 'cap rate: 7% default' : 'cap rate: zip median');
   const appr = num(row.hpi_cagr_5yr, DEFAULT_APPRECIATION);
   provenance.push(appr.wasDefault ? 'appreciation: 3% default' : 'appreciation: FHFA HPI 5yr CAGR');
 
+  const mortgageRate = prefs ? prefs.financing.ratePct / 100 : DEFAULT_MORTGAGE;
+  provenance.push(prefs ? `rate: ${prefs.financing.ratePct}% preset` : 'rate: 7% default');
+
   return {
     price, monthlyRent,
-    opexRatio: opex.value, downPct: down.value, marketCapRate: cap.value,
-    appreciationRate: appr.value, rentGrowthRate: DEFAULT_RENT_GROWTH, mortgageRate: DEFAULT_MORTGAGE,
+    opexRatio: opex.value, downPct, marketCapRate: cap.value,
+    appreciationRate: appr.value, rentGrowthRate: DEFAULT_RENT_GROWTH, mortgageRate,
     provenance,
   };
 }
 
-export function computeValuation(row: Record<string, unknown>): Valuation {
-  const inputs = assembleInputs(row);
+export function computeValuation(row: Record<string, unknown>, prefs?: InvestorPrefs | null): Valuation {
+  const inputs = assembleInputs(row, prefs);
   const intrinsic = intrinsicValue({
     monthlyRent: inputs.monthlyRent, opexRatio: inputs.opexRatio, marketCapRate: inputs.marketCapRate,
   });
