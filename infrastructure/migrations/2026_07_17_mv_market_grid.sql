@@ -32,3 +32,9 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS mv_market_grid AS
 
 -- CONCURRENTLY needs a unique index.
 CREATE UNIQUE INDEX IF NOT EXISTS mv_market_grid_zip ON mv_market_grid (zip_code);
+
+-- The worker refresh loop connects as oper_worker (see oper-worker-refresh.service
+-- env). REFRESH MATERIALIZED VIEW CONCURRENTLY requires ownership, so hand it over.
+-- Without this, the 30-min refresh fails with "must be owner" — and a future
+-- migration that recreates this view as postgres would silently revert it.
+ALTER MATERIALIZED VIEW mv_market_grid OWNER TO oper_worker;
