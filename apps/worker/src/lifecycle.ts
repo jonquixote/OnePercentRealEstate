@@ -29,7 +29,11 @@ export const STALE_SQL = `
 export const SOLD_MATCH_SQL = `
   UPDATE listings l
      SET listing_status = 'sold', sold_price = s.sold_price, sold_date = s.sold_date
-    FROM sold_listings s
+    FROM (
+      SELECT DISTINCT ON (address) address, sold_price, sold_date
+        FROM sold_listings
+       ORDER BY address, sold_date DESC
+    ) s
    WHERE l.listing_type = 'for_sale'
      AND l.listing_status IN ('active','pending_verify','stale')
      AND l.address = s.address

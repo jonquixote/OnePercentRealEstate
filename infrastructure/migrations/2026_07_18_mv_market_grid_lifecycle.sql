@@ -8,7 +8,9 @@
 -- to oper_worker so the worker's REFRESH CONCURRENTLY loop keeps working.
 DROP MATERIALIZED VIEW IF EXISTS mv_market_grid;
 
-CREATE MATERIALIZED VIEW mv_market_grid AS
+-- WITH NO DATA: CREATE does not populate; the REFRESH below is the single
+-- population pass (keeps migration self-contained if definition changes).
+CREATE MATERIALIZED VIEW mv_market_grid WITH NO DATA AS
   WITH top AS (
     SELECT zip_code,
            max(raw_data->>'city') AS city,
@@ -40,8 +42,7 @@ CREATE MATERIALIZED VIEW mv_market_grid AS
 -- CONCURRENTLY needs a unique index.
 CREATE UNIQUE INDEX IF NOT EXISTS mv_market_grid_zip ON mv_market_grid (zip_code);
 
--- Populate once now (CREATE ... AS already materialized data; this keeps the
--- migration self-contained if the definition is ever changed to WITH NO DATA).
+-- Single population pass (CREATE used WITH NO DATA above).
 REFRESH MATERIALIZED VIEW mv_market_grid;
 
 -- The worker refresh loop connects as oper_worker (see oper-worker-refresh.service

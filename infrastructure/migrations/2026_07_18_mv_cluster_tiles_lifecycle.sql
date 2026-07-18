@@ -8,7 +8,9 @@
 -- to oper_worker so the worker's REFRESH CONCURRENTLY loop keeps working.
 DROP MATERIALIZED VIEW IF EXISTS mv_cluster_tiles;
 
-CREATE MATERIALIZED VIEW mv_cluster_tiles AS
+-- WITH NO DATA: CREATE does not populate; the REFRESH below is the single
+-- population pass (keeps migration self-contained if definition changes).
+CREATE MATERIALIZED VIEW mv_cluster_tiles WITH NO DATA AS
 WITH zooms AS (
     SELECT generate_series(0, 13) AS zoom
 ),
@@ -39,8 +41,7 @@ CREATE UNIQUE INDEX uq_mv_cluster_tiles_zoom_xy ON public.mv_cluster_tiles USING
 CREATE INDEX idx_mv_cluster_tiles_zoom_geom ON public.mv_cluster_tiles USING gist (geom) INCLUDE (zoom);
 CREATE INDEX idx_mv_cluster_tiles_zoom ON public.mv_cluster_tiles USING btree (zoom);
 
--- Populate once now (CREATE ... AS already materialized data; this keeps the
--- migration self-contained if the definition is ever changed to WITH NO DATA).
+-- Single population pass (CREATE used WITH NO DATA above).
 REFRESH MATERIALIZED VIEW mv_cluster_tiles;
 
 -- The worker refresh loop connects as oper_worker (see worker-refresh service /
