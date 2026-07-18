@@ -8,9 +8,7 @@
 -- to oper_worker so the worker's REFRESH CONCURRENTLY loop keeps working.
 DROP MATERIALIZED VIEW IF EXISTS mv_market_grid;
 
--- WITH NO DATA: CREATE does not populate; the REFRESH below is the single
--- population pass (keeps migration self-contained if definition changes).
-CREATE MATERIALIZED VIEW mv_market_grid WITH NO DATA AS
+CREATE MATERIALIZED VIEW mv_market_grid AS
   WITH top AS (
     SELECT zip_code,
            max(raw_data->>'city') AS city,
@@ -37,7 +35,8 @@ CREATE MATERIALIZED VIEW mv_market_grid WITH NO DATA AS
     SELECT max(hpi) FILTER (WHERE year = (SELECT max(year) FROM fhfa_zip_hpi WHERE zip5 = t.zip_code)) AS latest,
            max(hpi) FILTER (WHERE year = (SELECT max(year) FROM fhfa_zip_hpi WHERE zip5 = t.zip_code) - 5) AS five_ago
     FROM fhfa_zip_hpi WHERE zip5 = t.zip_code
-  ) h ON true;
+  ) h ON true
+WITH NO DATA;
 
 -- CONCURRENTLY needs a unique index.
 CREATE UNIQUE INDEX IF NOT EXISTS mv_market_grid_zip ON mv_market_grid (zip_code);

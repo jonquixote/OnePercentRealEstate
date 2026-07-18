@@ -8,9 +8,7 @@
 -- to oper_worker so the worker's REFRESH CONCURRENTLY loop keeps working.
 DROP MATERIALIZED VIEW IF EXISTS mv_cluster_tiles;
 
--- WITH NO DATA: CREATE does not populate; the REFRESH below is the single
--- population pass (keeps migration self-contained if definition changes).
-CREATE MATERIALIZED VIEW mv_cluster_tiles WITH NO DATA AS
+CREATE MATERIALIZED VIEW mv_cluster_tiles AS
 WITH zooms AS (
     SELECT generate_series(0, 13) AS zoom
 ),
@@ -35,7 +33,8 @@ SELECT zoom,
     max(price)::numeric(12,0) AS max_price,
     avg(NULLIF(estimated_rent, 0::numeric))::numeric(10,0) AS avg_rent
 FROM buckets
-GROUP BY zoom, (st_snaptogrid(geom, eps));
+GROUP BY zoom, (st_snaptogrid(geom, eps))
+WITH NO DATA;
 
 CREATE UNIQUE INDEX uq_mv_cluster_tiles_zoom_xy ON public.mv_cluster_tiles USING btree (zoom, longitude, latitude);
 CREATE INDEX idx_mv_cluster_tiles_zoom_geom ON public.mv_cluster_tiles USING gist (geom) INCLUDE (zoom);
