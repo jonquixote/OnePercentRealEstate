@@ -74,6 +74,7 @@ export async function generateStaticParams(): Promise<{ zip: string }[]> {
                 SELECT zip_code
                 FROM listings
                 WHERE listing_type = 'for_sale' AND sale_type = 'standard' AND zip_code ~ '^\\d{5}$'
+                  AND listing_status NOT IN ('sold','stale','rental_misfiled')
                 GROUP BY zip_code
                 ORDER BY count(*) DESC
                 LIMIT 2000
@@ -155,7 +156,8 @@ async function loadMarketData(zip: string): Promise<MarketData> {
                         FILTER (WHERE estimated_rent > 0)::numeric(10,2) AS median_rent,
                     count(*) FILTER (WHERE price > 0 AND estimated_rent > 0)::int AS rentable_count
                  FROM listings
-                 WHERE zip_code = $1 AND listing_type = 'for_sale' AND sale_type = 'standard' AND price > 10000`,
+                 WHERE zip_code = $1 AND listing_type = 'for_sale' AND sale_type = 'standard' AND price > 10000
+                   AND listing_status NOT IN ('sold','stale','rental_misfiled')`,
                 [zip],
             ),
             pool.query(
@@ -169,7 +171,8 @@ async function loadMarketData(zip: string): Promise<MarketData> {
                     percentile_cont(0.5) WITHIN GROUP (ORDER BY price / NULLIF(sqft, 0))::numeric(8,2) AS med_sold_psf,
                     count(*) FILTER (WHERE sqft > 0 AND price > 0)::int AS n_sold_psf
                  FROM listings
-                 WHERE zip_code = $1 AND listing_type = 'for_sale' AND sale_type = 'standard'`,
+                 WHERE zip_code = $1 AND listing_type = 'for_sale' AND sale_type = 'standard'
+                   AND listing_status NOT IN ('sold','stale','rental_misfiled')`,
                 [zip],
             ),
             pool.query(
@@ -215,6 +218,7 @@ async function loadMarketData(zip: string): Promise<MarketData> {
                  FROM listings
                  WHERE zip_code = $1 AND listing_type = 'for_sale' AND sale_type = 'standard'
                    AND price > 0 AND estimated_rent > 0
+                   AND listing_status NOT IN ('sold','stale','rental_misfiled')
                  ORDER BY rent_price_ratio DESC NULLS LAST
                  LIMIT 6`,
                 [zip],
@@ -224,6 +228,7 @@ async function loadMarketData(zip: string): Promise<MarketData> {
                     SELECT zip_code, count(*) AS c
                     FROM listings
                     WHERE listing_type = 'for_sale' AND sale_type = 'standard' AND zip_code ~ '^\\d{5}$'
+                      AND listing_status NOT IN ('sold','stale','rental_misfiled')
                     GROUP BY zip_code
                 ) t ORDER BY c DESC LIMIT 600`,
             ),

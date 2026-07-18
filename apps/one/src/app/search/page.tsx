@@ -140,6 +140,10 @@ export default function SearchPage() {
         hoaMax: filters.hoaMax > 0 ? filters.hoaMax : undefined,
         domMin: filters.domMin > 0 ? filters.domMin : undefined,
         hasPriceCut: filters.hasPriceCut || undefined,
+        // Lifecycle opt-in (#53): the "Include sold" pill flips the `sold` nuqs
+        // param → showSold → includeSold, relaxing the sold exclusion so SOLD
+        // cards render. Stale + rental_misfiled stay hidden regardless.
+        includeSold: filters.showSold || undefined,
         q: qs.q || undefined,
         bounds: showMap && mapBounds ? mapBounds : undefined,
         polygon: showMap && polygon ? polygon : undefined,
@@ -221,6 +225,15 @@ export default function SearchPage() {
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
+              <button
+                onClick={() => setQs({ sold: !qs.sold })}
+                aria-pressed={qs.sold}
+                className="flex items-center gap-1 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors hover:border-line-hi"
+                style={{ borderColor: qs.sold ? 'var(--pass)' : 'var(--line)', color: qs.sold ? 'var(--pass)' : 'var(--haze)' }}
+                title={qs.sold ? 'Hide sold listings' : 'Include sold listings'}
+              >
+                Include sold
+              </button>
               <button
                 onClick={() => setTableView(!tableView)}
                 className="hidden sm:flex items-center gap-1 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors hover:border-line-hi"

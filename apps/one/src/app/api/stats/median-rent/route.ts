@@ -14,6 +14,7 @@ const getCachedMedianRent = unstable_cache(
         WHERE listing_type = 'for_sale'
           AND estimated_rent IS NOT NULL
           AND estimated_rent > 0
+          AND listing_status NOT IN ('sold','stale','rental_misfiled')
       `);
       const medianRent = result.rows[0]?.median_rent;
       return medianRent != null ? Math.round(Number(medianRent)) : null;

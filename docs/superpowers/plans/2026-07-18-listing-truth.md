@@ -318,3 +318,8 @@ field-name divergence. Applied as one commit on top of 4477500.
 - [ ] **DEF-LT-5 — `/api/properties` compare-by-id intentionally unfiltered.** Kept opt-in-by-id so Compare never hides a named row. Documented decision, not a bug (note for future reviewers).
 - [ ] **DEF-LT-6 — `runLifecycleTick` not integration-tested.** Only SQL strings asserted; `rowCount` aggregation + step ordering unexercised against a live DB. Acceptable per brief.
 - [ ] **DEF-LT-7 — prod `last_seen_at` NULL verification.** After the daily-bounded no-op guard fix (1d7f01c), run `SELECT count(*) FROM listings WHERE last_seen_at IS NULL` on prod; NULL rows would never daily-refresh and could be wrongly aged to stale.
+
+## Decisions
+
+- **Compare-by-id is intentionally NOT lifecycle-filtered (issue #50, DEF-LT-5).** `/api/properties?ids=` (Compare) deliberately omits the default `listing_status NOT IN ('sold','stale','rental_misfiled')` filter: the user named those exact rows by id, so Compare must never silently drop one that went sold/stale/misfiled — it surfaces `listing_status AS status` and lets the UI render an off-market treatment instead. An ADR comment guards the query so future reviewers don't "fix" it. The by-id lookups in `estimate-rent/route.ts` follow the same rule; only its zip-comps aggregate is filtered.
+- **`includeSold` accepts both a body flag and a query param (issue #54, DEF-LT-4).** `/api/properties/query` and `/api/properties/export` opt into sold rows via **EITHER** `body.includeSold === true` **OR** `?include_sold=1` — reconciling the plan's Global-Constraints wording (`?include_sold=1`) with the shipped body field. Both are fixed server strings; stale + rental_misfiled stay hidden regardless.

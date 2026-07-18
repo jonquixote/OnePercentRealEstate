@@ -184,7 +184,12 @@ export async function POST(req: NextRequest) {
   const saleTypeDefault = compiled.usedColumns.includes('sale_type')
     ? ''
     : `sale_type = 'standard' AND`;
-  const lifecycleFilter = body.includeSold
+  // Dual acceptance (issue #54): mirror /api/properties/query — opt into sold
+  // rows via EITHER the body `includeSold` boolean OR `?include_sold=1`, so the
+  // CSV export honours the same param shape as the on-screen query.
+  const includeSold =
+    body.includeSold === true || req.nextUrl.searchParams.get('include_sold') === '1';
+  const lifecycleFilter = includeSold
     ? `listing_status NOT IN ('stale','rental_misfiled')`
     : `listing_status NOT IN ('sold','stale','rental_misfiled')`;
   const orderBySql = buildOrderBy(body.orderBy);
