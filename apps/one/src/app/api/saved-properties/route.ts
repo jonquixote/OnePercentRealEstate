@@ -96,18 +96,33 @@ export async function DELETE(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'login required' }, { status: 401 });
   const id = request.nextUrl.searchParams.get('id');
-  if (!id || !/^\d{1,18}$/.test(id)) {
-    return NextResponse.json({ error: 'id required' }, { status: 400 });
+  const listingId = request.nextUrl.searchParams.get('listingId');
+  // The client (SaveButton) only knows the listing id; support it directly so
+  // a save can always be unsaved by the same id it was saved with. The PK `id`
+  // is also accepted for callers that have it (e.g. the shelf batch remove).
+  if (listingId && /^\d{1,18}$/.test(listingId)) {
+    try {
+      const res = await pool.query(
+        'DELETE FROM saved_properties WHERE listing_id = $1 AND user_id = $2',
+        [listingId, user.id],
+      );
+      return NextResponse.json({ deleted: res.rowCount });
+    } catch (err) {
+      console.error('DELETE /api/saved-properties error:', err);
+      return NextResponse.json({ error: 'failed to delete saved property' }, { status: 500 });
+    }
   }
-  try {
-    // Only the session user's own row (user_id bound to the WHERE).
-    const res = await pool.query(
-      'DELETE FROM saved_properties WHERE id = $1 AND user_id = $2',
-      [id, user.id],
-    );
-    return NextResponse.json({ deleted: res.rowCount });
-  } catch (err) {
-    console.error('DELETE /api/saved-properties error:', err);
-    return NextResponse.json({ error: 'failed to delete saved property' }, { status: 500 });
+  if (id && /^\d{1,18}$/.test(id)) {
+    try {
+      const res = await pool.query(
+        'DELETE FROM saved_properties WHERE id = $1 AND user_id = $2',
+        [id, user.id],
+      );
+      return NextResponse.json({ deleted: res.rowCount });
+    } catch (err) {
+      console.error('DELETE /api/saved-properties error:', err);
+      return NextResponse.json({ error: 'failed to delete saved property' }, { status: 500 });
+    }
   }
+  return NextResponse.json({ error: 'id or listingId required' }, { status: 400 });
 }

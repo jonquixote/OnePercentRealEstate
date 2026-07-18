@@ -37,7 +37,7 @@ describe('SaveButton', () => {
 
     fireEvent.click(btn);
     expect(screen.getByRole('button')?.getAttribute('aria-pressed')).toBe('false');
-    expect(fetchMock).toHaveBeenCalledWith('/api/saved-properties?id=123', { method: 'DELETE' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/saved-properties?listingId=123', { method: 'DELETE' });
   });
 
   it('renders a sign-in link when fetch 401s on save', async () => {

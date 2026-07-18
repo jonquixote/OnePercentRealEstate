@@ -62,7 +62,7 @@ export default function ShelfPage() {
           fetch('/api/watchlists'),
           fetch('/api/saved-searches'),
         ]);
-        if (sRes.status === 401 || wRes.status === 401) {
+        if (sRes.status === 401 || wRes.status === 401 || sSearchRes.status === 401) {
           setLoading(false);
           return;
         }

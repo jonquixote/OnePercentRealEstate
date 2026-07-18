@@ -38,7 +38,7 @@ export default function SaveButton({ listingId, initialSaved = false }: Props) {
           setSaved(!next);
         }
       } else {
-        const res = await fetch(`/api/saved-properties?id=${lid}`, { method: 'DELETE' });
+        const res = await fetch(`/api/saved-properties?listingId=${lid}`, { method: 'DELETE' });
         if (res.status === 401) {
           setSaved(true);
           setSignedOut(true);

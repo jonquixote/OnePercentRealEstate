@@ -31,6 +31,10 @@ function delReq(id: string): NextRequest {
   return new NextRequest(`http://x/api/saved-properties?id=${id}`, { method: 'DELETE' });
 }
 
+function delReqListing(listingId: string): NextRequest {
+  return new NextRequest(`http://x/api/saved-properties?listingId=${listingId}`, { method: 'DELETE' });
+}
+
 describe('POST /api/saved-properties', () => {
   beforeEach(() => {
     query.mockClear();
@@ -129,6 +133,19 @@ describe('DELETE /api/saved-properties', () => {
 
   it('400 on bad id', async () => {
     const res = await DELETE(delReq('abc'));
+    expect(res.status).toBe(400);
+  });
+
+  it('deletes by listingId (SaveButton path)', async () => {
+    const res = await DELETE(delReqListing('42'));
+    expect(res.status).toBe(200);
+    // listing_id bound first, user_id second — scoped to session.
+    expect((query.mock.calls[0] as unknown as unknown[][])[1]).toEqual(['42', 'u1']);
+    expect((query.mock.calls[0] as unknown as string[])[0]).toMatch(/listing_id/);
+  });
+
+  it('400 when neither id nor listingId given', async () => {
+    const res = await DELETE(new NextRequest('http://x/api/saved-properties', { method: 'DELETE' }));
     expect(res.status).toBe(400);
   });
 });
