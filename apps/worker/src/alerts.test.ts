@@ -81,8 +81,9 @@ describe('runAlertTick tier split', () => {
     return { pool, query };
   }
 
-  const mkSql = 'SELECT id, subscription_tier, prefs';
-  const candSql = 'last_seen_at >';
+    const mkSql = 'SELECT id, subscription_tier, prefs';
+    const mkNoPrefsSql = 'SELECT id, subscription_tier';
+    const candSql = 'last_seen_at >';
   const wmSql = 'SELECT last_seen_at FROM alert_state';
   const setWmSql = 'INSERT INTO alert_state';
   const insSql = 'INSERT INTO alert_events';
@@ -124,5 +125,45 @@ describe('runAlertTick tier split', () => {
     expect(markCalls.length).toBe(1);
     // Free user must never be stamped delivered.
     expect(markCalls.join(' ')).not.toContain('free1');
+  });
+
+  it('degrades (not throws) when profiles.prefs column is absent (42703)', async () => {
+    const { runAlertTick } = await import('./alerts');
+    // First USERS_SQL select throws 42703; client must retry USERS_SQL_NO_PREFS.
+    const err42703 = Object.assign(new Error('column "prefs" does not exist'), { code: '42703' });
+    const queryWithMissingPrefs = async (text: string, _params?: any[]) => {
+      if (text.includes(mkSql) && !text.includes(mkNoPrefsSql)) {
+        throw err42703;
+      }
+      const key = Object.keys(rowsBySql).find((k) => text.includes(k));
+      const hit = key ? rowsBySql[key] : { rows: [], rowCount: 0 };
+      return { rows: hit.rows, rowCount: hit.rowCount ?? hit.rows.length };
+    };
+    const rowsBySql: Record<string, { rows: any[]; rowCount?: number }> = {
+      [wmSql]: { rows: [{ last_seen_at: new Date(0) }] },
+      [candSql]: {
+        rows: [{
+          id: 42, address: '9 Deal St', zip_code: '77002', price: 120000,
+          estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(1000),
+        }],
+      },
+      [mkNoPrefsSql]: {
+        rows: [
+          { id: 'pro1', subscription_tier: 'pro' },
+          { id: 'free1', subscription_tier: 'free' },
+        ],
+      },
+      [insSql]: { rows: [], rowCount: 0 },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: 0 },
+    };
+    const pool: any = { query: queryWithMissingPrefs, connect: async () => poolClient };
+    const poolClient = { query: queryWithMissingPrefs, release: () => {} };
+
+    // Should NOT throw — falls back to no-prefs users and still completes the tick.
+    const res = await runAlertTick(pool, { info: () => {}, warn: () => {}, error: () => {} } as any);
+    expect(res.candidates).toBe(1);
+    // prefs absent → no area matches → only watchlist rows (none here) → 0 events.
+    expect(res.eventsInserted).toBe(0);
   });
 });

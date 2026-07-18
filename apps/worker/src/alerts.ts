@@ -64,9 +64,22 @@ export const CANDIDATES_SQL_NO_LIFECYCLE = `
   LIMIT 2000
 `;
 
-/** Fetch every user's id, tier, and areas (defensive — prefs may be absent). */
+/**
+ * Fetch every user's id, tier, and areas. `profiles.prefs` is created by a
+ * different branch (investors-shelf plan) that may not be applied when our
+ * alert worker runs. `runAlertTick` feature-detects the column: if selecting
+ * `prefs` throws 42703 (undefined_column), it falls back to USERS_SQL_NO_PREFS
+ * and treats every user's areas as empty `[]`.
+ */
 export const USERS_SQL = `
   SELECT id, subscription_tier, prefs
+  FROM profiles
+  WHERE subscription_tier IS NOT NULL
+`;
+
+/** Same as USERS_SQL but without the prefs column (fallback when it's absent). */
+export const USERS_SQL_NO_PREFS = `
+  SELECT id, subscription_tier
   FROM profiles
   WHERE subscription_tier IS NOT NULL
 `;
@@ -262,8 +275,20 @@ export async function runAlertTick(
       }
     }
 
-    const usersRes = await client.query(USERS_SQL);
-    const users = usersRes.rows;
+    let users: Array<{ id: string; subscription_tier?: string; prefs?: unknown }> = [];
+    try {
+      const usersRes = await client.query(USERS_SQL);
+      users = usersRes.rows;
+    } catch (err: any) {
+      if (err?.code === '42703') {
+        // profiles.prefs column missing — re-run without it; areas degrade to [].
+        log.warn('profiles.prefs missing; fetching users without prefs (no area matches)');
+        const usersRes = await client.query(USERS_SQL_NO_PREFS);
+        users = usersRes.rows;
+      } else {
+        throw err;
+      }
+    }
 
     // Build all candidate AlertRows (area + watchlist) for dedup insert.
     const areaRows = matchAreas(
