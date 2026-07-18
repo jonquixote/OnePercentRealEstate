@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { rentToPriceMonthly } from '@oper/primitives';
 import { Photo } from '@/components/Photo';
 import { useCompare } from '@/components/compare/useCompare';
+import SaveButton from '@/components/SaveButton';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -96,6 +97,13 @@ export function SearchCard({ property, onHover, highlighted }: SearchCardProps) 
             −{(cutPct * 100).toFixed(cutPct >= 0.1 ? 0 : 1)}%
           </span>
         )}
+        {/* save button — top-right, stop propagation so card link doesn't fire */}
+        <div
+          className="absolute right-3 top-12 z-10 transition-opacity opacity-0 group-hover:opacity-100"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        >
+          <SaveButton listingId={id} />
+        </div>
         {/* compare toggle — visible on hover or when selected */}
         <button
           type="button"
