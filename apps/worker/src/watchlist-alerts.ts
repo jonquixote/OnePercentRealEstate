@@ -416,6 +416,54 @@ async function tick(): Promise<void> {
 }
 
 /**
+ * Match a single listing candidate against one of a user's watchlists.
+ *
+ * Reuses the SAME compilation path the watchlist tick uses (compileWatchlistQuery)
+ * so the two never drift. Returns the watchlist name when the candidate satisfies
+ * the watchlist's query_json, otherwise null. Pure w.r.t. the DB — it does not
+ * insert alert rows (the caller owns the alert_events ledger).
+ *
+ * `pool` is a pg Pool; we take a short-lived client to run the compiled SQL with
+ * the candidate bound as a row. Compile errors (invalid column) reject, surfacing
+ * a misconfigured watchlist rather than silently skipping.
+ */
+export async function matchWatchlists(
+  pool: { query: (t: string, a: any[]) => Promise<{ rows: any[] }> },
+  userId: string,
+  candidate: {
+    id: string | number;
+    [k: string]: unknown;
+  },
+): Promise<{ watchlistId: number | string; name: string } | null> {
+  const res = await pool.query(
+    `SELECT id, name, query_json FROM watchlists WHERE user_id = $1`,
+    [userId],
+  );
+  for (const wl of res.rows) {
+    let sql: string;
+    let params: any[];
+    try {
+      ({ sql, params } = compileWatchlistQuery(wl.query_json ?? {}, 0));
+    } catch (err) {
+      logger.warn({ err, userId, watchlistId: wl.id }, 'Skipping uncompilable watchlist');
+      continue;
+    }
+    // Build a 1-row VALUES expression from the candidate so the compiled
+    // column expressions evaluate against the listing's actual fields.
+    const cols = Object.keys(candidate).filter((k) => k !== 'id');
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+    const match = await pool.query(
+      `SELECT 1 FROM (VALUES (${placeholders})) AS c(${cols.map((c) => `"${c}"`).join(', ')}) WHERE ${sql}`,
+      cols.map((c) => candidate[c]),
+    );
+    if (match.rows.length > 0) {
+      return { watchlistId: wl.id, name: wl.name };
+    }
+  }
+  return null;
+}
+
+/**
  * Main loop.
  */
 async function main() {
@@ -437,7 +485,11 @@ async function main() {
   });
 }
 
-main().catch(err => {
-  logger.error({ err }, 'Startup error');
-  process.exit(1);
-});
+// Only auto-start when executed directly (node/tsx apps/worker/src/watchlist-alerts.ts),
+// NOT when imported by another module (e.g. alerts.ts reusing matchWatchlists).
+if (process.argv[1] && process.argv[1].endsWith('watchlist-alerts.ts')) {
+  main().catch((err) => {
+    logger.error({ err }, 'Startup error');
+    process.exit(1);
+  });
+}
