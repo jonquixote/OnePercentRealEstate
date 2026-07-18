@@ -12,6 +12,7 @@ import { useSelection } from "@/lib/selection";
 import { Workspace, type BottomPane } from "@/components/Workspace";
 import { ScreenTabs } from "@/components/ScreenTabs";
 import { ColumnPicker } from "@/components/ColumnPicker";
+import { WatchlistPane } from "@/components/WatchlistPane";
 import { DEFAULT_SORT, type ScreenSort } from "@/lib/screens";
 import {
   DEFAULT_COLUMN_IDS,
@@ -100,6 +101,11 @@ export function TerminalClient({
   // active pane (or null = collapsed) is persisted so the layout survives a
   // reload. Hydrated after mount to stay SSR-safe.
   const [bottomPane, setBottomPane] = React.useState<BottomPane>(null);
+
+  // ---- W4: watchlist side pane -----------------------------------------
+  // Collapsible pane (toggle `w`) listing the user's watchlists; clicking one
+  // loads its criteria into the FilterExpression bar via `two:filter-change`.
+  const [watchlistOpen, setWatchlistOpen] = React.useState(false);
   React.useEffect(() => {
     try {
       const v = window.localStorage.getItem('two:bottom-pane');
@@ -159,6 +165,27 @@ export function TerminalClient({
     (ids: string[]) => {
       setColumnIds(ids.length > 0 ? ids : DEFAULT_COLUMN_IDS);
       persistColumns(ids, activeScreen);
+    },
+    [activeScreen, persistColumns],
+  );
+
+  // ---- W4: apply a saved layout ---------------------------------------
+  // A layout carries visible column ids + an optional sort. We set both, then
+  // mirror the column layout to localStorage and (for the active user screen)
+  // to the server. Sorting is server-side and applied via the existing
+  // `setSort` path. Decoupled from `two:filter-change` — a layout is a column
+  // view, not a row filter.
+  const applyLayout = React.useCallback(
+    (layout: { columns: string[]; sort?: { col: string; dir: "asc" | "desc" } | null }) => {
+      if (layout.columns?.length) {
+        setColumnIds(layout.columns);
+        persistColumns(layout.columns, activeScreen);
+      }
+      if (layout.sort) {
+        setSort(layout.sort);
+      } else if (layout.sort === null) {
+        setSort(DEFAULT_SORT);
+      }
     },
     [activeScreen, persistColumns],
   );
@@ -411,6 +438,13 @@ export function TerminalClient({
     { description: "Toggle column picker", group: "Data" },
   );
 
+  // ---- Watchlist pane toggle (w) -----------------------------------------
+  useHotkey(
+    "w",
+    () => setWatchlistOpen((v) => !v),
+    { description: "Toggle watchlist pane", group: "Data" },
+  );
+
   // ---- Top-bar status portal ------------------------------------------
   // Layout reserves a `#topbar-status` slot; we render the count + zoom into
   // it from here so the header chrome stays a layout-time concern and the
@@ -516,18 +550,23 @@ export function TerminalClient({
             onApply={applyScreen}
             onExport={() => void exportCsv()}
           />
-          <Workspace
-            rows={rows}
-            columns={columns}
-            sort={sort}
-            onSortChange={onSortChange}
-            selectedId={selected?.id ?? null}
-            onSelect={setSelected}
-            selectedZip={selected?.zip_code ?? null}
-            bottomPane={bottomPane}
-            latencyMs={latencyMs}
-            screenName={screenName}
-          />
+          <div className="flex min-h-0 flex-1">
+            <WatchlistPane open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
+            <Workspace
+              rows={rows}
+              columns={columns}
+              sort={sort}
+              onSortChange={onSortChange}
+              selectedId={selected?.id ?? null}
+              onSelect={setSelected}
+              selectedZip={selected?.zip_code ?? null}
+              bottomPane={bottomPane}
+              latencyMs={latencyMs}
+              screenName={screenName}
+              canSaveLayout={isPro}
+              onApplyLayout={applyLayout}
+            />
+          </div>
           <ColumnPicker
             open={pickerOpen}
             onClose={() => setPickerOpen(false)}
