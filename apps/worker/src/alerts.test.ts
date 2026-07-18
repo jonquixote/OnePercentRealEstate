@@ -279,6 +279,48 @@ describe('runAlertTick tier split', () => {
     expect(res.candidates).toBe(2);
     expect(res.eventsInserted).toBeGreaterThanOrEqual(1);
   });
+
+  it('caps the watchlists fetch (LIMIT $1) and warns when the cap is hit (#41)', async () => {
+    const { runAlertTick } = await import('./alerts');
+    const seen: Array<{ text: string; params?: any[] }> = [];
+    const warns: any[] = [];
+    const rowsBySql: Record<string, { rows: any[]; rowCount?: number }> = {
+      [wmSql]: { rows: [{ last_seen_at: new Date(0) }] },
+      [candSql]: {
+        rows: [{
+          id: 42, address: '9 Deal St', zip_code: '77002', price: 120000, city: 'Houston',
+          estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(1000),
+        }],
+      },
+      [mkSql]: { rows: [{ id: 'pro1', subscription_tier: 'pro', prefs: {}, email: 'p1@x.com' }] },
+      [insSql]: { rows: [], rowCount: 1 },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: 1 },
+      // Exactly one watchlist row returned; with watchlistBatch=1 the fetch is
+      // AT the cap, so the warn must fire.
+      'SELECT user_id, name, query_json FROM watchlists': {
+        rows: [{ user_id: 'pro1', name: 'Houston deals', query_json: { city: 'Houston' } }],
+      },
+    };
+    const query = async (text: string, params?: any[]) => {
+      seen.push({ text, params });
+      const key = Object.keys(rowsBySql).find((k) => text.includes(k));
+      const hit = key ? rowsBySql[key] : { rows: [], rowCount: 0 };
+      return { rows: hit.rows, rowCount: hit.rowCount ?? hit.rows.length };
+    };
+    const pool: any = { query, connect: async () => ({ query, release: () => {} }) };
+    const log = { info: () => {}, warn: (...a: any[]) => warns.push(a), error: () => {} };
+
+    await runAlertTick(pool, log as any, { watchlistBatch: 1 });
+
+    const wlCall = seen.find((c) => c.text.includes('FROM watchlists'));
+    expect(wlCall).toBeDefined();
+    // Bounded fetch: keyset-free single capped query.
+    expect(wlCall!.text).toMatch(/LIMIT \$1/);
+    expect(wlCall!.params).toEqual([1]);
+    // Cap hit (1 fetched >= batch 1) → a warn mentioning the cap fired.
+    expect(warns.some((w) => JSON.stringify(w).includes('cap'))).toBe(true);
+  });
 });
 
 describe('evalWatchlistQuery (pure, mirrors compileWatchlistQuery)', () => {

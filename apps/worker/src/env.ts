@@ -47,6 +47,9 @@ export interface WorkerEnv {
   readonly WATCHLIST_FROM_EMAIL: string;
   // Pro Deal Flow — tiered deal alert tick
   readonly ALERT_TICK_MS: number;
+  // Cap on watchlists loaded per alert tick — keeps the fanout's in-memory
+  // candidate×watchlist evaluation bounded. Warn-logged when hit (#41).
+  readonly ALERT_WATCHLIST_BATCH: number;
   // Tasks 2.1 & 2.2 — saved-search daily digest + weekly ZIP market brief
   readonly UNSUBSCRIBE_SECRET: string;
   readonly DIGEST_PUBLIC_URL: string;
@@ -173,6 +176,9 @@ export function loadEnv(): WorkerEnv {
     WATCHLIST_TICK_MS: readInt('WATCHLIST_TICK_MS', 15 * 60 * 1000), // 15 minutes default
     WATCHLIST_FROM_EMAIL: readString('WATCHLIST_FROM_EMAIL', 'alerts@octavo.press'),
     ALERT_TICK_MS: readInt('ALERT_TICK_MS', 5 * 60 * 1000), // 5 minutes default
+    // Bound on watchlists loaded per tick so the fanout's in-memory
+    // candidate×watchlist evaluation stays memory-bounded at scale (#41).
+    ALERT_WATCHLIST_BATCH: readInt('ALERT_WATCHLIST_BATCH', 2000),
     // Tasks 2.1 & 2.2 — HMAC key for one-click unsubscribe tokens and the
     // public base URL used to build those links. Required in production; a
     // dev-only fallback keeps local runs from crashing (tokens won't verify

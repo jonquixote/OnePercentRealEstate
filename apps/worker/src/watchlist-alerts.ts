@@ -126,6 +126,9 @@ async function evaluateWatchlist(client: any, watchlistId: bigint, userId: strin
         SELECT id, address, price, estimated_rent
         FROM listings
         WHERE listing_type = 'for_sale'
+          -- Lifecycle (#52): deal-alert notifications are active-only —
+          -- never fire on sold/stale/quarantined rows.
+          AND listing_status = 'active'
           AND created_at > $1
           AND ${sql}
         LIMIT 50
