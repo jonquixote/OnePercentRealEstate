@@ -232,8 +232,8 @@ function PresetsEditor() {
           <NumField label="Rate %" value={draft.financing.ratePct} step={0.1} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, ratePct: v } }))} />
           <NumField label="Down %" value={draft.financing.downPct} step={1} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, downPct: v } }))} />
           <NumField label="Term (yrs)" value={draft.financing.termYears} step={1} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, termYears: v } }))} />
-          <NumField label="Tax %" value={draft.financing.taxRatePct ?? 0} step={0.1} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, taxRatePct: v } }))} onClear={() => patch((d) => ({ ...d, financing: { ...d.financing, taxRatePct: null } }))} />
-          <NumField label="Insurance $/yr" value={draft.financing.insuranceMoYr ?? 0} step={50} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, insuranceMoYr: v } }))} onClear={() => patch((d) => ({ ...d, financing: { ...d.financing, insuranceMoYr: null } }))} />
+          <NumField label="Tax %" value={draft.financing.taxRatePct ?? null} step={0.1} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, taxRatePct: v } }))} onClear={() => patch((d) => ({ ...d, financing: { ...d.financing, taxRatePct: null } }))} />
+          <NumField label="Insurance $/yr" value={draft.financing.insuranceMoYr ?? null} step={50} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, insuranceMoYr: v } }))} onClear={() => patch((d) => ({ ...d, financing: { ...d.financing, insuranceMoYr: null } }))} />
           <NumField label="Mgmt %" value={draft.financing.mgmtPct} step={1} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, mgmtPct: v } }))} />
           <NumField label="Vacancy %" value={draft.financing.vacancyPct} step={1} onChange={(v) => patch((d) => ({ ...d, financing: { ...d.financing, vacancyPct: v } }))} />
         </div>
@@ -312,7 +312,7 @@ function PresetsEditor() {
   );
 }
 
-function NumField({ label, value, step, onChange, onClear }: { label: string; value: number | null; step: number; onChange: (v: number) => void; onClear?: () => void }) {
+function NumField<T extends number | null>({ label, value, step, onChange, onClear }: { label: string; value: T; step: number; onChange: (v: T) => void; onClear?: () => void }) {
   return (
     <label className="block">
       <span className="text-xs text-haze mb-1 flex items-center justify-between">
@@ -327,7 +327,7 @@ function NumField({ label, value, step, onChange, onClear }: { label: string; va
         type="number"
         step={step}
         value={Number.isFinite(value as number) ? (value as number) : ''}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => onChange((e.target.value === '' ? null : Number(e.target.value)) as T)}
         className="w-full rounded-xl border border-line bg-ink-2 px-3 py-2 text-sm tabular-nums outline-none focus:border-pass/50"
       />
     </label>
