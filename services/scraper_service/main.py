@@ -506,6 +506,11 @@ def scrape_listings(req: ScrapeRequest):
                            OR (EXCLUDED.nearby_schools IS NOT NULL AND listings.nearby_schools IS DISTINCT FROM EXCLUDED.nearby_schools)
                            OR (EXCLUDED.agent_info IS NOT NULL AND listings.agent_info IS DISTINCT FROM EXCLUDED.agent_info)
                            OR (EXCLUDED.tax_history IS NOT NULL AND listings.tax_history IS DISTINCT FROM EXCLUDED.tax_history)
+                           -- Re-seen-but-unchanged listings must still advance last_seen_at
+                           -- (the reaper keys entirely off it; a frozen value false-stales a
+                           -- healthy listing). Bounded to once/day to cap write amplification.
+                           -- NOTE: this refresh path also bumps updated_at (accepted tradeoff).
+                           OR listings.last_seen_at < now() - interval '1 day'
                         RETURNING id, (xmax = 0) as was_inserted
                     """, (
                         address, row.get('city'), row.get('state'), zip_code, price,
