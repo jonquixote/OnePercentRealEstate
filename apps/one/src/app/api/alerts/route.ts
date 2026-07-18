@@ -19,6 +19,7 @@ import { getSessionUser } from '@/lib/auth';
 const INBOX_SQL = `
   SELECT
     a.id,
+    a.listing_id,
     a.source,
     a.source_label,
     a.ratio,

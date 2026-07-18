@@ -6,6 +6,7 @@ import { Bell, CheckCheck } from 'lucide-react';
 
 interface AlertRow {
   id: number;
+  listing_id: number;
   source: 'area' | 'watchlist';
   source_label: string;
   ratio: string | number | null;
@@ -39,8 +40,8 @@ function fmtRatio(r: string | number | null): string {
 }
 
 function propertyHref(row: AlertRow): string {
-  // Deal pages live at /property/[id]; property_url is the offsite source.
-  return `/property/${row.id}`;
+  // Deal pages live at /property/[listing_id]; property_url is the offsite source.
+  return `/property/${row.listing_id}`;
 }
 
 export default function AlertsBell() {

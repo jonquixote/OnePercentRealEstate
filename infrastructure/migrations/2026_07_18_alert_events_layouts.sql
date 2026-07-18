@@ -46,7 +46,9 @@ CREATE TABLE IF NOT EXISTS alert_state (
 INSERT INTO alert_state (id, last_seen_at) VALUES (1, now())
   ON CONFLICT (id) DO NOTHING;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON alert_events, terminal_layouts TO oper_app;
-GRANT SELECT, INSERT, UPDATE ON alert_events TO oper_worker;
-GRANT USAGE, SELECT ON SEQUENCE alert_events_id_seq, terminal_layouts_id_seq TO oper_app;
-GRANT USAGE, SELECT ON SEQUENCE alert_events_id_seq TO oper_worker;
+-- Privileges: oper_app / oper_worker both sit in oper_rw, which already
+-- receives DEFAULT PRIVILEGES granting on all new tables (see
+-- 2026_07_12_db_roles.sql). Explicit GRANTs are intentionally omitted so the
+-- migration applies cleanly in environments where those roles are not yet
+-- created (e.g. the CI migrations-dry-run container). Apply them on the live
+-- DB after the roles exist, if needed.
