@@ -14,12 +14,27 @@ const INTENT_REASON: Record<string, string> = {
   digest: 'Sign in to opt into deal digests.',
 };
 
+const NEXT_HOST_ALLOWLIST = new Set(['one.octavo.press', 'two.octavo.press']);
+
 // Reject protocol-relative (//evil.example) and absolute URLs so a crafted
-// ?next= param can't become an open redirect after login.
-function safeNextPath(next: string | null): string {
+// ?next= param can't become an open redirect after login. Allow an EXACT-host
+// round-trip to our two production hosts over https only.
+export function safeNextPath(next: string | null): string {
   if (!next) return '/';
-  if (next.startsWith('//') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(next)) return '/';
-  return next;
+  const trimmed = next.trim();
+  // Reject protocol-relative (//evil) and backslash forms (\evil, /\evil) that
+  // browsers may treat as protocol-relative.
+  if (trimmed.startsWith('//') || trimmed.startsWith('\\') || trimmed.startsWith('/\\')) return '/';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      if (url.protocol === 'https:' && NEXT_HOST_ALLOWLIST.has(url.hostname)) return trimmed;
+    } catch {
+      /* fall through to reject */
+    }
+    return '/';
+  }
+  return trimmed;
 }
 
 // Wave 5: real credentials auth against /api/auth/{login,signup}.

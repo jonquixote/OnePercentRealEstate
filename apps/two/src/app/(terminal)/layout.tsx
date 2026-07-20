@@ -20,6 +20,7 @@ import { useSessionUser } from "@/lib/useSessionUser";
 import { FilterRail } from "@/components/FilterRail";
 import { PropertyInspector } from "@/components/PropertyInspector";
 import { FilterExpression } from "@/components/FilterExpression";
+import { SessionChip } from "@/components/SessionChip";
 
 /**
  * Three-pane terminal shell. The route group `(terminal)` owns the chrome
@@ -168,6 +169,7 @@ export default function TerminalLayout({
               id="topbar-status"
               className="font-mono text-[11px] text-zinc-500"
             />
+            <SessionChip />
             <ThemeToggle />
             <button
               type="button"

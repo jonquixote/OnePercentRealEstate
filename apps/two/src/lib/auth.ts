@@ -63,11 +63,16 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export function sessionCookieOptions() {
+  // SESSION_COOKIE_DOMAIN (prod: ".octavo.press") shares the session across
+  // one.octavo.press and two.octavo.press. Unset (dev/tests) = host-only,
+  // exactly the pre-2026-07-20 behavior.
+  const domain = process.env.SESSION_COOKIE_DOMAIN;
   return {
     httpOnly: true as const,
     sameSite: 'lax' as const,
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: SESSION_TTL_S,
+    ...(domain ? { domain } : {}),
   };
 }
