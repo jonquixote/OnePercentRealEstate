@@ -13,5 +13,9 @@ describe('safeNextPath', () => {
     expect(safeNextPath('https://evil.com/')).toBe('/');
     expect(safeNextPath('http://two.octavo.press/')).toBe('/'); // https only
     expect(safeNextPath('javascript:alert(1)')).toBe('/');
+    expect(safeNextPath(' javascript:alert(1)')).toBe('/');
+    expect(safeNextPath(' https://evil.com')).toBe('/');
+    expect(safeNextPath('\\evil.com')).toBe('/');
+    expect(safeNextPath('/\\evil.com')).toBe('/');
   });
 });

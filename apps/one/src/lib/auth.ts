@@ -80,6 +80,6 @@ export function sessionCookieOptions() {
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: SESSION_TTL_S,
-    ...(domain ? { domain } : null),
+    ...(domain ? { domain } : {}),
   };
 }

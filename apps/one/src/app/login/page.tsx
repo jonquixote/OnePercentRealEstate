@@ -21,17 +21,20 @@ const NEXT_HOST_ALLOWLIST = new Set(['one.octavo.press', 'two.octavo.press']);
 // round-trip to our two production hosts over https only.
 export function safeNextPath(next: string | null): string {
   if (!next) return '/';
-  if (next.startsWith('//')) return '/';
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(next)) {
+  const trimmed = next.trim();
+  // Reject protocol-relative (//evil) and backslash forms (\evil, /\evil) that
+  // browsers may treat as protocol-relative.
+  if (trimmed.startsWith('//') || trimmed.startsWith('\\') || trimmed.startsWith('/\\')) return '/';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
     try {
-      const url = new URL(next);
-      if (url.protocol === 'https:' && NEXT_HOST_ALLOWLIST.has(url.hostname)) return next;
+      const url = new URL(trimmed);
+      if (url.protocol === 'https:' && NEXT_HOST_ALLOWLIST.has(url.hostname)) return trimmed;
     } catch {
       /* fall through to reject */
     }
     return '/';
   }
-  return next;
+  return trimmed;
 }
 
 // Wave 5: real credentials auth against /api/auth/{login,signup}.
