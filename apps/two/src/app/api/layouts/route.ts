@@ -68,7 +68,11 @@ export async function GET() {
          FROM terminal_layouts WHERE user_id = $1 ORDER BY updated_at DESC`,
       [user.id],
     );
-    return NextResponse.json(res.rows);
+    const cap = user.tier === 'pro' ? PRO_CAP : FREE_CAP;
+    return NextResponse.json({
+      layouts: res.rows,
+      limits: { max: cap, used: res.rows.length, tier: user.tier },
+    });
   } catch (err) {
     console.error('GET /api/layouts error:', err);
     return NextResponse.json({ error: 'failed to load layouts' }, { status: 500 });

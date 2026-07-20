@@ -30,12 +30,13 @@ export interface SessionUser {
   id: string;
   email: string;
   tier: 'free' | 'pro';
+  stripeCustomerId: string | null;
 }
 
 export async function issueSession(user: SessionUser): Promise<string | null> {
   const key = secretKey();
   if (!key) return null;
-  return new SignJWT({ email: user.email, tier: user.tier })
+  return new SignJWT({ email: user.email, tier: user.tier, stripeCustomerId: user.stripeCustomerId })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(user.id)
     .setIssuedAt()
@@ -53,6 +54,7 @@ export async function verifySession(token: string): Promise<SessionUser | null> 
       id: String(payload.sub),
       email: typeof payload.email === 'string' ? payload.email : '',
       tier: payload.tier === 'pro' ? 'pro' : 'free',
+      stripeCustomerId: typeof payload.stripeCustomerId === 'string' ? payload.stripeCustomerId : null,
     };
   } catch {
     return null;

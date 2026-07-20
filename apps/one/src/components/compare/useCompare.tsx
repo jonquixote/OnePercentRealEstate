@@ -5,10 +5,12 @@
 // at COMPARE_FREE_MAX (Growth 1.3: Compare(>2) is the paid gate).
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useSessionUser } from '@/lib/useSessionUser';
+import { COMPARE_FREE_MAX, COMPARE_PRO_MAX } from '@/lib/entitlements';
 
 const KEY = 'oper:compare';
-export const COMPARE_MAX = 4;
-export const COMPARE_FREE_MAX = 2;
+// Re-export for back-compat with consumers importing the cap from this module.
+export const COMPARE_MAX = COMPARE_PRO_MAX;
+export { COMPARE_FREE_MAX };
 
 interface CompareCtx {
   ids: string[];

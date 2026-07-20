@@ -16,6 +16,7 @@ export interface SessionUser {
   id: string;
   email: string;
   tier: 'free' | 'pro';
+  stripeCustomerId: string | null;
 }
 
 let cached: SessionUser | null | undefined = undefined;
@@ -55,6 +56,19 @@ export function useSessionUser(): SessionUser | null {
   useEffect(() => {
     if (cached === undefined) {
       void load();
+    }
+    // After a Stripe checkout completes, the webhook flips the user's tier in
+    // `profiles`, but the session JWT was baked at login and is now stale. The
+    // checkout success redirect carries `?upgrade_success=true`; refresh the
+    // cookie from the DB so entitlements + the billing link update without a
+    // manual re-login.
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('upgrade_success') === 'true') {
+        void fetch('/api/auth/refresh', { cache: 'no-store' })
+          .then(() => notifyAuthChanged())
+          .catch(() => {});
+      }
     }
     const handler = () => setUser(cached ?? null);
     listeners.add(handler);
