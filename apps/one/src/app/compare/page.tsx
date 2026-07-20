@@ -7,7 +7,8 @@ import { useProperties, type PropertyListItem } from '@oper/api-client';
 import { capRate, monthlyMortgage } from '@oper/primitives';
 import { useSessionUser } from '@/lib/useSessionUser';
 import { Photo } from '@/components/Photo';
-import { COMPARE_FREE_MAX } from '@/components/compare/useCompare';
+import UpgradeMoment from '@/components/UpgradeMoment';
+import { COMPARE_FREE_MAX } from '@/lib/entitlements';
 
 type Property = PropertyListItem;
 
@@ -30,28 +31,19 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
     const params = use(searchParams);
     const ids = params.ids ? params.ids.split(',').filter(Boolean) : [];
     const sessionUser = useSessionUser();
-    const { data, isLoading, isError } = useProperties(ids, { compare: true });
+    const isPro = sessionUser?.tier === 'pro';
+    // Free accounts see the first COMPARE_FREE_MAX properties; the rest are
+    // gated behind the upgrade CTA rendered below the table. We slice the ids
+    // (rather than blanking the page) so partial value is always visible.
+    const overCap = !isPro && ids.length > COMPARE_FREE_MAX;
+    const visibleIds = isPro ? ids : ids.slice(0, COMPARE_FREE_MAX);
+    const { data, isLoading } = useProperties(visibleIds, { compare: true });
     const properties: Property[] = data ?? [];
 
     if (isLoading) {
         return (
             <div className="flex h-screen items-center justify-center" style={{ background: 'var(--ink)' }}>
                 <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--pass)' }} />
-            </div>
-        );
-    }
-
-    // Growth 1.3: server enforces the Compare(>2) gate. A free account hitting
-    // the limit (e.g. a hand-crafted URL) gets a 402 — show the upgrade CTA.
-    if (isError && sessionUser?.tier !== 'pro' && ids.length > COMPARE_FREE_MAX) {
-        return (
-            <div className="flex h-screen flex-col items-center justify-center gap-4" style={{ background: 'var(--ink)', color: 'var(--text)' }}>
-                <h1 style={{ font: '400 var(--display-2)/1.1 var(--font-display)' }}>Compare is a Pro feature</h1>
-                <p style={{ color: 'var(--haze)' }}>Free accounts can compare up to {COMPARE_FREE_MAX} properties at a time.</p>
-                <Link href="/pricing" className="rounded-md bg-pass px-4 py-2 font-semibold text-white hover:bg-pass-hi">
-                    Upgrade to compare more
-                </Link>
-                <Link href="/" style={{ color: 'var(--pass-hi)' }}>Return to Dashboard</Link>
             </div>
         );
     }
@@ -159,6 +151,8 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<{ 
                         </tbody>
                     </table>
                 </div>
+
+                {overCap ? <UpgradeMoment gate="compare" className="mt-2" /> : null}
             </div>
         </div>
     );

@@ -2,14 +2,13 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { withSpan } from '@/lib/tracing';
+import { COMPARE_FREE_MAX, COMPARE_PRO_MAX } from '@/lib/entitlements';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_IDS = 100;
 // Growth 1.3: Compare(>2) is the paid gate. Free accounts compare at most
 // COMPARE_FREE_MAX; subscribers get the wider COMPARE_MAX table.
-const COMPARE_FREE_MAX = 2;
-const COMPARE_PRO_MAX = 4;
 
 export async function GET(req: Request) {
   try {

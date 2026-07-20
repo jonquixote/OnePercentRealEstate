@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const client = await pool.connect();
     try {
       const res = await client.query(
-        `SELECT id, email, password_hash, subscription_tier FROM profiles WHERE email = $1`,
+        `SELECT id, email, password_hash, subscription_tier, stripe_customer_id FROM profiles WHERE email = $1`,
         [normalized],
       );
       const row = res.rows[0];
@@ -33,7 +33,12 @@ export async function POST(request: NextRequest) {
       if (!row || !row.password_hash || !ok) {
         return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
       }
-      const user = { id: row.id, email: row.email, tier: row.subscription_tier === 'pro' ? 'pro' as const : 'free' as const };
+      const user = {
+        id: row.id,
+        email: row.email,
+        tier: row.subscription_tier === 'pro' ? 'pro' as const : 'free' as const,
+        stripeCustomerId: row.stripe_customer_id ?? null,
+      };
       const token = await issueSession(user);
       if (!token) {
         return NextResponse.json({ error: 'Auth not configured (AUTH_SECRET missing)' }, { status: 503 });

@@ -4,6 +4,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Bell, CheckCheck } from 'lucide-react';
 import { usePrefs } from '@/lib/prefs';
+import { useSessionUser } from '@/lib/useSessionUser';
+import UpgradeMoment from '@/components/UpgradeMoment';
 
 interface AlertRow {
   id: number;
@@ -52,6 +54,10 @@ export default function AlertsBell() {
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const { prefs } = usePrefs();
+  const session = useSessionUser();
+  // Anon (null session) and free tier both stay on the daily digest — surface
+  // the honest upgrade footer for anyone who isn't Pro.
+  const showUpgrade = session?.tier !== 'pro';
 
   const load = useCallback(async () => {
     try {
@@ -198,6 +204,12 @@ export default function AlertsBell() {
               })
             )}
           </div>
+
+          {showUpgrade && (
+            <div className="border-t border-line bg-card/95 p-3">
+              <UpgradeMoment gate="alerts" />
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -5,7 +5,7 @@ import pool from '@/lib/db';
 
 export async function POST(req: Request) {
     if (!process.env.STRIPE_SECRET_KEY) {
-        return NextResponse.json({ error: 'Not configured' }, { status: 500 });
+        return NextResponse.json({ error: 'Billing unavailable' }, { status: 503 });
     }
 
     const sessionUser = await getSessionUser();
