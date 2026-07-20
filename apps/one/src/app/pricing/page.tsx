@@ -21,7 +21,9 @@ import {
 const HAS_STRIPE = Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 // Agency column only ships when its Stripe price id exists (risk audit
 // 2026-07-07: otherwise the checkout route returns a clean 400 for agency).
-const HAS_AGENCY = Boolean(process.env.STRIPE_PRICE_AGENCY);
+// Must be NEXT_PUBLIC_ — this is a client component and the value is inlined
+// at build time, so a server-only var would always be undefined here.
+const HAS_AGENCY = Boolean(process.env.NEXT_PUBLIC_STRIPE_PRICE_AGENCY);
 
 const PRO_MAILTO = 'mailto:sales@onepercent.com?subject=Upgrade%20to%20Pro';
 const AGENCY_MAILTO = 'mailto:sales@onepercent.com?subject=Agency%20Team%20Inquiry';
@@ -65,7 +67,7 @@ function PricingBody() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const from = (searchParams.get('from') as Gate | null) ?? undefined;
-  const highlightGate = from && from in GATE_ROWS ? from : undefined;
+  const highlightGate = from && Object.prototype.hasOwnProperty.call(GATE_ROWS, from) ? from : undefined;
 
   const handleCheckout = async (tierId: string) => {
     if (tierId === 'free') {
@@ -123,7 +125,9 @@ function PricingBody() {
     }
   };
 
-  const proColRing = highlightGate ? 'ring-brass' : 'ring-2';
+  // Pro column always carries the brass ring width/color for visual
+  // consistency; the highlight branch deepens it.
+  const proColRing = highlightGate ? 'ring-2 ring-brass' : 'ring-1 ring-brass';
   const proColBorder = highlightGate ? 'var(--brass-hi)' : 'var(--pass)';
 
   return (

@@ -15,7 +15,7 @@ function mockSearchParams(initial: URLSearchParams) {
 
 beforeEach(() => {
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_xxx';
-  process.env.STRIPE_PRICE_AGENCY = 'price_agency_xxx';
+  process.env.NEXT_PUBLIC_STRIPE_PRICE_AGENCY = 'price_agency_xxx';
 });
 
 afterEach(() => {
@@ -68,13 +68,13 @@ describe('pricing page', () => {
   });
 
   it('omits Agency column when agency price env is unset', async () => {
-    delete process.env.STRIPE_PRICE_AGENCY;
+    delete process.env.NEXT_PUBLIC_STRIPE_PRICE_AGENCY;
     await loadPage(new URLSearchParams());
     expect(screen.queryByText('Agency Team')).toBeNull();
   });
 
   it('shows Agency column when agency price env is set', async () => {
-    process.env.STRIPE_PRICE_AGENCY = 'price_agency_xxx';
+    process.env.NEXT_PUBLIC_STRIPE_PRICE_AGENCY = 'price_agency_xxx';
     await loadPage(new URLSearchParams());
     expect(screen.getByText('Agency Team')).toBeTruthy();
   });

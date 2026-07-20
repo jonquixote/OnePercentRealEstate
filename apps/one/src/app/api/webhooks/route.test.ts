@@ -15,7 +15,7 @@ vi.mock('@/lib/db', () => ({
   default: { connect: vi.fn(async () => ({ query, release: vi.fn() })) },
 }));
 
-import { dispatchEvent } from './route';
+import { dispatchEvent } from './handler';
 
 function makeSession(userId: string | undefined, customerId: string, email?: string): Stripe.Checkout.Session {
   return {

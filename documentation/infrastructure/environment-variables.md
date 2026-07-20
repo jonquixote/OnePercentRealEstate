@@ -10,6 +10,11 @@ The application requires specific environment variables to be set in a `.env` fi
 | `REDIS_URL` | Redis connection string | `redis://redis:6379` |
 | `MAPBOX_TOKEN` | Public Mapbox GL token | `pk.eyJ1Ijo...` |
 | `NEXT_PUBLIC_TILE_SERVER_URL` | URL of the MVT server | `http://157.245.184.89:7800` |
+| `STRIPE_SECRET_KEY` | Server-side Stripe secret key | `sk_live_...` |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | `whsec_...` |
+| `STRIPE_PRICE_MONTHLY` | Stripe price id for monthly Pro | `price_...` |
+| `STRIPE_PRICE_ANNUAL` | Stripe price id for annual Pro | `price_...` |
+| `NEXT_PUBLIC_STRIPE_PRICE_AGENCY` | Stripe price id for Agency tier. `NEXT_PUBLIC_` so the client pricing page can show the Agency column at build time. Unset = column hidden (checkout returns 400 for agency). | `price_...` |
 
 ## 📡 External API Keys
 

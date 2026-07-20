@@ -44,12 +44,16 @@ export default function AccountPage() {
         return;
       }
       if (!res.ok) {
+        console.error('Billing portal request failed', res.status);
         setBillingBusy(false);
         return;
       }
       const data = await res.json();
       if (data?.url) window.location.href = data.url;
-      else setBillingBusy(false);
+      else {
+        console.error('Billing portal returned no url', data);
+        setBillingBusy(false);
+      }
     } catch {
       setBillingBusy(false);
     }

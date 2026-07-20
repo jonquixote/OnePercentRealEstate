@@ -65,9 +65,38 @@ export function useSessionUser(): SessionUser | null {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('upgrade_success') === 'true') {
-        void fetch('/api/auth/refresh', { cache: 'no-store' })
-          .then(() => notifyAuthChanged())
-          .catch(() => {});
+        // The Stripe webhook flips the user's tier in `profiles` asynchronously.
+        // Poll /api/auth/refresh a few times (≤5 × 800ms) so we don't cache a
+        // stale `free` tier if the webhook hasn't landed yet. Stop early once the
+        // refreshed session shows `pro`.
+        let attempts = 0;
+        const tryRefresh = async (): Promise<void> => {
+          try {
+            await fetch('/api/auth/refresh', { cache: 'no-store' });
+            // /api/auth/refresh only re-issues the cookie; re-read /api/auth/me
+            // so `cached` reflects the DB tier before we check it. Without this,
+            // the early-stop below reads the stale pre-refresh value.
+            await load();
+            if (cached?.tier === 'pro') {
+              notifyAuthChanged();
+              return;
+            }
+          } catch {
+            /* ignore network errors; fall through to retry/settle */
+          }
+          if (++attempts < 5) {
+            setTimeout(tryRefresh, 800);
+          } else {
+            notifyAuthChanged();
+          }
+        };
+        void tryRefresh();
+
+        // Strip the param so a manual refresh doesn't re-trigger the flow.
+        params.delete('upgrade_success');
+        params.delete('session_id');
+        const newUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
+        window.history.replaceState({}, '', newUrl);
       }
     }
     const handler = () => setUser(cached ?? null);
