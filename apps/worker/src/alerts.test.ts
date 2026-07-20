@@ -95,6 +95,97 @@ describe('matchAreas (pure)', () => {
     );
     expect(rows).toHaveLength(0);
   });
+
+  const candHouston = {
+    id: 7,
+    address: '9 Suburb Ln',
+    zip_code: '77099',
+    city: 'Houston',
+    state: 'TX',
+    price: 120000,
+    estimated_rent: 1300,
+    rent_price_ratio: 0.0108,
+  };
+
+  it('matches an area to any candidate in the same city+state', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([candHouston as any], [
+      { id: 'u1', areas: [{ zip: '77002', label: 'Houston', city: 'Houston', state: 'TX' }] } as any,
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ user_id: 'u1', listing_id: 7, source: 'area', source_label: 'Houston' });
+  });
+
+  it('city match is case-insensitive and state exact', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([{ ...candHouston, city: 'HOUSTON' } as any], [
+      { id: 'u1', areas: [{ zip: '00000', label: 'H', city: 'houston', state: 'TX' }] } as any,
+    ]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('emits ONE row when both zip and city match the same listing', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([{ ...candHouston, zip_code: '77002' } as any], [
+      { id: 'u1', areas: [{ zip: '77002', label: 'Houston', city: 'Houston', state: 'TX' }] } as any,
+    ]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('old ZIP-only blobs keep matching by zip alone', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([{ ...candHouston, zip_code: '77002', city: null } as any], [
+      { id: 'u1', areas: [{ zip: '77002', label: 'Houston' }] } as any,
+    ]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('area with city but NO state does not city-match', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([candHouston as any], [
+      { id: 'u1', areas: [{ zip: '99999', label: 'H', city: 'Houston' }] } as any,
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('area with state but NO city does not city-match', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([candHouston as any], [
+      { id: 'u1', areas: [{ zip: '99999', label: 'H', state: 'TX' }] } as any,
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('city match does not fire on city alone when states differ', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([candHouston as any], [
+      { id: 'u1', areas: [{ zip: '00000', label: 'H', city: 'Houston', state: 'CA' }] } as any,
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('candidate with null city/state does not falsely match and does not throw', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([{ ...candHouston, city: null, state: null } as any], [
+      { id: 'u1', areas: [{ zip: '99999', label: 'H', city: 'Houston', state: 'TX' }] } as any,
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('dedups: a candidate matching by zip (area A) AND city+state (area B) yields ONE row', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas([{ ...candHouston, zip_code: '77002' } as any], [
+      {
+        id: 'u1',
+        areas: [
+          { zip: '77002', label: 'ZIP Area' },
+          { zip: '00000', label: 'City Area', city: 'Houston', state: 'TX' },
+        ],
+      } as any,
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ user_id: 'u1', listing_id: 7 });
+  });
 });
 
 describe('runAlertTick tier split', () => {
@@ -349,6 +440,105 @@ describe('runAlertTick tier split', () => {
     expect(wlCall!.params).toEqual([1]);
     // Cap hit (1 fetched >= batch 1) → a warn mentioning the cap fired.
     expect(warns.some((w) => JSON.stringify(w).includes('cap'))).toBe(true);
+  });
+});
+
+describe('runAlertTick observability (backlogFull + watermarkLagSeconds)', () => {
+  function makePool(rowsBySql: Record<string, { rows: any[]; rowCount?: number }>) {
+    const query = async (text: string, _params?: any[]) => {
+      const key = Object.keys(rowsBySql).find((k) => text.includes(k));
+      const hit = key ? rowsBySql[key] : { rows: [], rowCount: 0 };
+      return { rows: hit.rows, rowCount: hit.rowCount ?? hit.rows.length };
+    };
+    return { pool: { query, connect: async () => ({ query, release: () => {} }) } };
+  }
+
+  const mkSql = 'SELECT id, subscription_tier, prefs, email';
+  const candSql = 'last_seen_at >';
+  const wmSql = 'SELECT last_seen_at FROM alert_state';
+  const setWmSql = 'INSERT INTO alert_state';
+  const insSql = 'INSERT INTO alert_events';
+  const markSql = 'UPDATE alert_events';
+
+  it('backlogFull is true when the tick hits the candidate cap (2000)', async () => {
+    const { runAlertTick } = await import('./alerts');
+    const CAP = 2000;
+    const rows = Array.from({ length: CAP }, (_unused, i) => ({
+      id: i, address: 'x', zip_code: '77002', price: 120000,
+      estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(1000 + i),
+    }));
+    const { pool } = makePool({
+      [wmSql]: { rows: [{ last_seen_at: new Date(0) }] },
+      [candSql]: { rows },
+      [mkSql]: { rows: [{ id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'], alertOptIn: true }, email: 'p1@x.com' }] },
+      [insSql]: { rows: [], rowCount: CAP },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: CAP },
+    });
+    const infos: any[] = [];
+    const res = await runAlertTick(pool as any, { info: (...a: any[]) => infos.push(a), warn: () => {}, error: () => {} } as any);
+    expect(res.backlogFull).toBe(true);
+    expect(infos[0][0]).toMatchObject({ backlogFull: true });
+  });
+
+  it('backlogFull is false when fewer than the cap candidates are returned', async () => {
+    const { runAlertTick } = await import('./alerts');
+    const { pool } = makePool({
+      [wmSql]: { rows: [{ last_seen_at: new Date(0) }] },
+      [candSql]: {
+        rows: [{
+          id: 42, address: '9 Deal St', zip_code: '77002', price: 120000,
+          estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(1000),
+        }],
+      },
+      [mkSql]: { rows: [{ id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'], alertOptIn: true }, email: 'p1@x.com' }] },
+      [insSql]: { rows: [], rowCount: 1 },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: 1 },
+    });
+    const infos: any[] = [];
+    const res = await runAlertTick(pool as any, { info: (...a: any[]) => infos.push(a), warn: () => {}, error: () => {} } as any);
+    expect(res.backlogFull).toBe(false);
+    expect(infos[0][0]).toMatchObject({ backlogFull: false });
+  });
+
+  it('watermarkLagSeconds reflects now minus the processed watermark', async () => {
+    const { runAlertTick } = await import('./alerts');
+    const now = Date.now();
+    const wmMs = now - 120_000; // 120s behind
+    const { pool } = makePool({
+      [wmSql]: { rows: [{ last_seen_at: new Date(wmMs) }] },
+      [candSql]: {
+        rows: [{
+          id: 42, address: '9 Deal St', zip_code: '77002', price: 120000,
+          estimated_rent: 1500, rent_price_ratio: 0.0125, last_seen_at: new Date(wmMs),
+        }],
+      },
+      [mkSql]: { rows: [{ id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'] }, email: 'p1@x.com' }] },
+      [insSql]: { rows: [], rowCount: 1 },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: 1 },
+    });
+    const infos: any[] = [];
+    const res = await runAlertTick(pool as any, { info: (...a: any[]) => infos.push(a), warn: () => {}, error: () => {} } as any);
+    expect(Math.abs(res.watermarkLagSeconds - 120)).toBeLessThanOrEqual(2);
+    expect(Math.abs(infos[0][0].watermarkLagSeconds - 120)).toBeLessThanOrEqual(2);
+  });
+
+  it('watermarkLagSeconds is 0 when the watermark is absent (caught up)', async () => {
+    const { runAlertTick } = await import('./alerts');
+    const { pool } = makePool({
+      [wmSql]: { rows: [] }, // no watermark row → absent → lag must be 0
+      [candSql]: { rows: [] },
+      [mkSql]: { rows: [] },
+      [insSql]: { rows: [], rowCount: 0 },
+      [setWmSql]: { rows: [] },
+      [markSql]: { rows: [], rowCount: 0 },
+    });
+    const infos: any[] = [];
+    const res = await runAlertTick(pool as any, { info: (...a: any[]) => infos.push(a), warn: () => {}, error: () => {} } as any);
+    expect(res.watermarkLagSeconds).toBe(0);
+    expect(infos[0][0]).toMatchObject({ watermarkLagSeconds: 0 });
   });
 });
 

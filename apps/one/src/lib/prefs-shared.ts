@@ -15,7 +15,7 @@ export type InvestorPrefs = {
     mgmtPct: number; // property management % of rent
     vacancyPct: number; // 0-30
   };
-  areas: Array<{ label: string; zip: string }>; // watched areas (metro chips or ZIPs)
+  areas: Array<{ label: string; zip: string; city?: string; state?: string }>; // watched areas (metro chips or ZIPs)
   strategy: Strategy;
   onboarded?: boolean;
   alertOptIn?: boolean;
@@ -68,9 +68,21 @@ export function parsePrefs(json: unknown): InvestorPrefs {
   const areasRaw = Array.isArray(src.areas) ? src.areas : [];
   const areas = areasRaw
     .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
-    .map((a) => ({ label: typeof a.label === 'string' ? a.label : '', zip: typeof a.zip === 'string' ? a.zip : '' }))
-    .filter((a) => a.label.trim() !== '' && ZIP_RE.test(a.zip))
-    .map((a) => ({ label: a.label, zip: a.zip }));
+    .map((a) => {
+      const label = typeof a.label === 'string' ? a.label : '';
+      const zip = typeof a.zip === 'string' ? a.zip : '';
+      const cityRaw = typeof a.city === 'string' ? a.city.trim() : '';
+      const stateRaw = typeof a.state === 'string' ? a.state.trim().toUpperCase() : '';
+      const validCity = cityRaw.length > 0 && cityRaw.length <= 40;
+      const validState = /^[A-Z]{2}$/.test(stateRaw);
+      const area: { label: string; zip: string; city?: string; state?: string } = { label, zip };
+      if (validCity && validState) {
+        area.city = cityRaw;
+        area.state = stateRaw;
+      }
+      return area;
+    })
+    .filter((a) => a.label.trim() !== '' && ZIP_RE.test(a.zip));
 
   const strategy: Strategy = STRATEGIES.includes(src.strategy as Strategy)
     ? (src.strategy as Strategy)

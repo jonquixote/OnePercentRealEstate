@@ -64,6 +64,8 @@ describe('WizardSteps', () => {
     expect(saved.alertOptIn).toBe(true);
     expect(saved.areas).toHaveLength(2);
     expect(saved.areas.map((a) => a.label).sort()).toEqual([METROS[0].label, METROS[1].label].sort());
+    expect(saved.areas[0]).toEqual({ label: METROS[0].label, zip: METROS[0].zip, city: METROS[0].city, state: METROS[0].state });
+    expect(saved.areas[1]).toEqual({ label: METROS[1].label, zip: METROS[1].zip, city: METROS[1].city, state: METROS[1].state });
     expect(push).toHaveBeenCalledWith('/search');
   });
 
