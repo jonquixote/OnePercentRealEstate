@@ -294,7 +294,7 @@ export default function SearchPage() {
 
       {/* Content: cards + map */}
       <div className="mx-auto max-w-7xl px-6 py-6 pb-24 lg:px-8 lg:pb-6">
-        {sessionUser && myAreas.length === 0 && !welcomeCtaDismissed && (
+        {sessionUser && !prefs.onboarded && myAreas.length === 0 && !welcomeCtaDismissed && (
           <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[var(--r-panel)] border border-line bg-card px-4 py-3">
             <span className="prov flex-1">
               <Link href="/welcome" className="font-semibold text-pass transition-colors hover:text-pass-hi">

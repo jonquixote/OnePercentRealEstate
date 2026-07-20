@@ -12,15 +12,19 @@ export default function WelcomePage() {
   const user = useSessionUser();
   const sessionLoaded = useSessionLoaded();
 
+  // Signed out (after session resolves) → send to login, preserving the return path.
+  useEffect(() => {
+    if (!loading && sessionLoaded && !user) {
+      router.replace('/login?next=/welcome');
+    }
+  }, [loading, sessionLoaded, user, router]);
+
   if (loading || !sessionLoaded) {
     return <div className="min-h-screen flex items-center justify-center text-haze">Loading…</div>;
   }
 
-  // Signed out → send to login, preserving the return path.
+  // Signed out → nothing to render (redirect handled above).
   if (!user) {
-    useEffect(() => {
-      router.replace('/login?next=/welcome');
-    }, [router]);
     return null;
   }
 
