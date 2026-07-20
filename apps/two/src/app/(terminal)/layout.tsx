@@ -151,12 +151,13 @@ export default function TerminalLayout({
                 <span className="truncate">
                   Custom filters are a Pro feature
                 </span>
-                <Link
-                  href="/pricing"
+                {/* Pricing lives on one.octavo.press — the terminal has no /pricing route. */}
+                <a
+                  href="https://one.octavo.press/pricing?from=terminal"
                   className="shrink-0 underline underline-offset-2 hover:text-amber-50"
                 >
                   See pricing →
-                </Link>
+                </a>
               </div>
             )}
           </div>

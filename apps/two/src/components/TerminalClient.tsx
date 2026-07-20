@@ -35,12 +35,13 @@ function DemoBanner() {
     >
       Terminal is a Pro feature — full access from{" "}
       <span className="font-semibold text-amber-100">$19/mo</span>.{" "}
-      <Link
-        href="/pricing"
+      {/* Pricing lives on one.octavo.press — the terminal has no /pricing route. */}
+      <a
+        href="https://one.octavo.press/pricing?from=terminal"
         className="underline underline-offset-2 hover:text-amber-50"
       >
         See pricing →
-      </Link>
+      </a>
     </div>
   );
 }
