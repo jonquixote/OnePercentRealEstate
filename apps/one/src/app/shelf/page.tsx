@@ -194,7 +194,7 @@ export default function ShelfPage() {
                 className="inline-flex items-center gap-2 rounded-full border border-pass px-6 py-2 text-sm font-semibold text-pass transition-colors hover:bg-pass/10"
               >
                 <Search className="h-4 w-4" />
-                Browse Properties
+                Browse deals →
               </Link>
             </div>
           )}
@@ -242,7 +242,13 @@ export default function ShelfPage() {
           ) : (
             <div className="rounded-[var(--r-panel)] border border-line bg-card p-8 text-center">
               <Search className="mx-auto h-8 w-8 text-haze mb-3" />
-              <p className="text-sm text-haze">No watched searches yet. Save a search to track it here.</p>
+              <p className="text-sm text-haze mb-4">No watched searches yet. Save a search to track it here.</p>
+              <Link
+                href="/welcome"
+                className="inline-flex items-center gap-2 rounded-full border border-pass px-6 py-2 text-sm font-semibold text-pass transition-colors hover:bg-pass/10"
+              >
+                Set up your areas →
+              </Link>
             </div>
           )}
         </section>
@@ -260,6 +266,14 @@ export default function ShelfPage() {
             >
               Edit presets →
             </Link>
+            {!prefs.onboarded && (
+              <Link
+                href="/welcome"
+                className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brass transition-colors hover:text-brass-hi"
+              >
+                Not set up yet — 60 seconds →
+              </Link>
+            )}
           </div>
         </section>
       </div>

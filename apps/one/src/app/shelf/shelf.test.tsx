@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+
+vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
+
+const prefsState = vi.hoisted(() => ({ prefs: { strategy: 'buy_hold', financing: { ratePct: 7, downPct: 25 }, areas: [], onboarded: false } }));
+vi.mock('@/lib/prefs', () => ({
+  usePrefs: () => ({ prefs: prefsState.prefs, save: vi.fn(), loading: false }),
+}));
+
 import ShelfPage from './page';
 
 afterEach(() => cleanup());
@@ -89,5 +97,23 @@ describe('ShelfPage', () => {
 
     // Card remains because the server rejected the delete.
     expect(screen.getByText('111 First St')).toBeTruthy();
+  });
+});
+
+describe('ShelfPage — warm empty states', () => {
+  it('links the watched-searches empty state to /welcome when not onboarded', async () => {
+    prefsState.prefs = { ...prefsState.prefs, onboarded: false };
+    global.fetch = mockFetchFor([], []) as unknown as typeof fetch;
+    render(<ShelfPage />);
+    const link = await screen.findByRole('link', { name: /Set up your areas/i });
+    expect(link.getAttribute('href')).toBe('/welcome');
+  });
+
+  it('shows a "Not set up yet" /welcome link in presets when not onboarded', async () => {
+    prefsState.prefs = { ...prefsState.prefs, onboarded: false };
+    global.fetch = mockFetchFor([], []) as unknown as typeof fetch;
+    render(<ShelfPage />);
+    const link = await screen.findByRole('link', { name: /Not set up yet/i });
+    expect(link.getAttribute('href')).toBe('/welcome');
   });
 });
