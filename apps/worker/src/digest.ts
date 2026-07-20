@@ -480,6 +480,10 @@ const MARK_EVENTS_DELIVERED_SQL = `
   WHERE id = ANY($1::bigint[]) AND delivered_at IS NULL
 `;
 
+// Cap events bundled into a single alert email. Gmail clips >102KB; Resend has
+// payload limits. Overflow stays undelivered and is picked up on the next run.
+const MAX_EVENTS_PER_EMAIL = 20;
+
 interface AlertDeliveryRow {
   id: bigint;
   user_id: string;
@@ -528,7 +532,12 @@ export async function deliverAlertEvents(pool: Pool, log: Logger): Promise<void>
             : false;
         if (!alertOptIn || !email) continue;
 
-        const candidates: Candidate[] = events.map((e) => ({
+        // Cap events per email: a large backlog (offline / newly opted-in)
+        // would otherwise clip in Gmail (>102KB) or exceed Resend payload
+        // limits. Uncapped events stay undelivered and go out next run.
+        const eventsToSend = events.slice(0, MAX_EVENTS_PER_EMAIL);
+
+        const candidates: Candidate[] = eventsToSend.map((e) => ({
           id: e.listing_id,
           address: e.address,
           zip_code: e.zip_code,
@@ -539,7 +548,7 @@ export async function deliverAlertEvents(pool: Pool, log: Logger): Promise<void>
           state: e.state,
         }));
 
-        const alertRows: AlertRow[] = events.map((e) => ({
+        const alertRows: AlertRow[] = eventsToSend.map((e) => ({
           user_id: e.user_id,
           listing_id: e.listing_id,
           source: 'area',
@@ -555,8 +564,10 @@ export async function deliverAlertEvents(pool: Pool, log: Logger): Promise<void>
           log,
         );
         if (sent > 0) {
-          // Stamp exactly the event ids we attempted to deliver.
-          const ids = events.map((e) => e.id);
+          // Stamp exactly the event ids we delivered. node-postgres cannot
+          // serialize native BigInt, so cast ids to string; Postgres coerces
+          // the text[] to bigint[] via $1::bigint[].
+          const ids = eventsToSend.map((e) => String(e.id));
           await client.query(MARK_EVENTS_DELIVERED_SQL, [ids]);
           log.info({ userId, events: ids.length }, 'Delivered alert events');
         }

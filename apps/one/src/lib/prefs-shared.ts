@@ -82,12 +82,7 @@ export function parsePrefs(json: unknown): InvestorPrefs {
       }
       return area;
     })
-    .filter((a) => a.label.trim() !== '' && ZIP_RE.test(a.zip))
-    .map((a) =>
-      a.city !== undefined && a.state !== undefined
-        ? { label: a.label, zip: a.zip, city: a.city, state: a.state }
-        : { label: a.label, zip: a.zip },
-    );
+    .filter((a) => a.label.trim() !== '' && ZIP_RE.test(a.zip));
 
   const strategy: Strategy = STRATEGIES.includes(src.strategy as Strategy)
     ? (src.strategy as Strategy)

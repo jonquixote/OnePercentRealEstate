@@ -451,9 +451,12 @@ export async function runAlertTick(
     await client.query(SET_WATERMARK_SQL, [new Date(maxSeen)]);
 
     // Observability: is the watermark crawling a backlog, and how far behind is it?
+    // Measure lag against maxSeen (the value just persisted by SET_WATERMARK_SQL),
+    // not the stale pre-tick watermark — otherwise a partial backlog advance
+    // (backlogFull) overstates the lag of what's now stored in alert_state.
     const backlogFull = candidates.length >= CANDIDATES_LIMIT;
     const watermarkLagSeconds = watermarkPresent
-      ? Math.max(0, Math.round((Date.now() - watermark.getTime()) / 1000))
+      ? Math.max(0, Math.round((Date.now() - maxSeen) / 1000))
       : 0;
 
     log.info(

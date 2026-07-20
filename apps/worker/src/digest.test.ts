@@ -193,7 +193,9 @@ describe('deliverAlertEvents (TDD — should FAIL until implemented)', () => {
       return { ok: true, text: async () => 'ok' } as any;
     }) as any;
 
-    // Only one undelivered event returned; delivered ones are filtered by SQL.
+    // Event 999 is already delivered: the SQL `delivered_at IS NULL` guard
+    // filters it out, so ALERT_DELIVERY_SQL returns ONLY the undelivered 501.
+    // 999 must therefore never reach the email body nor the mark params.
     const { pool, query } = makePool({
       [ALERT_DELIVERY_SQL]: {
         rows: [
@@ -202,9 +204,10 @@ describe('deliverAlertEvents (TDD — should FAIL until implemented)', () => {
       },
       [MARK_SQL]: { rows: [], rowCount: 1 },
     });
-    const calls: string[] = [];
+    // Capture BOTH sql text and params so the assertion is not vacuous.
+    const calls: { text: string; params: any[] }[] = [];
     pool.query = (async (text: string, p?: any[]) => {
-      calls.push(text);
+      calls.push({ text, params: p ?? [] });
       return query(text, p);
     }) as any;
     pool.connect = async () => ({ query: pool.query, release: () => {} });
@@ -213,8 +216,15 @@ describe('deliverAlertEvents (TDD — should FAIL until implemented)', () => {
     expect(sentHtml).toHaveLength(1);
     const html = sentHtml[0];
     expect(html).toContain('Deal St 601');
-    // id 999 (the delivered one) must not appear.
-    expect(calls.some((c) => c.includes('999'))).toBe(false);
+
+    // The mark query must be called with exactly the undelivered event id (501).
+    const markCall = calls.find((c) => c.text.includes(MARK_SQL));
+    expect(markCall).toBeDefined();
+    const markIds = (markCall!.params[0] ?? []) as string[];
+    expect(markIds).toContain('501');
+    // The delivered event 999 never reaches the mark params nor the email body.
+    expect(markIds.some((id) => String(id) === '999')).toBe(false);
+    expect(html).not.toContain('999');
     globalThis.fetch = (async () => ({} as any)) as any;
   });
 
@@ -245,6 +255,49 @@ describe('deliverAlertEvents (TDD — should FAIL until implemented)', () => {
     // Should not throw; both users' send failed → no mark stamps.
     await deliverAlertEvents(pool, { info: () => {}, warn: () => {}, error: () => {} } as any);
     expect(calls.some((c) => c.includes(MARK_SQL))).toBe(false);
+    globalThis.fetch = (async () => ({} as any)) as any;
+  });
+
+  it('caps at 20 events per email: 21 undelivered → 20 sent+marked, 1 stays undelivered', async () => {
+    const { deliverAlertEvents } = await import('./digest');
+    process.env.RESEND_API_KEY = 're_test_key';
+    const sentHtml: string[] = [];
+    globalThis.fetch = (async (_url: any, init: any) => {
+      const body = JSON.parse(init.body);
+      sentHtml.push(body.html);
+      return { ok: true, text: async () => 'ok' } as any;
+    }) as any;
+
+    // 21 undelivered events for one opted-in user; ids 1..21, listings 1..21.
+    const rows = Array.from({ length: 21 }, (_, i) => ({
+      ...ev(i + 1, 'u8', i + 1),
+      ...listing(i + 1),
+      ...profile('u8', 'u8@x.com', true),
+    }));
+    const { pool, query } = makePool({
+      [ALERT_DELIVERY_SQL]: { rows },
+      [MARK_SQL]: { rows: [], rowCount: 20 },
+    });
+    const calls: { text: string; params: any[] }[] = [];
+    pool.query = (async (text: string, p?: any[]) => {
+      calls.push({ text, params: p ?? [] });
+      return query(text, p);
+    }) as any;
+    pool.connect = async () => ({ query: pool.query, release: () => {} });
+
+    await deliverAlertEvents(pool, { info: () => {}, warn: () => {}, error: () => {} } as any);
+
+    // Exactly one email sent.
+    expect(sentHtml).toHaveLength(1);
+    // Mark params carry exactly 20 ids — the newest 20 (rows[0..19] → ids 1..20).
+    const markCall = calls.find((c) => c.text.includes(MARK_SQL));
+    expect(markCall).toBeDefined();
+    const markIds = (markCall!.params[0] ?? []) as string[];
+    expect(markIds).toHaveLength(20);
+    // Event 21 (the overflow) is NOT marked → stays undelivered for next run.
+    expect(markIds.some((id) => String(id) === '21')).toBe(false);
+    expect(markIds).toContain('1');
+    expect(markIds).toContain('20');
     globalThis.fetch = (async () => ({} as any)) as any;
   });
 });
