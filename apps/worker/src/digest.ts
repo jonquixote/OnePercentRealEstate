@@ -21,6 +21,8 @@ import { parse, compile } from '@oper/query-lang';
 import { loadEnv } from './env.js';
 import { getLogger, type WorkerLogger } from './logger.js';
 import { indexEmailHtml } from './index-email.js';
+import { renderAlertEmail, resendEnabled, sendAlertEmails } from './alert-email.js';
+import type { AlertRow, Candidate } from './alerts.js';
 
 type Logger = WorkerLogger;
 
@@ -280,6 +282,13 @@ async function runDailyDigest(): Promise<void> {
       }
     }
 
+    // Task 3 — deliver free-tier alert events to opted-in users (Resend-gated).
+    try {
+      await deliverAlertEvents(pool, logger);
+    } catch (err) {
+      logger.error({ err }, 'Alert event delivery pass failed');
+    }
+
     logger.info({ users: usersRes.rows.length }, 'Daily digest pass complete');
   } finally {
     client.release();
@@ -439,6 +448,126 @@ async function sendDailyDigestForUser(
 
   await sendResendEmail(email, 'Your daily new matches', html);
   logger.info({ userId, listings: listings.length }, 'Sent daily digest');
+}
+
+// ---------------------------------------------------------------------------
+// TASK 3 — deliver undelivered free-tier alert_events (opt-in, Resend-gated)
+// ---------------------------------------------------------------------------
+// Undelivered area/watchlist alert events for opted-in users. Reuses the exact
+// alert-email template (renderAlertEmail) and Resend send (sendAlertEmails) so
+// the digest is Resend-gated for free — absent RESEND_API_KEY ⇒ skipped.
+// delivered_at is stamped ONLY on a successful send, keyed on alert_events.id
+// (the event row), never on listing_id, with a `delivered_at IS NULL` guard so
+// a re-run can never double-mark. Per-user failures are isolated.
+const ALERT_DELIVERY_SQL = `
+  SELECT ae.id, ae.user_id, ae.listing_id, ae.source_label, ae.ratio, ae.price,
+         l.address, l.city, l.state, l.zip_code, l.primary_photo, l.rent_price_ratio,
+         p.email, p.prefs
+  FROM alert_events ae
+  JOIN listings l ON l.id = ae.listing_id
+  JOIN profiles p ON p.id = ae.user_id
+  WHERE ae.delivered_at IS NULL
+    AND l.listing_status = 'active'
+    AND p.email IS NOT NULL
+    AND (p.prefs->>'alertOptIn')::boolean IS TRUE
+  ORDER BY ae.user_id, ae.created_at DESC
+  LIMIT 500
+`;
+
+const MARK_EVENTS_DELIVERED_SQL = `
+  UPDATE alert_events
+  SET delivered_at = now()
+  WHERE id = ANY($1::bigint[]) AND delivered_at IS NULL
+`;
+
+interface AlertDeliveryRow {
+  id: bigint;
+  user_id: string;
+  listing_id: number;
+  source_label: string;
+  ratio: number | null;
+  price: number | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  primary_photo: string | null;
+  rent_price_ratio: number | null;
+  email: string | null;
+  prefs: any;
+}
+
+/**
+ * Deliver all undelivered alert_events to opted-in users, then stamp
+ * delivered_at on exactly the events that were successfully emailed.
+ * Resend-gated: a no-op (single info line) when RESEND_API_KEY is unset.
+ */
+export async function deliverAlertEvents(pool: Pool, log: Logger): Promise<void> {
+  if (!resendEnabled()) return;
+
+  const client = await pool.connect();
+  try {
+    const res = await client.query(ALERT_DELIVERY_SQL);
+    const rows = res.rows as AlertDeliveryRow[];
+    if (rows.length === 0) return;
+
+    // Group events per user.
+    const byUser = new Map<string, AlertDeliveryRow[]>();
+    for (const r of rows) {
+      const arr = byUser.get(r.user_id) ?? [];
+      arr.push(r);
+      byUser.set(r.user_id, arr);
+    }
+
+    for (const [userId, events] of byUser) {
+      try {
+        const email = events[0].email;
+        const alertOptIn =
+          events[0].prefs && typeof events[0].prefs === 'object'
+            ? events[0].prefs.alertOptIn === true
+            : false;
+        if (!alertOptIn || !email) continue;
+
+        const candidates: Candidate[] = events.map((e) => ({
+          id: e.listing_id,
+          address: e.address,
+          zip_code: e.zip_code,
+          price: e.price,
+          estimated_rent: null,
+          rent_price_ratio: e.rent_price_ratio,
+          city: e.city,
+          state: e.state,
+        }));
+
+        const alertRows: AlertRow[] = events.map((e) => ({
+          user_id: e.user_id,
+          listing_id: e.listing_id,
+          source: 'area',
+          source_label: e.source_label,
+          ratio: e.ratio,
+          price: e.price,
+        }));
+
+        const sent = await sendAlertEmails(
+          { id: userId, email },
+          alertRows,
+          candidates,
+          log,
+        );
+        if (sent > 0) {
+          // Stamp exactly the event ids we attempted to deliver.
+          const ids = events.map((e) => e.id);
+          await client.query(MARK_EVENTS_DELIVERED_SQL, [ids]);
+          log.info({ userId, events: ids.length }, 'Delivered alert events');
+        }
+      } catch (err) {
+        // Isolate per-user failure — do NOT stamp delivered_at, continue.
+        log.error({ err, userId }, 'Alert event delivery failed for user');
+      }
+    }
+  } finally {
+    client.release();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -809,7 +938,11 @@ async function main() {
   });
 }
 
-main().catch((err) => {
-  logger.error({ err }, 'Startup error');
-  process.exit(1);
-});
+// Only auto-run when invoked as the entrypoint (e.g. `node dist/digest.js`).
+// Tests import this module without triggering the scheduler.
+if (process.argv[1] && process.argv[1].endsWith('digest.ts')) {
+  main().catch((err) => {
+    logger.error({ err }, 'Startup error');
+    process.exit(1);
+  });
+}

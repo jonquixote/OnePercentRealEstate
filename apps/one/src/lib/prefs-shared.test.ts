@@ -33,6 +33,19 @@ describe('parsePrefs onboarded + alertOptIn', () => {
     expect(a.areas).toEqual([{ label: 'Houston', zip: '77002' }]);
   });
 
+  it('round-trips area city/state and clamps junk', () => {
+    const p = parsePrefs({
+      areas: [
+        { zip: '77002', label: 'Houston', city: 'Houston', state: 'tx' },
+        { zip: '44102', label: 'Cleveland' },
+        { zip: '30310', label: 'Atlanta', city: 42, state: 'GEORGIA' },
+      ],
+    });
+    expect(p.areas[0]).toEqual({ zip: '77002', label: 'Houston', city: 'Houston', state: 'TX' });
+    expect(p.areas[1]).toEqual({ zip: '44102', label: 'Cleveland' });
+    expect(p.areas[2]).toEqual({ zip: '30310', label: 'Atlanta' });
+  });
+
   it('handles null and garbage input without throwing', () => {
     expect(parsePrefs(null).onboarded).toBe(false);
     expect(parsePrefs(null).alertOptIn).toBe(false);

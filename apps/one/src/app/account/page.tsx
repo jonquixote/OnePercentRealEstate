@@ -251,7 +251,10 @@ function PresetsEditor() {
 
   function addArea(mLabel: string, mZip: string) {
     if (!/^\d{5}$/.test(mZip) || !mLabel.trim()) return;
-    patch((d) => ({ ...d, areas: [...d.areas, { label: mLabel.trim(), zip: mZip }] }));
+    const metro = METROS.find((m) => m.zip === mZip);
+    const extra =
+      metro?.city && metro?.state ? { city: metro.city, state: metro.state } : {};
+    patch((d) => ({ ...d, areas: [...d.areas, { label: mLabel.trim(), zip: mZip, ...extra }] }));
     setLabel('');
     setZip('');
   }

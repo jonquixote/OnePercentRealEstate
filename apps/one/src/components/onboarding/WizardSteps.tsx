@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { METROS } from '@/lib/metros';
 import { DEFAULT_PREFS, type InvestorPrefs } from '@/lib/prefs-shared';
 
-type SelectedArea = { label: string; zip: string };
+type SelectedArea = { label: string; zip: string; city?: string; state?: string };
 
 function NumField({ label, value, step, onChange }: { label: string; value: number; step: number; onChange: (v: number) => void }) {
   return (
@@ -40,7 +40,7 @@ export function WizardSteps({
     setSelectedAreas((cur) =>
       cur.some((a) => a.zip === m.zip)
         ? cur.filter((a) => a.zip !== m.zip)
-        : [...cur, { label: m.label, zip: m.zip }],
+        : [...cur, { label: m.label, zip: m.zip, city: m.city, state: m.state }],
     );
   }
 

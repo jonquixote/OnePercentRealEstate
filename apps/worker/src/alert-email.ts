@@ -57,7 +57,7 @@ async function sendResendEmail(recipient: string, subject: string, html: string)
 // one-time "disabled" log is kept separate, fired on first disabled call.
 // ---------------------------------------------------------------------------
 let disabledLogged = false;
-function resendEnabled(): boolean {
+export function resendEnabled(): boolean {
   const key = process.env.RESEND_API_KEY ?? env.RESEND_API_KEY;
   const enabled = !!key && key !== 'dummy_key_for_dev';
   if (!enabled && !disabledLogged) {

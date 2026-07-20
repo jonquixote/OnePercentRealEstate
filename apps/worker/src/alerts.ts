@@ -49,6 +49,10 @@ const logger = getLogger(env.LOG_LEVEL);
  * here. (The NO_LIFECYCLE fallback below runs only pre-migration, when neither
  * the column nor the index exist, so its lack of an index match is moot.)
  */
+// A tick is "backlog-full" when the candidate fetch hits this cap, meaning the
+// watermark is crawling a backlog and more 1%-clearers exist beyond this batch.
+export const CANDIDATES_LIMIT = 2000;
+
 export const CANDIDATES_SQL = `
   SELECT id, address, zip_code, price, estimated_rent, rent_price_ratio,
          bedrooms, bathrooms, sqft, year_built, state, city,
@@ -61,7 +65,7 @@ export const CANDIDATES_SQL = `
     AND listing_type = 'for_sale'
     AND listing_status = 'active'
   ORDER BY last_seen_at ASC
-  LIMIT 2000
+  LIMIT ${CANDIDATES_LIMIT}
 `;
 
 /** Same as CANDIDATES_SQL but without the listing_status predicate (fallback). */
@@ -76,7 +80,7 @@ export const CANDIDATES_SQL_NO_LIFECYCLE = `
     AND price >= 30000
     AND listing_type = 'for_sale'
   ORDER BY last_seen_at ASC
-  LIMIT 2000
+  LIMIT ${CANDIDATES_LIMIT}
 `;
 
 /**
@@ -152,6 +156,8 @@ export interface Candidate {
   price: number | null;
   estimated_rent: number | null;
   rent_price_ratio: number | null;
+  city: string | null;
+  state: string | null;
 }
 
 export interface AlertRow {
@@ -171,11 +177,17 @@ export interface AlertRow {
  * Match candidates to user areas. Pure — no IO.
  *
  * User areas come from `profiles.prefs->'areas'`. The prefs schema
- * (`parsePrefs` in apps/one) stores `[{ zip, label }]` objects; bare ZIP
- * strings are also accepted for older blobs. An area matches a candidate
- * when its zip `=== candidate.zip_code` (exact 5-digit ZIP). Malformed or
- * missing zips on either side are dropped. Returns one AlertRow per
- * (user, candidate, area) hit; source_label prefers the area's label
+ * (`parsePrefs` in apps/one) stores `[{ zip, label, city?, state? }]`
+ * objects; bare ZIP strings are also accepted for older blobs. An area
+ * matches a candidate when EITHER:
+ *   (a) its zip `=== candidate.zip_code` (exact 5-digit ZIP), OR
+ *   (b) it carries BOTH a city and a 2-letter state AND
+ *       `candidate.city`/`candidate.state` match case-insensitively
+ *       (city lowercased, state uppercased). A city or state alone never
+ *       matches — it must be the pair.
+ * Malformed/missing zips and partial city/state are dropped. Returns at
+ * most ONE AlertRow per (user, listing) — a `seen` set dedups across all
+ * areas/criteria per user — and source_label prefers the area's label
  * ("Houston") over the raw zip.
  */
 export function matchAreas(
@@ -185,27 +197,40 @@ export function matchAreas(
   const rows: AlertRow[] = [];
   for (const user of users) {
     const areas = Array.isArray(user.areas) ? user.areas : [];
+    const seen = new Set<string | number>(); // one row per (user, listing) no matter how many areas/criteria hit
     for (const area of areas) {
       let areaZip: string | null = null;
       let label: string | null = null;
+      let areaCity: string | null = null;
+      let areaState: string | null = null;
       if (typeof area === 'string') {
         areaZip = area;
       } else if (area && typeof area === 'object') {
-        const zipField = (area as { zip?: unknown }).zip;
-        if (typeof zipField === 'string') areaZip = zipField;
-        const labelField = (area as { label?: unknown }).label;
-        if (typeof labelField === 'string' && labelField.length > 0) label = labelField;
+        const a = area as { zip?: unknown; label?: unknown; city?: unknown; state?: unknown };
+        if (typeof a.zip === 'string') areaZip = a.zip;
+        if (typeof a.label === 'string' && a.label.length > 0) label = a.label;
+        if (typeof a.city === 'string' && a.city.length > 0) areaCity = a.city.toLowerCase();
+        if (typeof a.state === 'string' && a.state.length === 2) areaState = a.state.toUpperCase();
       }
-      if (!areaZip || areaZip.length === 0) continue;
+      const hasCity = areaCity !== null && areaState !== null;
+      if ((!areaZip || areaZip.length === 0) && !hasCity) continue;
       for (const c of candidates) {
-        const zip = c.zip_code;
-        if (typeof zip !== 'string' || zip.length === 0) continue;
-        if (areaZip !== zip) continue;
+        if (seen.has(c.id)) continue;
+        const zipHit =
+          typeof c.zip_code === 'string' && c.zip_code.length > 0 && c.zip_code === areaZip;
+        const cityHit =
+          hasCity &&
+          typeof c.city === 'string' &&
+          c.city.toLowerCase() === areaCity &&
+          typeof c.state === 'string' &&
+          c.state.toUpperCase() === areaState;
+        if (!zipHit && !cityHit) continue;
+        seen.add(c.id);
         rows.push({
           user_id: user.id,
           listing_id: c.id,
           source: 'area',
-          source_label: label ?? areaZip,
+          source_label: label ?? areaZip ?? (c.city && c.state ? `${c.city}, ${c.state}` : 'watched area'),
           ratio: c.rent_price_ratio,
           price: c.price,
         });
@@ -255,11 +280,19 @@ export async function runAlertTick(
   pool: Pool,
   log: Logger,
   cfg?: AlertTickConfig,
-): Promise<{ candidates: number; eventsInserted: number; instantSent: number }> {
+): Promise<{
+  candidates: number;
+  eventsInserted: number;
+  instantSent: number;
+  backlogFull: boolean;
+  watermarkLagSeconds: number;
+}> {
   const client: PoolClient = await pool.connect();
   try {
     const wmRes = await client.query(GET_WATERMARK_SQL);
-    const watermark: Date = wmRes.rows[0]?.last_seen_at ?? new Date(0);
+    const watermarkRow = wmRes.rows[0]?.last_seen_at;
+    const watermark: Date = watermarkRow ?? new Date(0);
+    const watermarkPresent = watermarkRow != null;
 
     let candidates: Candidate[] = [];
     try {
@@ -417,11 +450,23 @@ export async function runAlertTick(
     }, watermark.getTime());
     await client.query(SET_WATERMARK_SQL, [new Date(maxSeen)]);
 
+    // Observability: is the watermark crawling a backlog, and how far behind is it?
+    const backlogFull = candidates.length >= CANDIDATES_LIMIT;
+    const watermarkLagSeconds = watermarkPresent
+      ? Math.max(0, Math.round((Date.now() - watermark.getTime()) / 1000))
+      : 0;
+
     log.info(
-      { candidates: candidates.length, eventsInserted, instantSent },
+      { candidates: candidates.length, eventsInserted, instantSent, backlogFull, watermarkLagSeconds },
       'Alert tick complete',
     );
-    return { candidates: candidates.length, eventsInserted, instantSent };
+    return {
+      candidates: candidates.length,
+      eventsInserted,
+      instantSent,
+      backlogFull,
+      watermarkLagSeconds,
+    };
   } finally {
     client.release();
   }
