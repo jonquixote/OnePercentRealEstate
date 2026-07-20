@@ -39,14 +39,26 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       }
     }
 
-    // FALLBACK: no metadata.userId — match by email, else insert a new profile.
-    if (!resolvedUserId && customerEmail) {
-      const byEmail = await client.query(
-        `SELECT id FROM profiles WHERE email = $1 LIMIT 1`,
-        [customerEmail]
+    // FALLBACK: no metadata.userId. Check the Stripe customer id FIRST — if it
+    // is already linked to a profile, reuse that owner and skip email matching.
+    // This prevents reassigning a duplicate stripe_customer_id to a different
+    // profile when stale metadata leaves the customer id pointing at an
+    // existing record. Only fall back to email when no such mapping exists.
+    if (!resolvedUserId) {
+      const byCustomer = await client.query(
+        `SELECT id FROM profiles WHERE stripe_customer_id = $1 LIMIT 1`,
+        [customerId]
       );
-      if (byEmail.rowCount && byEmail.rowCount > 0) {
-        resolvedUserId = byEmail.rows[0].id;
+      if (byCustomer.rowCount && byCustomer.rowCount > 0) {
+        resolvedUserId = byCustomer.rows[0].id;
+      } else if (customerEmail) {
+        const byEmail = await client.query(
+          `SELECT id FROM profiles WHERE email = $1 LIMIT 1`,
+          [customerEmail]
+        );
+        if (byEmail.rowCount && byEmail.rowCount > 0) {
+          resolvedUserId = byEmail.rows[0].id;
+        }
       }
     }
 
