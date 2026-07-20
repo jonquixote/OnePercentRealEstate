@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { usePrefs } from '@/lib/prefs';
 import { useSessionLoaded, useSessionUser } from '@/lib/useSessionUser';
 import { WizardSteps } from '@/components/onboarding/WizardSteps';
@@ -35,12 +36,12 @@ export default function WelcomePage() {
         <h1 className="text-2xl font-bold">You&apos;re set up</h1>
         <p className="text-haze text-sm">Your prefs are saved and your deals are ready.</p>
         <div className="flex gap-3">
-          <a href="/account#presets" className="rounded-full border border-pass px-4 py-2 text-sm text-pass hover:bg-pass/10">
+          <Link href="/account#presets" className="rounded-full border border-pass px-4 py-2 text-sm text-pass hover:bg-pass/10">
             Edit your prefs
-          </a>
-          <a href="/search" className="rounded-full bg-pass px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+          </Link>
+          <Link href="/search" className="rounded-full bg-pass px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
             Browse deals
-          </a>
+          </Link>
         </div>
       </div>
     );

@@ -77,7 +77,10 @@ function signUnsub(searchId: string, email: string): string {
 
 function unsubUrl(searchId: string, email: string): string {
   const token = signUnsub(searchId, email);
-  const base = env.DIGEST_PUBLIC_URL.replace(/\/$/, '');
+  const configured = env.DIGEST_PUBLIC_URL && env.DIGEST_PUBLIC_URL !== 'https://octavo.press'
+    ? env.DIGEST_PUBLIC_URL
+    : 'https://one.octavo.press';
+  const base = configured.replace(/\/$/, '');
   return `${base}/api/unsubscribe?token=${encodeURIComponent(token)}&id=${encodeURIComponent(searchId)}&e=${encodeURIComponent(email)}`;
 }
 

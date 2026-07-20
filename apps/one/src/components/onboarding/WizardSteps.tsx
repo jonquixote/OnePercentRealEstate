@@ -45,19 +45,25 @@ export function WizardSteps({
   }
 
   async function finish(onboardedPrefs: Partial<InvestorPrefs>) {
-    await save({
-      ...prefs,
-      financing: {
-        ...(prefs.financing ?? DEFAULT_PREFS.financing),
-        ratePct,
-        downPct,
-      },
-      areas: selectedAreas,
-      alertOptIn,
-      ...onboardedPrefs,
-      onboarded: true,
-    });
-    router.push('/search');
+    try {
+      const success = await save({
+        ...prefs,
+        financing: {
+          ...(prefs.financing ?? DEFAULT_PREFS.financing),
+          ratePct,
+          downPct,
+        },
+        areas: selectedAreas,
+        alertOptIn,
+        ...onboardedPrefs,
+        onboarded: true,
+      });
+      if (success) {
+        router.push('/search');
+      }
+    } catch (err) {
+      console.error('Failed to save preferences', err);
+    }
   }
 
   if (step === 1) {
