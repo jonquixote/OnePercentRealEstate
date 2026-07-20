@@ -78,7 +78,7 @@ build_node() {
       echo "  Copying static assets: $src -> $dst"
       rm -rf "$dst"
       mkdir -p "$dst"
-      cp -r "$src"/* "$dst"/
+      cp -a "$src/." "$dst/"
     fi
     pub="apps/$app/public"
     pubdst="apps/$app/.next/standalone/apps/$app/public"
@@ -86,7 +86,9 @@ build_node() {
       echo "  Copying public assets: $pub -> $pubdst"
       rm -rf "$pubdst"
       mkdir -p "$pubdst"
-      cp -r "$pub"/* "$pubdst"/
+      # `/.` form copies contents and tolerates an empty dir (a bare glob under
+      # `set -e` aborts the script before any restart runs).
+      cp -a "$pub/." "$pubdst/"
     fi
   done
 }
