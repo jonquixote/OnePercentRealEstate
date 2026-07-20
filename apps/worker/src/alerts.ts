@@ -20,6 +20,7 @@ import { Pool, type PoolClient } from 'pg';
 import { loadEnv } from './env.js';
 import { getLogger, type WorkerLogger } from './logger.js';
 import { evalWatchlistQuery } from './watchlist-alerts.js';
+import { sendAlertEmails } from './alert-email.js';
 
 type Logger = WorkerLogger;
 
@@ -430,26 +431,18 @@ export async function runAlertTick(
       const fresh = allRows.filter((r) => r.user_id === u.id);
       if (fresh.length === 0) continue;
       const ids = fresh.map((r) => r.listing_id);
-      if (haveResend) {
-        for (const row of fresh) {
-          const c = candidates.find((x) => String(x.id) === String(row.listing_id));
-          if (!c) continue;
-          if (!u.email) {
-            log.warn({ userId: u.id }, 'No email on profile; skipping instant alert');
-            continue;
-          }
-          try {
-            await sendResendEmail(
-              u.email,
-              `New deal in your areas: ${c.address ?? 'property'}`,
-              instantEmailHtml(row, c),
-            );
-            instantSent++;
-          } catch (err) {
-            log.error({ err, userId: u.id }, 'Instant alert email failed');
-          }
+      // Only email pro users who have opted in via prefs.alertOptIn. The
+      // in-app alert_events row is still stamped delivered below regardless,
+      // so an email failure can never lose the inbox event (try/catch).
+      const alertOptIn = (u.prefs && typeof u.prefs === 'object' && (u.prefs as any).alertOptIn === true);
+      if (haveResend && alertOptIn && u.email) {
+        try {
+          instantSent += await sendAlertEmails(u, fresh, candidates, log);
+        } catch (err) {
+          log.warn({ err, userId: u.id }, 'Alert email fanout failed');
         }
       }
+      void instantEmailHtml; // retained for backwards-compat reference; new path uses alert-email.ts
       await client.query(MARK_DELIVERED_SQL, [u.id, ids]);
     }
 
