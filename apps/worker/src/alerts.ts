@@ -170,10 +170,13 @@ export interface AlertRow {
 /**
  * Match candidates to user areas. Pure — no IO.
  *
- * User areas come from `profiles.prefs->'areas'` as an array of ZIP strings.
- * An area matches a candidate when `area === candidate.zip_code` (exact
- * 5-digit ZIP). Malformed/missing candidate zips and non-string areas are
- * dropped. Returns one AlertRow per (user, candidate, area) hit.
+ * User areas come from `profiles.prefs->'areas'`. The prefs schema
+ * (`parsePrefs` in apps/one) stores `[{ zip, label }]` objects; bare ZIP
+ * strings are also accepted for older blobs. An area matches a candidate
+ * when its zip `=== candidate.zip_code` (exact 5-digit ZIP). Malformed or
+ * missing zips on either side are dropped. Returns one AlertRow per
+ * (user, candidate, area) hit; source_label prefers the area's label
+ * ("Houston") over the raw zip.
  */
 export function matchAreas(
   candidates: Candidate[],
@@ -183,16 +186,26 @@ export function matchAreas(
   for (const user of users) {
     const areas = Array.isArray(user.areas) ? user.areas : [];
     for (const area of areas) {
-      if (typeof area !== 'string' || area.length === 0) continue;
+      let areaZip: string | null = null;
+      let label: string | null = null;
+      if (typeof area === 'string') {
+        areaZip = area;
+      } else if (area && typeof area === 'object') {
+        const zipField = (area as { zip?: unknown }).zip;
+        if (typeof zipField === 'string') areaZip = zipField;
+        const labelField = (area as { label?: unknown }).label;
+        if (typeof labelField === 'string' && labelField.length > 0) label = labelField;
+      }
+      if (!areaZip || areaZip.length === 0) continue;
       for (const c of candidates) {
         const zip = c.zip_code;
         if (typeof zip !== 'string' || zip.length === 0) continue;
-        if (area !== zip) continue;
+        if (areaZip !== zip) continue;
         rows.push({
           user_id: user.id,
           listing_id: c.id,
           source: 'area',
-          source_label: area,
+          source_label: label ?? areaZip,
           ratio: c.rent_price_ratio,
           price: c.price,
         });

@@ -66,6 +66,35 @@ describe('matchAreas (pure)', () => {
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.user_id).sort()).toEqual(['u1', 'u2']);
   });
+
+  it('matches the prefs-schema {zip, label} area objects and uses the label', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas(
+      [cand('77002')],
+      [{ id: 'u1', areas: [{ zip: '77002', label: 'Houston' }] }],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ user_id: 'u1', listing_id: 1, source: 'area', source_label: 'Houston' });
+  });
+
+  it('falls back to the zip as source_label when an area object has no label', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas(
+      [cand('44102')],
+      [{ id: 'u1', areas: [{ zip: '44102' }] }],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source_label).toBe('44102');
+  });
+
+  it('drops malformed area objects without a string zip', async () => {
+    const { matchAreas } = await import('./alerts');
+    const rows = matchAreas(
+      [cand('77002')],
+      [{ id: 'u1', areas: [{ zip: 77002 }, { label: 'Houston' }, null, 42] }],
+    );
+    expect(rows).toHaveLength(0);
+  });
 });
 
 describe('runAlertTick tier split', () => {
