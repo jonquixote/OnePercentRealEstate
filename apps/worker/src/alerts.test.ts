@@ -111,7 +111,7 @@ describe('runAlertTick tier split', () => {
       },
       [mkSql]: {
         rows: [
-          { id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'] }, email: 'pro1@example.com' },
+          { id: 'pro1', subscription_tier: 'pro', prefs: { areas: ['77002'], alertOptIn: true }, email: 'pro1@example.com' },
           { id: 'free1', subscription_tier: 'free', prefs: { areas: ['77002'] }, email: 'free1@example.com' },
         ],
       },

@@ -60,7 +60,11 @@ function LoginForm() {
             }
             notifyAuthChanged();
             setMessage({ type: 'success', text: mode === 'signup' ? 'Account created — welcome.' : 'Welcome back.' });
-            router.push(safeNextPath(next));
+            if (mode === 'signup') {
+              router.push('/welcome');
+            } else {
+              router.push(safeNextPath(next));
+            }
             router.refresh();
         } catch {
             setMessage({ type: 'error', text: 'Network error — try again' });

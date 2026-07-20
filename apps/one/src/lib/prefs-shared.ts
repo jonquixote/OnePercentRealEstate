@@ -17,6 +17,8 @@ export type InvestorPrefs = {
   };
   areas: Array<{ label: string; zip: string }>; // watched areas (metro chips or ZIPs)
   strategy: Strategy;
+  onboarded?: boolean;
+  alertOptIn?: boolean;
 };
 
 export const DEFAULT_PREFS: InvestorPrefs = {
@@ -31,6 +33,8 @@ export const DEFAULT_PREFS: InvestorPrefs = {
   },
   areas: [],
   strategy: 'buy_hold',
+  onboarded: false,
+  alertOptIn: false,
 };
 
 const STRATEGIES: Strategy[] = ['buy_hold', 'brrrr', 'flip', 'str'];
@@ -72,6 +76,9 @@ export function parsePrefs(json: unknown): InvestorPrefs {
     ? (src.strategy as Strategy)
     : DEFAULT_PREFS.strategy;
 
+  const onboarded: boolean = src.onboarded === true;
+  const alertOptIn: boolean = src.alertOptIn === true;
+
   return {
     financing: {
       ratePct: clamp(num(fin.ratePct, DEFAULT_PREFS.financing.ratePct), 0, 15),
@@ -84,5 +91,7 @@ export function parsePrefs(json: unknown): InvestorPrefs {
     },
     areas,
     strategy,
+    onboarded,
+    alertOptIn,
   };
 }

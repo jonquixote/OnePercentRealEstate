@@ -20,6 +20,7 @@ import { Pool, type PoolClient } from 'pg';
 import { loadEnv } from './env.js';
 import { getLogger, type WorkerLogger } from './logger.js';
 import { evalWatchlistQuery } from './watchlist-alerts.js';
+import { sendAlertEmails } from './alert-email.js';
 
 type Logger = WorkerLogger;
 
@@ -202,60 +203,12 @@ export function matchAreas(
 }
 
 // ---------------------------------------------------------------------------
-// Resend send (inlined — digest.ts is NOT imported, see header note)
+// Resend send now lives in ./alert-email.ts (renderAlertEmail + sendAlertEmails).
+// digest.ts is NOT imported here (see header note) — alert-email.ts copies the
+// inlined send + unsubscribe helpers instead.
 // ---------------------------------------------------------------------------
 
-function escHtml(input: unknown): string {
-  return String(input ?? '').replace(/[&<>"']/g, (c) => {
-    switch (c) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return c;
-    }
-  });
-}
 
-async function sendResendEmail(recipient: string, subject: string, html: string): Promise<void> {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: env.WATCHLIST_FROM_EMAIL,
-      to: recipient,
-      subject: subject.replace(/[\r\n]+/g, ' ').slice(0, 200),
-      html,
-    }),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Resend API error ${response.status}: ${text}`);
-  }
-}
-
-function instantEmailHtml(row: AlertRow, candidate: Candidate): string {
-  const address = escHtml(candidate.address ?? 'a property');
-  const price = candidate.price != null
-    ? `$${escHtml(Number(candidate.price).toLocaleString())}`
-    : 'N/A';
-  const ratio = candidate.rent_price_ratio != null
-    ? `${escHtml((Number(candidate.rent_price_ratio) * 100).toFixed(2))}%`
-    : 'N/A';
-  return `
-    <h2>New deal in your watched areas</h2>
-    <p><strong>Address:</strong> ${address}</p>
-    <p><strong>Price:</strong> ${price}</p>
-    <p><strong>1% rule ratio:</strong> ${ratio}</p>
-    <p><em>${escHtml(row.source_label)}</em></p>
-  `;
-}
-
-// ---------------------------------------------------------------------------
 // Tick
 // ---------------------------------------------------------------------------
 
@@ -430,24 +383,15 @@ export async function runAlertTick(
       const fresh = allRows.filter((r) => r.user_id === u.id);
       if (fresh.length === 0) continue;
       const ids = fresh.map((r) => r.listing_id);
-      if (haveResend) {
-        for (const row of fresh) {
-          const c = candidates.find((x) => String(x.id) === String(row.listing_id));
-          if (!c) continue;
-          if (!u.email) {
-            log.warn({ userId: u.id }, 'No email on profile; skipping instant alert');
-            continue;
-          }
-          try {
-            await sendResendEmail(
-              u.email,
-              `New deal in your areas: ${c.address ?? 'property'}`,
-              instantEmailHtml(row, c),
-            );
-            instantSent++;
-          } catch (err) {
-            log.error({ err, userId: u.id }, 'Instant alert email failed');
-          }
+      // Only email pro users who have opted in via prefs.alertOptIn. The
+      // in-app alert_events row is still stamped delivered below regardless,
+      // so an email failure can never lose the inbox event (try/catch).
+      const alertOptIn = (u.prefs && typeof u.prefs === 'object' && (u.prefs as any).alertOptIn === true);
+      if (haveResend && alertOptIn && u.email) {
+        try {
+          instantSent += await sendAlertEmails(u, fresh, candidates, log);
+        } catch (err) {
+          log.warn({ err, userId: u.id }, 'Alert email fanout failed');
         }
       }
       await client.query(MARK_DELIVERED_SQL, [u.id, ids]);

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useQueryStates } from 'nuqs';
+import Link from 'next/link';
 import { Loader2, SlidersHorizontal, Map, List } from 'lucide-react';
 import type maplibregl from 'maplibre-gl';
 import { PropertyMap } from '@/components/PropertyMap';
@@ -11,6 +12,7 @@ import { ResultsTable } from '@/components/search/ResultsTable';
 import { WatchSearchButton } from '@/components/WatchSearchButton';
 import { FirstRunCoach } from '@/components/search/FirstRunCoach';
 import { usePrefs } from '@/lib/prefs';
+import { useSessionUser } from '@/lib/useSessionUser';
 import {
   PropertyFilters,
   propertyFilterParsers,
@@ -66,6 +68,18 @@ export default function SearchPage() {
 
   const { prefs } = usePrefs();
   const myAreas = prefs.areas;
+  const sessionUser = useSessionUser();
+
+  const [welcomeCtaDismissed, setWelcomeCtaDismissed] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('welcome-cta-dismissed') === '1') setWelcomeCtaDismissed(true);
+    } catch { /* SSR/private mode */ }
+  }, []);
+  function dismissWelcomeCta() {
+    try { localStorage.setItem('welcome-cta-dismissed', '1'); } catch { /* ignore */ }
+    setWelcomeCtaDismissed(true);
+  }
 
   function applyArea(zip: string) {
     setQs({ q: zip });
@@ -280,6 +294,23 @@ export default function SearchPage() {
 
       {/* Content: cards + map */}
       <div className="mx-auto max-w-7xl px-6 py-6 pb-24 lg:px-8 lg:pb-6">
+        {sessionUser && !prefs.onboarded && myAreas.length === 0 && !welcomeCtaDismissed && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[var(--r-panel)] border border-line bg-card px-4 py-3">
+            <span className="prov flex-1">
+              <Link href="/welcome" className="font-semibold text-pass transition-colors hover:text-pass-hi">
+                Tell us your markets and we&apos;ll watch them for you →
+              </Link>
+            </span>
+            <button
+              type="button"
+              onClick={dismissWelcomeCta}
+              className="rounded-full border border-line px-3 py-1 text-xs font-medium text-haze transition-colors hover:border-line-hi hover:text-foreground"
+              aria-label="Dismiss suggestion"
+            >
+              Dismiss ×
+            </button>
+          </div>
+        )}
         {myAreas.length > 0 && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <span className="prov">my areas</span>

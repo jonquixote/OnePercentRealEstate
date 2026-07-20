@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Bell, CheckCheck } from 'lucide-react';
+import { usePrefs } from '@/lib/prefs';
 import { useSessionUser } from '@/lib/useSessionUser';
 import UpgradeMoment from '@/components/UpgradeMoment';
 
@@ -52,6 +53,7 @@ export default function AlertsBell() {
   const [unread, setUnread] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const { prefs } = usePrefs();
   const session = useSessionUser();
   // Anon (null session) and free tier both stay on the daily digest — surface
   // the honest upgrade footer for anyone who isn't Pro.
@@ -162,7 +164,16 @@ export default function AlertsBell() {
           <div className="max-h-[60vh] overflow-y-auto">
             {alerts.length === 0 ? (
               <p className="px-4 py-8 text-center text-[13px] leading-relaxed text-mute">
-                Alerts land here when a deal clears the line in your areas.
+                {!prefs.onboarded ? (
+                  <>
+                    Alerts land here when a deal clears the line in your areas.{' '}
+                    <Link href="/welcome" className="font-semibold text-pass transition-colors hover:text-pass-hi">
+                      Pick your areas →
+                    </Link>
+                  </>
+                ) : (
+                  'Alerts land here when a deal clears the line in your areas.'
+                )}
               </p>
             ) : (
               alerts.map((row) => {

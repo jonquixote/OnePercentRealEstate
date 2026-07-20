@@ -26,6 +26,10 @@ vi.mock('@/components/search/FirstRunCoach', () => ({ FirstRunCoach: () => null 
 vi.mock('@/lib/prefs', () => ({
   usePrefs: () => ({ prefs: { areas: [] }, save: async () => true, loading: false }),
 }));
+const sessionState = vi.hoisted(() => ({ user: null as null | { id: string; email: string; tier: 'free' } }));
+vi.mock('@/lib/useSessionUser', () => ({
+  useSessionUser: () => sessionState.user,
+}));
 
 import SearchPage from './page';
 
@@ -67,5 +71,32 @@ describe('SearchPage — "Include sold" control wiring (#53)', () => {
     renderPage('?sold=true');
     const pill = screen.getByRole('button', { name: /include sold/i });
     expect(pill.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('SearchPage — warm welcome CTA (#empty-states)', () => {
+  it('shows the /welcome CTA above results when signed in with no areas', async () => {
+    sessionState.user = { id: 'u1', email: 'a@b.co', tier: 'free' };
+    renderPage();
+    const link = await screen.findByRole('link', { name: /Tell us your markets/i });
+    expect(link.getAttribute('href')).toBe('/welcome');
+  });
+
+  it('hides the CTA when signed out', async () => {
+    sessionState.user = null;
+    renderPage();
+    await waitFor(() => expect(h.getProperties).toHaveBeenCalled());
+    expect(screen.queryByRole('link', { name: /Tell us your markets/i })).toBeNull();
+  });
+
+  it('dismisses the CTA and persists to localStorage', async () => {
+    sessionState.user = { id: 'u1', email: 'a@b.co', tier: 'free' };
+    localStorage.clear();
+    renderPage();
+    const link = await screen.findByRole('link', { name: /Tell us your markets/i });
+    expect(link).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Dismiss/i }));
+    expect(localStorage.getItem('welcome-cta-dismissed')).toBe('1');
+    expect(screen.queryByRole('link', { name: /Tell us your markets/i })).toBeNull();
   });
 });
