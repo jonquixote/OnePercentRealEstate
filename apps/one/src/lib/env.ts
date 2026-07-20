@@ -16,6 +16,9 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_MONTHLY: z.string().optional(),
   STRIPE_PRICE_ANNUAL: z.string().optional(),
+  // Agency price id. NEXT_PUBLIC_ so the client pricing page can decide whether
+  // to render the Agency column at build time (it is inlined into the bundle).
+  NEXT_PUBLIC_STRIPE_PRICE_AGENCY: z.string().optional(),
   NEXT_PUBLIC_SITE_URL: z.string().optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });

@@ -29,10 +29,10 @@ beforeEach(() => {
  * returned getter exposes it once the save fires. Both tests drove identical
  * setup before — this is the single source (D2 cleanup).
  */
-function installFetchMock(): () => unknown {
+function installFetchMock(meUser: { id: string; email: string; tier: 'free' | 'pro'; stripeCustomerId: string | null } = { id: 'u1', email: 'a@b.co', tier: 'free', stripeCustomerId: null }): () => unknown {
   let savedBody: unknown = null;
   global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.includes('/api/auth/me')) return { ok: true, status: 200, json: async () => ({ user: { id: 'u1', email: 'a@b.co', tier: 'free' } }) } as Response;
+    if (url.includes('/api/auth/me')) return { ok: true, status: 200, json: async () => ({ user: meUser }) } as Response;
     if (url.includes('/api/saved-searches')) return { ok: true, status: 200, json: async () => [] } as Response;
     if (url.includes('/api/watchlists')) return { ok: true, status: 200, json: async () => [] } as Response;
     if (url.includes('/api/prefs') && (!init || init.method === undefined || init.method === 'GET')) {
@@ -82,5 +82,39 @@ describe('AccountPage presets', () => {
     // The null sentinel must survive a save with no edits — must NOT become 0.
     expect(body.financing.taxRatePct).toBeNull();
     expect(body.financing.insuranceMoYr).toBeNull();
+  });
+});
+
+describe('AccountPage billing', () => {
+  it('shows "Manage billing" when session has a stripeCustomerId', async () => {
+    installFetchMock({ id: 'u1', email: 'a@b.co', tier: 'pro', stripeCustomerId: 'cus_123' });
+    render(<AccountPage />);
+    expect(await screen.findByRole('button', { name: /manage billing/i })).toBeTruthy();
+  });
+
+  it('hides "Manage billing" when stripeCustomerId is null', async () => {
+    installFetchMock({ id: 'u1', email: 'a@b.co', tier: 'free', stripeCustomerId: null });
+    render(<AccountPage />);
+    await screen.findByText(/account/i);
+    expect(screen.queryByRole('button', { name: /manage billing/i })).toBeNull();
+  });
+
+  it('POSTs to /api/checkout/portal and redirects on success', async () => {
+    installFetchMock({ id: 'u1', email: 'a@b.co', tier: 'pro', stripeCustomerId: 'cus_123' });
+    let portalCalled = false;
+    const realFetch = global.fetch;
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/checkout/portal')) {
+        portalCalled = true;
+        return { ok: true, status: 200, json: async () => ({ url: 'https://stripe.test/portal' }) } as Response;
+      }
+      return realFetch(url, init);
+    }) as unknown as typeof fetch;
+    const locationStub = { href: '' };
+    Object.defineProperty(window, 'location', { value: locationStub, configurable: true, writable: true });
+    render(<AccountPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /manage billing/i }));
+    await waitFor(() => expect(portalCalled).toBe(true));
+    await waitFor(() => expect(locationStub.href).toBe('https://stripe.test/portal'));
   });
 });

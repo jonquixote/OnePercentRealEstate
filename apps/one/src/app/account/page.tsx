@@ -25,6 +25,7 @@ interface SessionUser {
   id: string;
   email: string;
   tier: 'free' | 'pro';
+  stripeCustomerId: string | null;
 }
 
 export default function AccountPage() {
@@ -32,6 +33,31 @@ export default function AccountPage() {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
   const [loading, setLoading] = useState(true);
+  const [billingBusy, setBillingBusy] = useState(false);
+
+  async function openBillingPortal() {
+    setBillingBusy(true);
+    try {
+      const res = await fetch('/api/checkout/portal', { method: 'POST' });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+      if (!res.ok) {
+        console.error('Billing portal request failed', res.status);
+        setBillingBusy(false);
+        return;
+      }
+      const data = await res.json();
+      if (data?.url) window.location.href = data.url;
+      else {
+        console.error('Billing portal returned no url', data);
+        setBillingBusy(false);
+      }
+    } catch {
+      setBillingBusy(false);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -94,6 +120,16 @@ export default function AccountPage() {
           <span className={`prov ${user.tier === 'pro' ? 'prov--real' : 'prov--est'}`}>
             {user.tier === 'pro' ? 'Pro' : 'Free'}
           </span>
+          {user.stripeCustomerId && (
+            <button
+              onClick={openBillingPortal}
+              disabled={billingBusy}
+              className="text-[12px] font-medium transition-colors hover:opacity-70 disabled:opacity-50"
+              style={{ color: 'var(--brass-hi)' }}
+            >
+              {billingBusy ? 'Loading…' : 'Manage billing →'}
+            </button>
+          )}
         </header>
 
         <div className="mt-10 grid grid-cols-1 gap-12 lg:grid-cols-2">

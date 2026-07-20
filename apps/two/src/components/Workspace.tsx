@@ -58,6 +58,9 @@ interface WorkspaceProps {
 const SPLIT_KEY = "two:workspace-split";
 const DEFAULT_SPLIT = 0.62;
 const TERMINAL_LISTINGS = "terminal-listings";
+// Free-tier layout cap — mirrors FREE_CAP in the /api/layouts route. The bar
+// only uses this as a fallback when the API omits `limits` (old shape/tests).
+const FREE_CAP = 5;
 
 export function Workspace({
   rows,
@@ -197,7 +200,7 @@ interface SavedLayout {
   updated_at: string;
 }
 
-function LayoutBar({
+export function LayoutBar({
   onApplyLayout,
   canSaveLayout,
   currentColumns,
@@ -213,13 +216,29 @@ function LayoutBar({
   const [saving, setSaving] = React.useState(false);
   const [saveName, setSaveName] = React.useState("");
 
+  // Cap bookkeeping for the free-tier upgrade nudge. `limits` arrives from the
+  // API; if absent (old shape / tests) we fall back to a conservative default.
+  const [used, setUsed] = React.useState(0);
+  const [max, setMax] = React.useState(FREE_CAP);
+
   const load = React.useCallback(async () => {
     try {
       const res = await fetch("/api/layouts", { cache: "no-store" });
       if (!res.ok) return;
-      const data = (await res.json()) as SavedLayout[];
-      const list = Array.isArray(data) ? data : [];
+      const data = (await res.json()) as
+        | SavedLayout[]
+        | { layouts?: SavedLayout[]; limits?: { max: number; used: number; tier: string } };
+      const list = Array.isArray(data)
+        ? data
+        : (data.layouts ?? []);
       setLayouts(list);
+      if (!Array.isArray(data) && data.limits) {
+        setUsed(data.limits.used);
+        setMax(data.limits.max);
+      } else {
+        setUsed(list.length);
+        setMax(FREE_CAP);
+      }
       // Re-apply the last-used layout on mount (server is source of truth).
       const last = window.localStorage.getItem(LAYOUT_LS_KEY);
       const match = last ? list.find((l) => l.name === last) : undefined;
@@ -354,6 +373,16 @@ function LayoutBar({
             Save
           </button>
         </span>
+      )}
+      {!canSaveLayout && used >= max && (
+        <a
+          href="https://one.octavo.press/pricing?from=layouts"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto text-amber-400 underline decoration-amber-400/50 underline-offset-2 hover:decoration-amber-400"
+        >
+          {max} layouts on the free desk — Pro takes it to 20 →
+        </a>
       )}
     </div>
   );

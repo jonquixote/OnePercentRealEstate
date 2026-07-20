@@ -11,7 +11,7 @@ const VALID_PRICE_IDS: Record<string, string | undefined> = {
   // Agency tier ships when the owner creates its Stripe price; until then
   // requests for it get the clean 400 below rather than silently charging
   // the wrong amount (security review 2026-07-07: pricing bypass).
-  agency: process.env.STRIPE_PRICE_AGENCY,
+  agency: process.env.NEXT_PUBLIC_STRIPE_PRICE_AGENCY,
 };
 
 const checkoutSchema = z.object({

@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Loader2, Heart, Search, Trash2 } from 'lucide-react';
 import { usePrefs } from '@/lib/prefs';
+import { useSessionUser } from '@/lib/useSessionUser';
+import UpgradeMoment from '@/components/UpgradeMoment';
+import { COMPARE_FREE_MAX, COMPARE_PRO_MAX } from '@/lib/entitlements';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -53,6 +56,8 @@ export default function ShelfPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const { prefs } = usePrefs();
+  const session = useSessionUser();
+  const isPro = session?.tier === 'pro';
 
   useEffect(() => {
     async function load() {
@@ -131,7 +136,13 @@ export default function ShelfPage() {
     );
   }
 
-  const compareHref = selected.length >= 2 ? `/compare?ids=${selected.join(',')}` : null;
+  const compareCap = isPro ? COMPARE_PRO_MAX : COMPARE_FREE_MAX;
+  // Free users select up to MAX_SELECT but can only compare COMPARE_FREE_MAX at
+  // once. Keep every selection visible — never silently truncate — and gate the
+  // compare action instead. `overCompareCap` drives the disabled state + CTA.
+  const overCompareCap = !isPro && selected.length > COMPARE_FREE_MAX;
+  const compareIds = selected.slice(0, compareCap);
+  const compareHref = !overCompareCap && selected.length >= 2 ? `/compare?ids=${compareIds.join(',')}` : null;
 
   return (
     <div className="min-h-screen">
@@ -267,23 +278,39 @@ export default function ShelfPage() {
       {/* Sticky compare bar */}
       {selected.length > 0 ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur">
-          <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-3">
-            <span className="text-sm text-haze">{selected.length} selected (max {MAX_SELECT})</span>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={removeSelected}
-                className="text-sm font-medium text-loss transition-colors hover:opacity-70"
-              >
-                Remove
-              </button>
-              {compareHref && (
-                <Link
-                  href={compareHref}
-                  className="rounded-full bg-pass px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          <div className="mx-auto max-w-4xl px-6 py-3">
+            {overCompareCap ? (
+              <div className="mb-3">
+                <UpgradeMoment gate="compare" />
+              </div>
+            ) : null}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-haze">{selected.length} selected (max {MAX_SELECT})</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={removeSelected}
+                  className="text-sm font-medium text-loss transition-colors hover:opacity-70"
                 >
-                  Compare ({selected.length}) →
-                </Link>
-              )}
+                  Remove
+                </button>
+                {overCompareCap ? (
+                  <button
+                    type="button"
+                    disabled
+                    title="Free accounts compare up to 2 — upgrade for 4"
+                    className="cursor-not-allowed rounded-full bg-pass/40 px-5 py-2 text-sm font-semibold text-white opacity-60"
+                  >
+                    Compare ({selected.length}) →
+                  </button>
+                ) : compareHref ? (
+                  <Link
+                    href={compareHref}
+                    className="rounded-full bg-pass px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  >
+                    Compare ({selected.length}) →
+                  </Link>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

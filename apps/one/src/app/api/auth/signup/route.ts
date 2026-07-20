@@ -35,14 +35,19 @@ export async function POST(request: NextRequest) {
         `INSERT INTO profiles (id, email, password_hash)
          VALUES ($1, $2, $3)
          ON CONFLICT (email) WHERE email IS NOT NULL DO NOTHING
-         RETURNING id, email, subscription_tier`,
+         RETURNING id, email, subscription_tier, stripe_customer_id`,
         [id, normalized, hash],
       );
       if (res.rowCount === 0) {
         // Same message shape as a bad login — don't leak account existence.
         return NextResponse.json({ error: 'Unable to create account with those credentials' }, { status: 409 });
       }
-      const user = { id: res.rows[0].id, email: res.rows[0].email, tier: res.rows[0].subscription_tier === 'pro' ? 'pro' as const : 'free' as const };
+      const user = {
+        id: res.rows[0].id,
+        email: res.rows[0].email,
+        tier: res.rows[0].subscription_tier === 'pro' ? 'pro' as const : 'free' as const,
+        stripeCustomerId: res.rows[0].stripe_customer_id ?? null,
+      };
       const token = await issueSession(user);
       if (!token) {
         return NextResponse.json({ error: 'Auth not configured (AUTH_SECRET missing)' }, { status: 503 });
