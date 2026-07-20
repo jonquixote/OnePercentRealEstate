@@ -1,0 +1,264 @@
+import { NextRequest, NextResponse } from 'next/server';
+import pool from '@/lib/db';
+import { getSessionUser } from '@/lib/auth';
+
+/**
+ * Wave 5 minimal saved searches endpoint.
+ *
+ * SECURITY: Session identity (`getSessionUser()`) is the primary source
+ * for userId. The legacy `x-user-id` header / `?user_id=` query fallback
+ * is available only in non-production environments and is gated behind
+ * ADMIN_API_KEY in production.
+ *
+ * Production builds (NODE_ENV=production) require ADMIN_API_KEY in
+ * the `Authorization: Bearer <key>` header. Without it the route returns
+ * 501 so the endpoint is unreachable from the public web.
+ *
+ * Dev/test builds pass through with the spoofable user_id so the
+ * UI prototype keeps working locally.
+ */
+
+const PROD_GATE_HEADER = 'authorization';
+
+function devGateBlocked(request: NextRequest): NextResponse | null {
+  if (process.env.NODE_ENV !== 'production') return null;
+  const adminKey = process.env.ADMIN_API_KEY;
+  if (!adminKey) {
+    return NextResponse.json(
+      { error: 'saved-searches disabled: ADMIN_API_KEY not configured' },
+      { status: 501 }
+    );
+  }
+  const header = request.headers.get(PROD_GATE_HEADER) ?? '';
+  const expected = `Bearer ${adminKey}`;
+  if (header !== expected) {
+    return NextResponse.json(
+      { error: 'saved-searches requires auth (Wave 8 pending)' },
+      { status: 501 }
+    );
+  }
+  return null;
+}
+
+function readUserId(request: NextRequest, fallback?: string): string | null {
+  const id =
+    request.headers.get('x-user-id') ||
+    request.nextUrl.searchParams.get('user_id') ||
+    fallback ||
+    null;
+  // Constrain shape: alphanumeric, dash, underscore, max 64 chars. Anything
+  // else is a likely injection attempt. Reject early.
+  if (!id) return null;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return null;
+  return id;
+}
+
+export async function GET(request: NextRequest) {
+  // Wave 5: a real session is the primary identity; the ADMIN_API_KEY gate
+  // only guards the legacy header/query fallback path.
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
+
+  try {
+    const userId = sessionUser?.id ?? readUserId(request);
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'user_id required (alphanumeric, max 64 chars)' },
+        { status: 400 }
+      );
+    }
+
+    // D3 freshness: new_matches counts listings created since the search was
+    // last opened, matching the cheap-and-indexable subset of the saved
+    // params (price band, beds, ZIP). It's a badge, not a result set — an
+    // approximation is fine and keeps this one indexed query per row.
+    const result = await pool.query(
+      `SELECT s.id, s.user_id, s.name, s.params, s.created_at, s.last_viewed_at,
+              s.email_digest,
+              (SELECT count(*)::int FROM listings l
+                WHERE l.created_at > s.last_viewed_at
+                  AND l.listing_type = 'for_sale'
+                  AND (s.params->>'pmin' IS NULL OR l.price >= (s.params->>'pmin')::numeric)
+                  AND (s.params->>'pmax' IS NULL OR l.price <= (s.params->>'pmax')::numeric)
+                  AND (s.params->>'beds' IS NULL OR l.bedrooms >= (s.params->>'beds')::numeric)
+                  AND (s.params->>'q' IS NULL OR s.params->>'q' !~ '^\\d{5}$' OR l.zip_code = s.params->>'q')
+              ) AS new_matches
+       FROM saved_searches s WHERE s.user_id = $1
+       ORDER BY s.created_at DESC LIMIT 100`,
+      [userId]
+    );
+
+    return NextResponse.json(result.rows);
+  } catch (error) {
+    console.error('GET /api/saved-searches error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch saved searches' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
+
+  try {
+    const body = await request.json().catch(() => ({}));
+    const { user_id, name, params } = body ?? {};
+
+    const userId = sessionUser?.id ?? readUserId(request, typeof user_id === 'string' ? user_id : undefined);
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'user_id required (alphanumeric, max 64 chars)' },
+        { status: 400 }
+      );
+    }
+    if (typeof name !== 'string' || !name.trim() || name.length > 100) {
+      return NextResponse.json(
+        { error: 'name required (1-100 chars)' },
+        { status: 400 }
+      );
+    }
+    if (params == null || typeof params !== 'object') {
+      return NextResponse.json(
+        { error: 'params required (object)' },
+        { status: 400 }
+      );
+    }
+
+    const result = await pool.query(
+      `INSERT INTO saved_searches (user_id, name, params)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, name) DO UPDATE
+       SET params = $3
+       RETURNING id, user_id, name, params, created_at`,
+      [userId, name.trim(), JSON.stringify(params)]
+    );
+
+    return NextResponse.json(result.rows[0], { status: 201 });
+  } catch (error) {
+    console.error('POST /api/saved-searches error:', error);
+    return NextResponse.json(
+      { error: 'Failed to save search' },
+      { status: 500 }
+    );
+  }
+}
+
+// D3: stamp last_viewed_at when the user opens a saved search — clears the
+// new-matches badge. Also (Tasks 2.1 & 2.2) accepts an optional JSON body to
+// toggle the email digest opt-in and record the recipient email in
+// user_alert_prefs so the worker can reach them.
+export async function PATCH(request: NextRequest) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
+
+  try {
+    const id = request.nextUrl.searchParams.get('id');
+    const userId = sessionUser?.id ?? readUserId(request);
+
+    if (!id || !/^\d+$/.test(id) || !userId) {
+      return NextResponse.json(
+        { error: 'id (numeric) and user_id required' },
+        { status: 400 }
+      );
+    }
+
+    // Optional body: { email_digest?: boolean, email?: string }
+    const body = await request.json().catch(() => ({} as Record<string, unknown>));
+
+    if (body.email_digest !== undefined) {
+      if (typeof body.email_digest !== 'boolean') {
+        return NextResponse.json(
+          { error: 'email_digest must be a boolean' },
+          { status: 400 }
+        );
+      }
+      const upd = await pool.query(
+        'UPDATE saved_searches SET email_digest = $1 WHERE id = $2 AND user_id = $3 RETURNING id',
+        [body.email_digest, id, userId]
+      );
+      if (upd.rowCount === 0) {
+        return NextResponse.json(
+          { error: 'Saved search not found or access denied' },
+          { status: 404 }
+        );
+      }
+    }
+
+    // Persist the recipient email (from the session) so the digest worker can
+    // send. Reuses the Wave 6 user_alert_prefs table. Only trusted when the
+    // user is authenticated; anon/legacy callers can't set it.
+    if (sessionUser?.email) {
+      await pool.query(
+        `INSERT INTO user_alert_prefs (user_id, email) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email`,
+        [userId, sessionUser.email]
+      );
+    }
+
+    // Always stamp last_viewed_at (clears the badge on open).
+    await pool.query(
+      'UPDATE saved_searches SET last_viewed_at = now() WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('PATCH /api/saved-searches error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update saved search' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    const gate = devGateBlocked(request);
+    if (gate) return gate;
+  }
+
+  try {
+    const id = request.nextUrl.searchParams.get('id');
+    const userId = sessionUser?.id ?? readUserId(request);
+
+    if (!id || !/^\d+$/.test(id) || !userId) {
+      return NextResponse.json(
+        { error: 'id (numeric) and user_id required' },
+        { status: 400 }
+      );
+    }
+
+    const result = await pool.query(
+      'DELETE FROM saved_searches WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, userId]
+    );
+
+    if (result.rowCount === 0) {
+      return NextResponse.json(
+        { error: 'Saved search not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/saved-searches error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete saved search' },
+      { status: 500 }
+    );
+  }
+}
