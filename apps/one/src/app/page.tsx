@@ -24,7 +24,6 @@ import { WatchSearchButton } from '@/components/WatchSearchButton';
 import { useQueryStates } from 'nuqs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { SavedSearches } from '@/components/SavedSearches';
 import { FirstDealHero } from '@/components/home/FirstDealHero';
 import { HomeHero } from '@/components/home/HomeHero';
 import { FeaturedDeals } from '@/components/home/FeaturedDeals';
@@ -244,7 +243,6 @@ export default function Dashboard() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className="hidden sm:block"><SavedSearches /></div>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
