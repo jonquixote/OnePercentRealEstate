@@ -72,7 +72,7 @@ export default async function sitemap({
              FROM listings
              WHERE listing_status NOT IN ('sold','stale','rental_misfiled')
                AND listing_type = 'for_sale'
-               AND zip_code ~ '^\d{5}$'`,
+               AND zip_code ~ '^\\d{5}$'`,
             'markets',
         );
         const zips = rows

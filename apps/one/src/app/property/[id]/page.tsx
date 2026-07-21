@@ -30,7 +30,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
 
-function toDealLite(p: any): DealLite {
+function toDealLite(p: Record<string, any>): DealLite {
   const raw = p?.raw_data || {};
   const price = Number(p?.listing_price) || 0;
   const rent = Number(p?.estimated_rent) || 0;

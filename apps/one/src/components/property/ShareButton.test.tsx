@@ -6,6 +6,7 @@ import ShareButton from './ShareButton';
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('ShareButton', () => {

@@ -5,28 +5,36 @@ import { Share2 } from 'lucide-react';
 
 interface Props {
   title: string;
-  url: string;
+  url?: string;
 }
 
 export default function ShareButton({ title, url }: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleClick = async () => {
+    const shareUrl = url || (typeof window !== 'undefined' ? window.location.href : '');
+    if (!shareUrl) return;
+
     if (navigator.share) {
       try {
-        await navigator.share({ title, text: title, url });
+        await navigator.share({ title, text: title, url: shareUrl });
       } catch {
         // User cancelled — do nothing
       }
     } else {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Clipboard write failed — ignore
+      }
     }
   };
 
   return (
     <button
+      type="button"
       onClick={handleClick}
       title="Share"
       aria-label="Share"

@@ -40,7 +40,7 @@ export default function MenuHeader({ id, address, price, propertyUrl }: Props) {
               <ExternalLink className="h-4 w-4" />
             </a>
           )}
-          <ShareButton title={address} url={window.location.href} />
+          <ShareButton title={address} url={`${process.env.NEXT_PUBLIC_SITE_URL || 'https://one.octavo.press'}/property/${id}`} />
         </div>
       </div>
     </div>
