@@ -1,5 +1,6 @@
 'use server';
 
+import { cache } from 'react';
 import pool from '@/lib/db';
 import { cached, bumpCacheVersion, CACHE_TTL } from '@/lib/cache';
 import {
@@ -77,7 +78,9 @@ export async function getHudBenchmark(zipCode: string) {
   }
 }
 
-export async function getProperty(id: string) {
+// cache() dedupes across generateMetadata + page within one request —
+// one pk lookup instead of two.
+export const getProperty = cache(async function getProperty(id: string) {
   try {
     const client = await pool.connect();
     try {
@@ -91,7 +94,7 @@ export async function getProperty(id: string) {
     console.error('Database fetch error:', error);
     return null;
   }
-}
+});
 
 export async function getDemographics(zipCode: string) {
   try {

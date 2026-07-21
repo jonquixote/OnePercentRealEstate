@@ -1,5 +1,7 @@
 import { Suspense } from 'react';
+import type { Metadata } from 'next';
 import { getProperty, getHudBenchmark, getDemographics } from '@/app/actions';
+import { buildDealTitle, buildDealDescription, type DealLite } from '@/lib/deal-meta';
 import { Schema, type RealEstateListingData } from '@oper/primitives';
 import { calculatePropertyMetrics } from '@/lib/calculators';
 import { PhotoGallery } from '@/components/property/PhotoGallery';
@@ -27,6 +29,43 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
+
+function toDealLite(p: any): DealLite {
+  const raw = p?.raw_data || {};
+  const price = Number(p?.listing_price) || 0;
+  const rent = Number(p?.estimated_rent) || 0;
+  const hasRent = rent > 0 && price > 0;
+  return {
+    address: p?.address ?? null,
+    city: raw.city ?? null,
+    state: raw.state ?? null,
+    price: price || null,
+    rent: rent || null,
+    ratioPct: hasRent ? (rent / price) * 100 : null,
+    beds: p?.financial_snapshot?.bedrooms ?? p?.bedrooms ?? null,
+    baths: p?.financial_snapshot?.bathrooms ?? p?.bathrooms ?? null,
+  };
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const site = process.env.NEXT_PUBLIC_SITE_URL || 'https://one.octavo.press';
+  try {
+    const property = await getProperty(id);
+    if (!property) return { title: 'Property not found | OnePercent' };
+    const lite = toDealLite(property);
+    const url = `${site}/property/${id}`;
+    return {
+      title: buildDealTitle(lite),
+      description: buildDealDescription(lite),
+      alternates: { canonical: url },
+      openGraph: { title: buildDealTitle(lite), description: buildDealDescription(lite), url, type: 'website' },
+      twitter: { card: 'summary_large_image', title: buildDealTitle(lite), description: buildDealDescription(lite) },
+    };
+  } catch {
+    return { title: 'Rental property deal | OnePercent' };
+  }
+}
 
 function buildSchemaData(property: Record<string, any>, id: string): RealEstateListingData | null {
     if (!property) return null;
