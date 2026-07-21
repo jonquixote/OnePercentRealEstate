@@ -98,6 +98,26 @@ describe('buildListingsQuery — lifecycle filter', () => {
   });
 });
 
+describe('buildListingsQuery — unverified feed (#53/3)', () => {
+  // Mirrors RENT_TRUST.maxRatio (0.02) from apps/one/src/lib/rent-trust.ts.
+  // The trusted default feed excludes implausible rows with `rent_price_ratio
+  // <= 0.02`; the strict `includeUnverified` toggle opts in.
+  it('default (trusted) feed appends the 0.02 plank-rent ratio ceiling', () => {
+    const { sql } = buildListingsQuery({}, 'newest', 1, 100, null);
+    expect(sql).toMatch(/rent_price_ratio\s*<=\s*0\.02/i);
+  });
+  it('includeUnverified drops the 0.02 plank-rent ratio ceiling', () => {
+    const { sql } = buildListingsQuery({ includeUnverified: true }, 'newest', 1, 100, null);
+    expect(sql).not.toMatch(/rent_price_ratio\s*<=\s*0\.02/);
+  });
+  it('does not cross-cite the ceiling when onlyOnePercentRule is on (only the explicit rail)', () => {
+    // When the user is filtering FOR 1% clearers, we still want the ridge cap
+    // because the default ceiling is about plausibility not profitability.
+    const { sql } = buildListingsQuery({}, 'one_percent_high', 1, 100, null);
+    expect(sql).toMatch(/rent_price_ratio\s*<=\s*0\.02/i);
+  });
+});
+
 describe('buildListingsQuery — cursor vs offset', () => {
   it('uses keyset (id < cursor) on newest sort', () => {
     const { sql, params } = buildListingsQuery({}, 'newest', 1, 100, '999');

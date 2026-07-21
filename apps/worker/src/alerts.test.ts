@@ -14,8 +14,17 @@ describe('alerts SQL shape', () => {
     const { CANDIDATES_SQL } = await import('./alerts');
     expect(CANDIDATES_SQL).toContain('last_seen_at > $1');
     expect(CANDIDATES_SQL).toContain('rent_price_ratio >= 0.01');
-    expect(CANDIDATES_SQL).toContain('rent_price_ratio <= 0.05');
+    // Mirrors RENT_TRUST.maxRatio (0.02) from apps/one/src/lib/rent-trust.ts.
+    // Bulk-feed SQL proxy for the absolute plausibility ceiling. Threshold
+    // values must be kept identical to RENT_TRUST.maxRatio; both cite each other.
+    expect(CANDIDATES_SQL).toContain('rent_price_ratio <= 0.02');
     expect(CANDIDATES_SQL).toContain('price >= 30000');
+  });
+
+  it('CANDIDATES_SQL_NO_LIFECYCLE also applies the 0.02 ceiling', async () => {
+    const { CANDIDATES_SQL_NO_LIFECYCLE } = await import('./alerts');
+    expect(CANDIDATES_SQL_NO_LIFECYCLE).toContain('rent_price_ratio >= 0.01');
+    expect(CANDIDATES_SQL_NO_LIFECYCLE).toContain('rent_price_ratio <= 0.02');
   });
 
   it('INSERT_EVENT_SQL dedups with ON CONFLICT (user_id, listing_id) DO NOTHING', async () => {

@@ -53,6 +53,11 @@ const logger = getLogger(env.LOG_LEVEL);
 // watermark is crawling a backlog and more 1%-clearers exist beyond this batch.
 export const CANDIDATES_LIMIT = 2000;
 
+// Mirrors RENT_TRUST.maxRatio (0.02) from apps/one/src/lib/rent-trust.ts.
+// Bulk-feed SQL proxy: the trusted alert candidates approximate the absolute
+// plausibility ceiling with this ratio because HUD/comp joins aren't available
+// in bulk feeds. Threshold values must be kept identical to RENT_TRUST.maxRatio;
+// both cite each other.
 export const CANDIDATES_SQL = `
   SELECT id, address, zip_code, price, estimated_rent, rent_price_ratio,
          bedrooms, bathrooms, sqft, year_built, state, city,
@@ -60,7 +65,7 @@ export const CANDIDATES_SQL = `
   FROM listings
   WHERE last_seen_at > $1
     AND rent_price_ratio >= 0.01
-    AND rent_price_ratio <= 0.05
+    AND rent_price_ratio <= 0.02
     AND price >= 30000
     AND listing_type = 'for_sale'
     AND listing_status = 'active'
@@ -69,6 +74,7 @@ export const CANDIDATES_SQL = `
 `;
 
 /** Same as CANDIDATES_SQL but without the listing_status predicate (fallback). */
+// Mirrors RENT_TRUST.maxRatio (0.02) — see CANDIDATES_SQL comment above.
 export const CANDIDATES_SQL_NO_LIFECYCLE = `
   SELECT id, address, zip_code, price, estimated_rent, rent_price_ratio,
          bedrooms, bathrooms, sqft, year_built, state, city,
@@ -76,7 +82,7 @@ export const CANDIDATES_SQL_NO_LIFECYCLE = `
   FROM listings
   WHERE last_seen_at > $1
     AND rent_price_ratio >= 0.01
-    AND rent_price_ratio <= 0.05
+    AND rent_price_ratio <= 0.02
     AND price >= 30000
     AND listing_type = 'for_sale'
   ORDER BY last_seen_at ASC

@@ -14,6 +14,7 @@ import { Filter } from 'lucide-react';
 
 export interface FilterState {
     showSold: boolean;
+    showUnverified: boolean;
     minPrice: number;
     maxPrice: number;
     minBeds: number;
@@ -42,6 +43,7 @@ export interface FilterState {
  */
 export const propertyFilterParsers = {
     sold: parseAsBoolean.withDefault(false),
+    unverified: parseAsBoolean.withDefault(false),
     pmin: parseAsInteger.withDefault(0),
     pmax: parseAsInteger.withDefault(2000000),
     beds: parseAsInteger.withDefault(0),
@@ -65,6 +67,7 @@ export const propertyFilterParsers = {
  */
 export function toFilterState(qs: {
     sold: boolean;
+    unverified: boolean;
     pmin: number;
     pmax: number;
     beds: number;
@@ -82,6 +85,7 @@ export function toFilterState(qs: {
 }): FilterState {
     return {
         showSold: qs.sold,
+        showUnverified: qs.unverified,
         minPrice: qs.pmin,
         maxPrice: qs.pmax,
         minBeds: qs.beds,

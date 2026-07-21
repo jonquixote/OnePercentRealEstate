@@ -21,6 +21,12 @@ export interface PropertyFilters {
   // (sold/stale/rental_misfiled); true surfaces sold rows so a SOLD band can
   // render. Stale + misfiled stay hidden regardless.
   includeSold?: boolean;
+  // Unverified-feed opt-in. The default (trusted) search feed excludes rows
+  // above the absolute plausibility ceiling (mirrors RENT_TRUST.maxRatio in
+  // apps/one/src/lib/rent-trust.ts); setting this true reveals them so the
+  // user can audit borderline / unverified data. The richer HUD/comp gate
+  // (assessRent) is still applied deal-page-side (Task 2).
+  includeUnverified?: boolean;
   q?: string; // free-text / ZIP search
   // Split-view map sync: restrict the list to the visible viewport.
   bounds?: { north: number; south: number; east: number; west: number };
@@ -218,6 +224,17 @@ export function buildListingsQuery(
       ? `listing_status NOT IN ('stale','rental_misfiled')`
       : `listing_status NOT IN ('sold','stale','rental_misfiled')`,
   );
+
+  // Mirrors RENT_TRUST.maxRatio (0.02) from apps/one/src/lib/rent-trust.ts.
+  // Bulk-feed SQL proxy: the trusted default search feed approximates the
+  // absolute plausibility ceiling with this ratio because HUD/comp joins
+  // aren't available in bulk searches. Threshold values must be kept
+  // identical to RENT_TRUST.maxRatio; both cite each other. Toggle off via
+  // `includeUnverified` so power users can audit the borderline/unverified
+  // set; the richer HUD/comp gate (assessRent) still fires deal-page-side.
+  if (!filters?.includeUnverified) {
+    whereClauses.push(`rent_price_ratio <= 0.02`);
+  }
 
   // Canonical display: default to standard inventory unless the user opts
   // into a distress type. Strategy drives which rule thresholds apply.
