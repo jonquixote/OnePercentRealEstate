@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getWalkScore } from '@/lib/walkscore';
+import { computeHpiCagr } from '@/lib/hpi-cagr';
 
 export const revalidate = 60;
 
@@ -255,9 +256,9 @@ export async function GET(
       }
     })(),
 
-    // ── Market: FHFA ZIP HPI (10-yr series + CAGR) ──
+    // ── Market: FHFA ZIP HPI (series + sanity-clamped CAGR w/ span) ──
     (async () => {
-      if (!zipCode) return { series: [], cagr: null };
+      if (!zipCode) return { series: [], cagr: null, cagrSpanYears: null };
       try {
         const res = await pool.query(
           `SELECT year, hpi
@@ -270,19 +271,14 @@ export async function GET(
           .filter((r: any) => r.hpi != null)
           .map((r: any) => ({ year: Number(r.year), hpi: Number(r.hpi) }));
 
-        let cagr: number | null = null;
-        if (series.length >= 2) {
-          const first = series[0];
-          const last = series[series.length - 1];
-          const years = last.year - first.year;
-          if (years > 0 && first.hpi > 0) {
-            cagr = Math.round(((last.hpi / first.hpi) ** (1 / years) - 1) * 10000) / 100;
-          }
-        }
-
-        return { series, cagr };
+        const cagrResult = computeHpiCagr(series);
+        return {
+          series,
+          cagr: cagrResult?.cagrPct ?? null,
+          cagrSpanYears: cagrResult?.spanYears ?? null,
+        };
       } catch {
-        return { series: [], cagr: null };
+        return { series: [], cagr: null, cagrSpanYears: null };
       }
     })(),
 
@@ -333,8 +329,9 @@ export async function GET(
       crime: neighborhoodCrime ?? null,
     },
     market: {
-      cagr_5yr: marketHpi?.cagr ?? null,
       hpi: marketHpi?.series ?? [],
+      cagr: marketHpi?.cagr ?? null,
+      cagr_span_years: marketHpi?.cagrSpanYears ?? null,
       unemployment: marketUnemployment?.unemployment_rate ?? null,
       county_unemployment_period: marketUnemployment?.period ?? null,
     },

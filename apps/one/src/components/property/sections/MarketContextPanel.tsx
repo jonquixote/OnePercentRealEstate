@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 
 interface MarketData {
   hpi?: Array<{ date: string; value: number }> | null;
-  cagr_5yr?: number | null;
+  cagr?: number | null;
+  cagr_span_years?: number | null;
   unemployment?: number | null;
 }
 
@@ -71,7 +72,7 @@ export function MarketContextPanel({ propertyId }: { propertyId: string | number
   if (!data) return null;
 
   const hasHpi = data.hpi && data.hpi.length >= 2;
-  const hasCagr = data.cagr_5yr != null;
+  const hasCagr = data.cagr != null;
   const hasUnemp = data.unemployment != null;
   const hasAny = hasHpi || hasCagr || hasUnemp;
   if (!hasAny) return null;
@@ -86,15 +87,15 @@ export function MarketContextPanel({ propertyId }: { propertyId: string | number
         </div>
       )}
 
-      {/* 5-yr CAGR */}
+      {/* CAGR (span labelled dynamically) */}
       {hasCagr && (
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-foreground">5-yr CAGR</span>
+          <span className="text-sm font-semibold text-foreground">{data.cagr_span_years ?? 5}-yr CAGR</span>
           <span
             className="figure text-sm"
-            style={{ color: data.cagr_5yr! >= 0 ? 'var(--pass-hi)' : 'var(--loss)' }}
+            style={{ color: data.cagr! >= 0 ? 'var(--pass-hi)' : 'var(--loss)' }}
           >
-            {data.cagr_5yr! >= 0 ? '+' : ''}{(data.cagr_5yr! * 100).toFixed(1)}%
+            {data.cagr! >= 0 ? '+' : ''}{data.cagr!.toFixed(1)}%
           </span>
         </div>
       )}
