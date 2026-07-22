@@ -29,13 +29,19 @@ export type RentAssessment = {
   reason: string;
 };
 
-const compCorroborates = (modelRent: number, areaComp: number | null | undefined): boolean =>
-  areaComp != null && areaComp > 0 && modelRent / areaComp <= RENT_TRUST.compDivergence;
+const compCorroborates = (modelRent: number, areaComp: number | null | undefined): boolean => {
+  if (areaComp == null || !Number.isFinite(areaComp) || areaComp <= 0) return false;
+  const r = modelRent / areaComp;
+  return Number.isFinite(r) && r <= RENT_TRUST.compDivergence;
+};
 
-const ratioReasonable = (ratio: number): boolean => ratio <= RENT_TRUST.maxRatio;
+const ratioReasonable = (ratio: number): boolean =>
+  Number.isFinite(ratio) && ratio <= RENT_TRUST.maxRatio;
 
 const moderateDivergence = (a: number, b: number): boolean => {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= 0) return false;
   const r = a / b;
+  if (!Number.isFinite(r)) return false;
   return r > MODERATE_DIVERGENCE || r < 1 / MODERATE_DIVERGENCE;
 };
 
@@ -66,7 +72,11 @@ export function assessRent(input: RentAssessmentInput): RentAssessment {
   const hudImplausible =
     hudFmr != null &&
     hudFmr > 0 &&
-    modelRent / hudFmr > RENT_TRUST.hudDivergence &&
+    Number.isFinite(hudFmr) &&
+    (() => {
+      const r = modelRent / hudFmr;
+      return Number.isFinite(r) && r > RENT_TRUST.hudDivergence;
+    })() &&
     !compCorroborates(modelRent, areaComp);
   if (hudImplausible) {
     return {
@@ -77,8 +87,8 @@ export function assessRent(input: RentAssessmentInput): RentAssessment {
   }
 
   const anchors = [
-    hudFmr != null && hudFmr > 0 ? moderateDivergence(modelRent, hudFmr) : null,
-    areaComp != null && areaComp > 0 ? moderateDivergence(modelRent, areaComp) : null,
+    hudFmr != null && hudFmr > 0 && Number.isFinite(hudFmr) ? moderateDivergence(modelRent, hudFmr) : null,
+    areaComp != null && areaComp > 0 && Number.isFinite(areaComp) ? moderateDivergence(modelRent, areaComp) : null,
   ].filter((v): v is boolean => v !== null);
 
   // wide = meaningful disagreement BETWEEN anchors: only flag when ≥2 anchors are

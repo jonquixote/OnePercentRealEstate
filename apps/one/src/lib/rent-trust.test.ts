@@ -30,4 +30,28 @@ describe('assessRent', () => {
     expect(r.ratio).toBeCloseTo(0.0636, 4);
     expect(r.reason).toMatch(/exceeds|disagree/i);
   });
+  it('rejects non-finite anchors (Infinity areaComp does not corroborate)', () => {
+    // $45k home, 6.4% ratio, modelRent=2863, hudFmr=1100, areaComp=Infinity
+    // Without the finite guard, Infinity/2863=0 would make compCorroborates=true
+    // and drop the ratio>0.02 implausible branch — the verdict would leak "trusted".
+    expect(
+      assessRent({ price: 45000, modelRent: 2863, hudFmr: 1100, areaComp: Infinity }).verdict,
+    ).toBe('implausible');
+  });
+  it('rejects non-finite anchors (Infinity hudFmr does not corroborate implausible)', () => {
+    // hudFmr=Infinity makes modelRent/hudFmr = 0, suppressing the HUD-divergence
+    // implausible branch. Must still catch via the ratio ceiling.
+    expect(
+      assessRent({ price: 45000, modelRent: 2863, hudFmr: Infinity, areaComp: null }).verdict,
+    ).toBe('implausible');
+  });
+  it('rejects negative/zero anchors (treated as missing, not corroborating)', () => {
+    // zero/negative anchors are skipped; with sane ratio + valid comp the
+    // verdict is still trusted — the sanitizer just doesn't let bad anchors
+    // falsely corroborate.
+    expect(assessRent({ price: 245000, modelRent: 2767, hudFmr: 0, areaComp: 1200 }).verdict).toBe('trusted');
+    expect(assessRent({ price: 245000, modelRent: 2767, hudFmr: -50, areaComp: 1200 }).verdict).toBe('trusted');
+    // implausible still holds when ratio itself breaches even with bad anchors
+    expect(assessRent({ price: 45000, modelRent: 2863, hudFmr: 0, areaComp: 1200 }).verdict).toBe('implausible');
+  });
 });

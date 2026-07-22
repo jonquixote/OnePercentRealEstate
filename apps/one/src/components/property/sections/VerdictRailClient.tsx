@@ -129,8 +129,18 @@ export default function VerdictRailClient({
       >
         <div className="min-w-0">
           <p className="figure text-[17px] leading-tight">{usd0.format(price)}</p>
-          <p className="figure text-[12px]" style={{ color: ratioPct != null && ratioPct >= targetPct ? 'var(--pass)' : 'var(--haze)' }}>
-            {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '—'} · rent {hasRent ? usd0.format(rent) : '—'}
+          <p
+            className="figure text-[12px]"
+            style={{
+              color: isImplausible
+                ? 'var(--brass)'
+                : ratioPct != null && ratioPct >= targetPct
+                  ? 'var(--pass)'
+                  : 'var(--haze)',
+            }}
+          >
+            {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '—'}
+            {isImplausible ? ' · unverified' : ` · rent ${hasRent ? usd0.format(rent) : '—'}`}
           </p>
         </div>
         <div className="ml-auto shrink-0">

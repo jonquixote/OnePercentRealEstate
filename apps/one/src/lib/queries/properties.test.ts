@@ -113,8 +113,10 @@ describe('buildListingsQuery — unverified feed (#53/3)', () => {
   it('does not cross-cite the ceiling when onlyOnePercentRule is on (only the explicit rail)', () => {
     // When the user is filtering FOR 1% clearers, we still want the ridge cap
     // because the default ceiling is about plausibility not profitability.
-    const { sql } = buildListingsQuery({}, 'one_percent_high', 1, 100, null);
-    expect(sql).toMatch(/rent_price_ratio\s*<=\s*0\.02/i);
+    // Pass onlyOnePercentRule so the 1%-rail predicate is actually appended.
+    const { sql } = buildListingsQuery({ onlyOnePercentRule: true }, 'one_percent_high', 1, 100, null);
+    expect(sql).toMatch(/is_rentable/);          // the 1%-rail predicate
+    expect(sql).toMatch(/rent_price_ratio\s*<=\s*0\.02/i); // plausibility cap survives
   });
 });
 

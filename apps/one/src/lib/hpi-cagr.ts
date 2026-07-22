@@ -10,10 +10,17 @@ export function computeHpiCagr(
   const first = sorted[0];
   const last = sorted[sorted.length - 1];
 
-  if (first.hpi <= 0) return null;
+  if (
+    !Number.isFinite(first.hpi) ||
+    !Number.isFinite(last.hpi) ||
+    first.hpi <= 0 ||
+    last.hpi <= 0
+  ) {
+    return null;
+  }
 
   const spanYears = last.year - first.year;
-  if (spanYears < HPI_MIN_SPAN_YEARS) return null;
+  if (!Number.isFinite(spanYears) || spanYears < HPI_MIN_SPAN_YEARS) return null;
 
   const cagrRatio = Math.pow(last.hpi / first.hpi, 1 / spanYears) - 1;
   const cagrPct = cagrRatio * 100;

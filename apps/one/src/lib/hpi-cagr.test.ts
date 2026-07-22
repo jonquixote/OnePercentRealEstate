@@ -61,6 +61,16 @@ describe('computeHpiCagr', () => {
     const result = computeHpiCagr(series);
     expect(result).toBeNull();
   });
+  it('returns null for negative/zero/NaN terminal HPI (not just first)', () => {
+    const valid = [
+      { year: 2020, hpi: 100 },
+      { year: 2025, hpi: 120 },
+    ];
+    expect(computeHpiCagr(valid)).not.toBeNull();
+    expect(computeHpiCagr([...valid, { year: 2026, hpi: -5 }])).toBeNull();
+    expect(computeHpiCagr([...valid, { year: 2026, hpi: 0 }])).toBeNull();
+    expect(computeHpiCagr([...valid, { year: 2026, hpi: Number.NaN }])).toBeNull();
+  });
 
   it('orders input by year ascending internally before computing', () => {
     const series = [

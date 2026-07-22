@@ -120,6 +120,26 @@ describe('VerdictRailClient — implausible verdict', () => {
     const container = ratioNode.parentElement;
     expect(container?.textContent).toMatch(/⚠/);
   });
+
+  it('mobile CTA: implausible rent never shown as passing (brass + unverified)', () => {
+    renderRail({
+      ratioPct: 2.5,
+      targetPct: 1.0,
+      rent: 2863,
+      price: 45000,
+      hasRent: true,
+      rentAssessment: {
+        verdict: 'implausible',
+        ratio: 0.025,
+        reason: 'model disagrees with HUD/comps',
+      },
+    });
+    const ratioNodes = screen.getAllByText(/2.50%/);
+    const ctaNode = ratioNodes.find((n) => n.className.includes('text-[12px]'));
+    expect(ctaNode).toBeTruthy();
+    expect(ctaNode!.style.color).toBe('var(--brass)');
+    expect(ctaNode!.textContent).toMatch(/unverified/i);
+  });
 });
 
 describe('VerdictRailClient — wide verdict', () => {
