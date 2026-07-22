@@ -72,8 +72,11 @@ export function MarketContextPanel({ propertyId }: { propertyId: string | number
   if (!data) return null;
 
   const hasHpi = data.hpi && data.hpi.length >= 2;
-  const hasCagr = data.cagr != null;
-  const hasUnemp = data.unemployment != null;
+  const cagr = data.cagr ?? null;
+  const cagrSpanYears = data.cagr_span_years;
+  const hasCagr = cagr != null;
+  const unemp = data.unemployment ?? null;
+  const hasUnemp = unemp != null;
   const hasAny = hasHpi || hasCagr || hasUnemp;
   if (!hasAny) return null;
 
@@ -88,23 +91,23 @@ export function MarketContextPanel({ propertyId }: { propertyId: string | number
       )}
 
       {/* CAGR (span labelled dynamically) */}
-      {hasCagr && (
+      {hasCagr && cagr != null && (
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-foreground">{data.cagr_span_years ?? 5}-yr CAGR</span>
+          <span className="text-sm font-semibold text-foreground">{cagrSpanYears ?? 5}-yr CAGR</span>
           <span
             className="figure text-sm"
-            style={{ color: data.cagr! >= 0 ? 'var(--pass-hi)' : 'var(--loss)' }}
+            style={{ color: cagr >= 0 ? 'var(--pass-hi)' : 'var(--loss)' }}
           >
-            {data.cagr! >= 0 ? '+' : ''}{data.cagr!.toFixed(1)}%
+            {cagr >= 0 ? '+' : ''}{cagr.toFixed(1)}%
           </span>
         </div>
       )}
 
       {/* Unemployment */}
-      {hasUnemp && (
+      {hasUnemp && unemp != null && (
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">Unemployment</span>
-          <span className="figure text-sm">{data.unemployment!.toFixed(1)}%</span>
+          <span className="figure text-sm">{unemp.toFixed(1)}%</span>
         </div>
       )}
     </div>
