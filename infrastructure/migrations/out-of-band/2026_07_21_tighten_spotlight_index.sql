@@ -21,9 +21,9 @@
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f 2026_07_21_tighten_spotlight_index.sql
 --   (errors abort cleanly; rerun is safe.)
 --
--- If a previous attempt left an INVALID index behind, drop it first:
---   DROP INDEX CONCURRENTLY IF EXISTS idx_listings_spotlight;
---   DROP INDEX CONCURRENTLY IF EXISTS idx_listings_spotlight_new;
+-- If a previous attempt left an INVALID index behind, drop it before
+-- rebuilding so CREATE IF NOT EXISTS does not silently skip the rebuild:
+DROP INDEX CONCURRENTLY IF EXISTS idx_listings_spotlight_new;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_listings_spotlight_new
     ON listings (rent_price_ratio DESC, created_at DESC)
