@@ -1,56 +1,155 @@
 import { MetadataRoute } from 'next';
+import { INDEX_METROS } from '@/lib/index-metros';
 
-// Sitemap is generated at request time so missing DB during `next build`
-// (e.g. on Vercel preview deploys) doesn't fail the build. The route
-// segment is force-dynamic.
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://one.octavo.press';
+const PAGE_SIZE = 45000;
 
-async function fetchZipCodes(): Promise<string[]> {
+const CORE_ROUTES = [
+    '',
+    '/search',
+    '/market',
+    '/shelf',
+    '/playbook',
+    '/playbook/calculator',
+    '/playbook/comps',
+    '/playbook/buy-hold',
+    '/playbook/brrrr',
+    '/playbook/flip',
+    '/playbook/str',
+    '/pricing',
+];
+
+async function query<T = Record<string, unknown>>(
+    sql: string,
+    label: string,
+): Promise<T[]> {
     try {
-        // Lazy-import to avoid pulling pg into the build graph when the
-        // env is incomplete.
         const { default: pool } = await import('@/lib/db');
         const client = await pool.connect();
         try {
-            const result = await client.query(`
-                SELECT zip_code
-                FROM listings
-                WHERE listing_type = 'for_sale' AND sale_type = 'standard' AND zip_code ~ '^\\d{5}$'
-                  AND listing_status NOT IN ('sold','stale','rental_misfiled')
-                GROUP BY zip_code
-                ORDER BY count(*) DESC
-                LIMIT 2000
-            `);
-            return result.rows
-                .map((r: { zip_code: string | null }) => r.zip_code)
-                .filter((z): z is string => !!z && /^\d{5}$/.test(z));
+            const result = await client.query(sql);
+            return result.rows as T[];
         } finally {
             client.release();
         }
     } catch (error) {
-        console.warn('[sitemap] zip code query failed, returning core routes only:', error);
+        console.warn(`[sitemap] ${label} query failed:`, error);
         return [];
     }
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-    const coreRoutes = ['', '/search', '/market', '/shelf', '/playbook', '/playbook/calculator', '/playbook/comps', '/playbook/buy-hold', '/playbook/brrrr', '/playbook/flip', '/playbook/str', '/pricing'].map((route) => ({
-        url: `${BASE_URL}${route}`,
-        lastModified: new Date(),
-        changeFrequency: 'daily' as const,
-        priority: 1,
-    }));
+export async function generateSitemaps(): Promise<{ id: string }[]> {
+    const rows = await query<{ count: string }>(
+        `SELECT count(*) AS count FROM listings
+         WHERE listing_status NOT IN ('sold','stale','rental_misfiled')
+           AND listing_type = 'for_sale'`,
+        'property count',
+    );
+    const count = parseInt(rows[0]?.count ?? '0', 10);
+    const shards = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-    const zips = await fetchZipCodes();
-    const marketRoutes: MetadataRoute.Sitemap = zips.map((zip) => ({
-        url: `${BASE_URL}/market/${zip}`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly' as const,
-        priority: 0.8,
-    }));
+    return [
+        { id: 'markets' },
+        { id: 'sold' },
+        { id: 'index' },
+        ...Array.from({ length: shards }, (_, i) => ({ id: `property-${i}` })),
+    ];
+}
 
-    return [...coreRoutes, ...marketRoutes];
+export default async function sitemap({
+    id,
+}: {
+    id: string;
+}): Promise<MetadataRoute.Sitemap> {
+    const now = new Date();
+
+    if (id === 'markets') {
+        const rows = await query<{ zip_code: string | null }>(
+            `SELECT DISTINCT zip_code
+             FROM listings
+             WHERE listing_status NOT IN ('sold','stale','rental_misfiled')
+               AND listing_type = 'for_sale'
+               AND zip_code ~ '^\\d{5}$'`,
+            'markets',
+        );
+        const zips = rows
+            .map((r) => r.zip_code)
+            .filter((z): z is string => !!z && /^\d{5}$/.test(z));
+
+        const coreRoutes: MetadataRoute.Sitemap = CORE_ROUTES.map((route) => ({
+            url: `${BASE_URL}${route}`,
+            lastModified: now,
+            changeFrequency: 'daily' as const,
+            priority: 1,
+        }));
+
+        const marketRoutes: MetadataRoute.Sitemap = zips.map((zip) => ({
+            url: `${BASE_URL}/market/${zip}`,
+            lastModified: now,
+            changeFrequency: 'weekly' as const,
+            priority: 0.8,
+        }));
+
+        return [...coreRoutes, ...marketRoutes];
+    }
+
+    if (id === 'sold') {
+        const rows = await query<{ id: string }>(
+            `SELECT id FROM listings
+             WHERE listing_status = 'sold'
+             ORDER BY sold_date DESC NULLS LAST
+             LIMIT ${PAGE_SIZE}`,
+            'sold',
+        );
+        return rows.map((r) => ({
+            url: `${BASE_URL}/sold/${r.id}`,
+            lastModified: now,
+            changeFrequency: 'daily' as const,
+            priority: 0.5,
+        }));
+    }
+
+    if (id === 'index') {
+        const routes: MetadataRoute.Sitemap = [
+            {
+                url: `${BASE_URL}/the-1-percent-index`,
+                lastModified: now,
+                changeFrequency: 'weekly' as const,
+                priority: 1,
+            },
+            ...INDEX_METROS.map((metro) => ({
+                url: `${BASE_URL}/the-1-percent-index/${metro.slug}`,
+                lastModified: now,
+                changeFrequency: 'weekly' as const,
+                priority: 0.9,
+            })),
+        ];
+        return routes;
+    }
+
+    if (id.startsWith('property-')) {
+        const shard = parseInt(id.split('-')[1], 10);
+        const offset = shard * PAGE_SIZE;
+        const rows = await query<{ id: string; rent_price_ratio: number | null }>(
+            `SELECT id, rent_price_ratio FROM listings
+             WHERE listing_status NOT IN ('sold','stale','rental_misfiled')
+               AND listing_type = 'for_sale'
+             ORDER BY (rent_price_ratio IS NOT NULL) DESC,
+                      rent_price_ratio DESC NULLS LAST,
+                      last_seen_at DESC
+             LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
+            'property',
+        );
+        return rows.map((r) => ({
+            url: `${BASE_URL}/property/${r.id}`,
+            lastModified: now,
+            changeFrequency: 'daily' as const,
+            priority: r.rent_price_ratio != null && r.rent_price_ratio >= 0.01 ? 0.9 : 0.6,
+        }));
+    }
+
+    return [];
 }
