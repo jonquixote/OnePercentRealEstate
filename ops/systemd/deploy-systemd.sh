@@ -60,6 +60,20 @@ bash "$(dirname "$0")/gen-env.sh"
 echo "--- Regenerating alertmanager config ---"
 bash "$(dirname "$0")/gen-alertmanager.sh"
 
+# Preflight: validate the freshly-generated config against the RUNNING system
+# before anything is built or restarted. Fail-closed — a bad config aborts here
+# with nothing mutated, instead of half-deploying (2026-07-24: DATABASE_URL
+# pointed at a PgBouncer port that did not exist and the app went down).
+bash "$(dirname "$0")/../ci/preflight.sh" || {
+  echo "Deploy aborted by preflight." >&2
+  exit 1
+}
+
+# Recorded before the build so we can prove the build actually rebuilt and the
+# units actually restarted (an invalid systemd-run property once made the build
+# a silent no-op while the deploy still reported success).
+DEPLOY_START_EPOCH=$(date +%s)
+
 # Build steps
 build_node() {
   echo "--- Building Node.js (pnpm) under memory cap ---"
@@ -107,6 +121,57 @@ build_node() {
 build_ml() {
   echo "--- Installing ML Python deps ---"
   services/ml/.venv/bin/pip install -q -r services/ml/requirements.txt
+}
+
+# Assert the build produced fresh output and the units really restarted.
+# The 2026-07-24 `-p Nice=10` bug made build_node abort silently: the deploy
+# printed "Deploy complete" while the app kept running hours-old code. Freshness
+# is checked against DEPLOY_START_EPOCH, so a no-op build cannot pass.
+assert_rebuilt_and_restarted() {
+  local -a units=("$@")
+  local problem=0
+  echo "--- Verifying build output + restarts are fresh ---"
+
+  # a) the standalone server bundle must be newer than the deploy start
+  local built_any=0
+  for app in one two; do
+    local server_js="apps/$app/.next/standalone/apps/$app/server.js"
+    [[ -f "$server_js" ]] || continue
+    local mtime
+    mtime=$(stat -c %Y "$server_js" 2>/dev/null || stat -f %m "$server_js" 2>/dev/null || echo 0)
+    if [[ "$mtime" -ge "$DEPLOY_START_EPOCH" ]]; then
+      echo "  fresh build: $server_js"
+      built_any=1
+    else
+      echo "  STALE build: $server_js was not rewritten by this deploy" >&2
+      problem=1
+    fi
+  done
+  [[ $built_any -eq 0 ]] && echo "  (no standalone bundles present to check)"
+
+  # b) every restarted unit must have entered active AFTER the deploy started
+  for u in "${units[@]}"; do
+    systemctl is-active --quiet "$u" 2>/dev/null || continue
+    local ts epoch
+    ts=$(systemctl show "$u" -p ActiveEnterTimestamp --value 2>/dev/null)
+    [[ -z "$ts" ]] && continue
+    epoch=$(date -d "$ts" +%s 2>/dev/null || echo 0)
+    if [[ "$epoch" -ge "$DEPLOY_START_EPOCH" ]]; then
+      echo "  restarted: $u"
+    else
+      echo "  NOT RESTARTED: $u still running from before this deploy" >&2
+      problem=1
+    fi
+  done
+
+  if [[ $problem -ne 0 ]]; then
+    local notify_script="$(dirname "$0")/../monitoring/notify-telegram.sh"
+    [[ -x "$notify_script" ]] && "$notify_script" --key "deploy-noop" \
+      "RED $(hostname): deploy produced a stale build or did not restart units" || true
+    echo ""
+    echo "=== DEPLOY VERIFICATION FAILED (silent no-op build/restart) ===" >&2
+    exit 1
+  fi
 }
 
 # Post-deploy smoke gate — fail-closed. Any failure = non-zero exit.
@@ -248,6 +313,7 @@ if [[ $# -gt 0 ]]; then
     echo "Restarting $u..."
     systemctl restart "$u"
   done
+  RESTARTED_UNITS=("${targets[@]}")
 else
   # Full deploy
   build_node
@@ -257,7 +323,12 @@ else
     echo "  Restarting $u..."
     systemctl restart "$u"
   done
+  RESTARTED_UNITS=("${ALL_UNITS[@]}")
 fi
+
+# Prove the build wrote fresh output and the units actually restarted, before
+# the smoke gate runs. A silent no-op build fails HERE rather than shipping.
+assert_rebuilt_and_restarted "${RESTARTED_UNITS[@]}"
 
 echo ""
 echo "=== Deploy complete ==="
