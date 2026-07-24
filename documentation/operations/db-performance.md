@@ -85,6 +85,46 @@ The `_old` table was cruft (pre-partition migration remnant). It does not exist 
 
 ## 3. PgBouncer Runbook
 
+### 3.-1 STATUS (2026-07-24): PgBouncer is LIVE and the cutover is ON
+
+| Item | State |
+|---|---|
+| `pgbouncer` binary | installed (1.25.2, `/usr/sbin/pgbouncer`); distro `pgbouncer.service` disabled |
+| `oper-pgbouncer.service` | **active** — runs as `postgres` (it refuses to run as root), `:6432` |
+| Auth | `scram-sha-256` + plaintext userlist (0600, postgres-owned, **gitignored**) — 6 roles |
+| Cutover | **ON** — `.env` has `USE_PGBOUNCER=1`; `/etc/oper.env` + role env files use `:6432` |
+| Verified | `SHOW POOLS` shows real multiplexing (oper_worker: 3 clients → 1 server conn), health `db:up` |
+| Direct (`:5432`) consumers | the 2 LISTEN clients (crawl, rent-estimator) + migrations — via `DATABASE_URL_DIRECT` |
+
+**The cutover is fail-safe.** `gen-env.sh` writes `:6432` only when `USE_PGBOUNCER=1`
+**AND** a live `SELECT 1` through `:6432` succeeds; otherwise it falls back to `:5432`
+with a warning (proven by test: with the pooler stopped, the flag on, it fell back).
+The deploy smoke gate additionally fails if `DATABASE_URL` says `:6432` but the pooler
+is not answering. Worst case is "no pooling", never "no database".
+
+**Rollback (instant):** `sed -i '/^USE_PGBOUNCER=/d' /opt/onepercent/.env && bash
+ops/systemd/gen-env.sh && systemctl restart oper-app oper-worker …` — or just stop
+`oper-pgbouncer` and re-run `gen-env.sh`; it will fall back on its own.
+
+### 3.0 Session-dependence audit (2026-07-24) — what may move behind the pooler
+
+Transaction pooling breaks any state that must survive **between** statements on the
+same connection. Full audit of `apps/` (grep: `pg_advisory*`, `LISTEN`/`NOTIFY`,
+`SET`/`SET LOCAL`, `new Client(`, `new Pool(`):
+
+| Consumer | Session state | Verdict |
+|---|---|---|
+| `apps/worker/src/crawl.ts:501` (LISTEN client) | `LISTEN crawl_job_enqueued` — persists across statements | **DIRECT `:5432`** — already uses `DATABASE_URL_DIRECT` ✅ |
+| `apps/worker/src/rent-estimator.ts:762` (LISTEN client) | `LISTEN rent_job_enqueued` | **DIRECT `:5432`** — already uses `DATABASE_URL_DIRECT` ✅ |
+| `apps/one/src/scripts/migrate.ts`, `migrate-status.ts` | one long DDL transaction; out-of-band files use `CREATE INDEX CONCURRENTLY` (cannot run in a transaction) | **DIRECT `:5432`** — fixed 2026-07-24 to prefer `DATABASE_URL_DIRECT` |
+| `api/v1/listings`, `api/properties/export`, `api/properties/query`, `worker/digest.ts` | `SET LOCAL statement_timeout` | **POOLABLE** — every one is inside an explicit `BEGIN`/`COMMIT`, and `SET LOCAL` is transaction-scoped, which transaction pooling preserves ✅ |
+| All other `new Pool(...)` (`apps/one/lib/db`, `apps/two/lib/db`, worker pools: alerts, digest, media-health, ml-scheduler, index-snapshot) | none | **POOLABLE** ✅ |
+
+**Advisory locks: none in the codebase.** No `LISTEN`/`NOTIFY` outside the two dedicated
+`Client`s above. Therefore every pooled consumer can move to `:6432`; the only direct
+consumers are the two LISTEN clients and the migration scripts, all of which read
+`DATABASE_URL_DIRECT`.
+
 ### Configuration
 
 PgBouncer runs in **transaction mode** on `:6432`. Config at `ops/pgbouncer/pgbouncer.ini`:
@@ -241,6 +281,21 @@ Zero-scan indexes at the time of measurement (NOT proof of unused -- see Section
 ---
 
 ## 5. Index Audit Protocol
+
+> **GATE — window opened 2026-07-24 18:59 UTC.** `oper-pg-stat.timer` is **enabled and
+> active**; the first snapshot captured 182 index rows + 50 statement rows. Do **not**
+> drop any index before **2026-07-31** (≥2 weekly snapshots). Until then `idx_scan`
+> readings are post-reboot artifacts, not evidence. Check readiness with:
+> `SELECT count(DISTINCT captured_at) FROM perf_index_scan_history;` (need ≥2).
+>
+> Known candidates awaiting the window (non-constraint, >50MB, zero scans at capture):
+> `idx_listings_type_sale_price_geom` (159MB), `idx_mv_cluster_tiles_zoom_geom` (158MB),
+> `idx_parcels_addr` (151MB), `idx_listings_lat_lon` (143MB). **Never** drop
+> `listings_addr_type_saletype_uniq` / `uq_mv_cluster_tiles_zoom_xy` (UNIQUE = integrity).
+>
+> Also queued for this step: an index supporting the sitemap's property sort
+> (`ORDER BY rent_price_ratio DESC NULLS LAST, last_seen_at DESC` over ~450k rows,
+> ~18s cold) — see plan Task 5 Step 3.
 
 Execute when the >=7-day measurement window (Section 1) is complete.
 

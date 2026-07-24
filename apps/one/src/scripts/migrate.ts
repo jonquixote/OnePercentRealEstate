@@ -39,7 +39,12 @@ const REPO_ROOT = findRepoRoot(SCRIPT_DIR);
 loadEnvFile(path.join(REPO_ROOT, '.env'));
 
 const MIGRATIONS_DIR = path.join(REPO_ROOT, 'infrastructure', 'migrations');
-const DATABASE_URL = process.env.DATABASE_URL;
+// Migrations MUST bypass PgBouncer: each file runs as ONE long transaction of
+// DDL, and out-of-band files use CREATE INDEX CONCURRENTLY (which cannot run
+// inside a transaction at all). Under transaction pooling consecutive
+// statements can land on different server connections. DATABASE_URL_DIRECT
+// always points at Postgres :5432; fall back when it isn't set (local dev).
+const DATABASE_URL = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL is not set. Create a .env file in the project root or set the env var.');

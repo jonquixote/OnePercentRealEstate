@@ -60,3 +60,6 @@ rclone.conf
 skills
 monitoring/alertmanager/alertmanager.runtime.yml
 apps/worker/dist/
+
+# PgBouncer userlist contains PLAINTEXT role passwords (SCRAM backend) — never commit.
+ops/pgbouncer/userlist.txt
