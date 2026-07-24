@@ -1,0 +1,11 @@
+# FIXTURE — deliberately broken systemd unit. Must be CAUGHT by ops-lint.
+[Unit]
+Description=Broken fixture unit
+
+[Service]
+Type=simple
+ExecStart=/bin/true
+ThisDirectiveDoesNotExist=42
+
+[Install]
+WantedBy=multi-user.target
