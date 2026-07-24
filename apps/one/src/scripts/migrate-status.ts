@@ -1,6 +1,8 @@
 import pg from 'pg';
 
-const DATABASE_URL = process.env.DATABASE_URL;
+// Read the migration ledger straight from Postgres (:5432), not through
+// PgBouncer — status must reflect the real server, and it mirrors migrate.ts.
+const DATABASE_URL = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL is not set. Run with: npm run migrate:status (loads .env automatically)');

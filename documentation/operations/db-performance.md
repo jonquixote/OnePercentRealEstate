@@ -85,6 +85,25 @@ The `_old` table was cruft (pre-partition migration remnant). It does not exist 
 
 ## 3. PgBouncer Runbook
 
+### 3.0 Session-dependence audit (2026-07-24) — what may move behind the pooler
+
+Transaction pooling breaks any state that must survive **between** statements on the
+same connection. Full audit of `apps/` (grep: `pg_advisory*`, `LISTEN`/`NOTIFY`,
+`SET`/`SET LOCAL`, `new Client(`, `new Pool(`):
+
+| Consumer | Session state | Verdict |
+|---|---|---|
+| `apps/worker/src/crawl.ts:501` (LISTEN client) | `LISTEN crawl_job_enqueued` — persists across statements | **DIRECT `:5432`** — already uses `DATABASE_URL_DIRECT` ✅ |
+| `apps/worker/src/rent-estimator.ts:762` (LISTEN client) | `LISTEN rent_job_enqueued` | **DIRECT `:5432`** — already uses `DATABASE_URL_DIRECT` ✅ |
+| `apps/one/src/scripts/migrate.ts`, `migrate-status.ts` | one long DDL transaction; out-of-band files use `CREATE INDEX CONCURRENTLY` (cannot run in a transaction) | **DIRECT `:5432`** — fixed 2026-07-24 to prefer `DATABASE_URL_DIRECT` |
+| `api/v1/listings`, `api/properties/export`, `api/properties/query`, `worker/digest.ts` | `SET LOCAL statement_timeout` | **POOLABLE** — every one is inside an explicit `BEGIN`/`COMMIT`, and `SET LOCAL` is transaction-scoped, which transaction pooling preserves ✅ |
+| All other `new Pool(...)` (`apps/one/lib/db`, `apps/two/lib/db`, worker pools: alerts, digest, media-health, ml-scheduler, index-snapshot) | none | **POOLABLE** ✅ |
+
+**Advisory locks: none in the codebase.** No `LISTEN`/`NOTIFY` outside the two dedicated
+`Client`s above. Therefore every pooled consumer can move to `:6432`; the only direct
+consumers are the two LISTEN clients and the migration scripts, all of which read
+`DATABASE_URL_DIRECT`.
+
 ### Configuration
 
 PgBouncer runs in **transaction mode** on `:6432`. Config at `ops/pgbouncer/pgbouncer.ini`:
