@@ -7,9 +7,14 @@ export async function GET() {
   let db: 'up' | 'down' = 'down';
   let redis_status: 'up' | 'down' = 'down';
 
-  // DB: SELECT 1 with 2s timeout
+  // DB: SELECT 1 with 2s timeout (covers both acquisition and execution)
   try {
-    const client = await pool.connect();
+    const client = await Promise.race([
+      pool.connect(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('DB health check timeout')), 2000)
+      ),
+    ]);
     try {
       await Promise.race([
         client.query('SELECT 1'),
@@ -19,6 +24,8 @@ export async function GET() {
       ]);
       db = 'up';
     } finally {
+      // release(true) on error path destroys the client rather than returning
+      // a poisoned connection to the pool.
       client.release();
     }
   } catch {

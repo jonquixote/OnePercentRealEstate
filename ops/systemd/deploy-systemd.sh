@@ -115,8 +115,10 @@ smoke_test() {
     local check="$1"
     local detail="$2"
     echo "  SMOKE FAIL: ${check} — ${detail}"
+    # Telegram outage must not fail an otherwise-healthy deploy.
     if [[ -x "$notify_script" ]]; then
-      "$notify_script" --key "smoke-${check}" "RED ${box}: deploy smoke failed — ${check}: ${detail}"
+      "$notify_script" --key "smoke-${check}" "RED ${box}: deploy smoke failed — ${check}: ${detail}" \
+        || echo "WARN: failed to send smoke alert for ${check}" >&2
     fi
     failed=1
   }
@@ -125,7 +127,8 @@ smoke_test() {
     local check="$1"
     echo "  SMOKE PASS: ${check}"
     if [[ -x "$notify_script" ]]; then
-      "$notify_script" --resolved --key "smoke-${check}" "OK ${box}: deploy smoke passed — ${check}"
+      "$notify_script" --resolved --key "smoke-${check}" "OK ${box}: deploy smoke passed — ${check}" \
+        || echo "WARN: failed to send smoke resolution for ${check}" >&2
     fi
   }
 
@@ -144,7 +147,7 @@ smoke_test() {
   # 2. /sitemap.xml — must be XML with <urlset
   local sitemap_ct sitemap_body
   sitemap_ct=$(curl -sf -m5 -o /dev/null -w '%{content_type}' http://127.0.0.1:3001/sitemap.xml 2>/dev/null || echo "")
-  sitemap_body=$(curl -sf -m5 http://127.0.0.1:3001/sitemap.xml 2>/dev/null | head -5 || echo "")
+  sitemap_body=$(curl -sf -m5 http://127.0.0.1:3001/sitemap.xml 2>/dev/null | sed -n '1,5p' || echo "")
   if echo "$sitemap_ct" | grep -qi 'xml' && echo "$sitemap_body" | grep -q '<urlset'; then
     pass "sitemap"
   else

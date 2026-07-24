@@ -56,8 +56,8 @@ else
   check_pass "disk-root"
 fi
 
-# --- oper-* units ---
-for unit in $(systemctl list-units --type=service --plain --no-legend | awk '/oper-/ {print $1}'); do
+# --- oper-* units (include inactive/failed so they surface as failures) ---
+for unit in $(systemctl list-units --type=service --all --plain --no-legend | awk '/^  oper-/ {print $1}'); do
   key="unit-${unit}"
   if systemctl is-active --quiet "$unit" 2>/dev/null; then
     check_pass "$key"

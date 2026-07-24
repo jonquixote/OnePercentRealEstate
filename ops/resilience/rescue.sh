@@ -63,10 +63,18 @@ done
 # ---------------------------------------------------------------------------
 # State file — tracks progress so re-runs skip completed steps
 # ---------------------------------------------------------------------------
+
+# Validate DEAD_UUID: it flows into a filesystem path, so reject anything that
+# isn't a hex-or-dash UUID. Prevents /../../etc-style overrides.
+if [[ ! "$DEAD_UUID" =~ ^[0-9A-Fa-f-]+$ ]]; then
+  printf 'Invalid dead-server UUID: %s\n' "$DEAD_UUID" >&2
+  exit 2
+fi
+
 STATE_DIR="${TMPDIR:-/tmp}/rescue-state-${DEAD_UUID}"
 STATE_FILE="$STATE_DIR/progress"
+umask 077
 mkdir -p "$STATE_DIR"
-chmod 700 "$STATE_DIR"
 touch "$STATE_FILE"
 # Deliberately not removed on exit: state must survive interruption so a
 # re-run of rescue.sh resumes from the last completed step. Clean up
@@ -205,7 +213,7 @@ if state_get "step2_done"; then
 else
   printf "  \033[1;31m>>> CLASSIFIER-GATED — paste this into your shell with ! prefix: <<<\033[0m\n"
   printf "\n"
-  printf "    ! upctl server stop $DEAD_UUID\n"
+  printf '    ! upctl server stop %s\n' "$DEAD_UUID"
   printf "\n"
   if [[ "$MODE" == "plan-only" ]]; then
     info "(plan-only: not executing)"
@@ -440,7 +448,7 @@ step 10 "[USER] Delete dead box (classifier-gated)"
 
 printf "  \033[1;31m>>> CLASSIFIER-GATED — paste this into your shell with ! prefix: <<<\033[0m\n"
 printf "\n"
-printf "    ! upctl server delete $DEAD_UUID\n"
+printf '    ! upctl server delete %s\n' "$DEAD_UUID"
 printf "\n"
 printf "  \033[1;33mWARNING: Only delete after new box has been stable for 24+ hours.\033[0m\n"
 printf "  The old box serves as fallback.\n"
@@ -465,6 +473,6 @@ echo ""
 echo "  Remaining manual steps:"
 echo "    1. Verify app is serving: curl -s https://one.octavo.press/api/health"
 echo "    2. If first-time floating IP: update DNS A records → floating IP"
-echo "    3. After 24h stability: ! upctl server delete $DEAD_UUID"
+echo "    3. After 24h stability: ! upctl server delete ${DEAD_UUID}"
 echo "    4. Restart side scraper if needed: ! upctl server start 003b3b44"
 echo ""

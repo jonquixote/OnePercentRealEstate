@@ -95,13 +95,14 @@ ATTACHED_SERVER=$(upctl ip-address list --output json 2>/dev/null | jq -r \
 if [[ "${ATTACHED_SERVER}" == "${PROD_SERVER_UUID}" ]]; then
   echo "    Already attached to ${PROD_SERVER_UUID}. Nothing to do."
 else
-  # Get the server's private-network MAC address (needed for ip-address modify)
+  # Get the server's public-network MAC address (floating IPs attach to the
+  # public interface per UpCloud's ip-address modify --mac semantics)
   SERVER_MAC=$(upctl server show "${PROD_SERVER_UUID}" --output json 2>/dev/null | \
-    jq -r '.networking.interfaces[]? | select(.type == "private") | .mac_address // empty' | head -1)
+    jq -r '.networking.interfaces[]? | select(.type == "public") | .mac_address // empty' | head -1)
 
   if [[ -z "${SERVER_MAC}" ]]; then
     echo "ERROR: Could not determine MAC address for server ${PROD_SERVER_UUID}." >&2
-    echo "The server may not have a private network interface." >&2
+    echo "The server may not have a public network interface." >&2
     exit 1
   fi
 

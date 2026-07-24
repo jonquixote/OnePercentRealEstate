@@ -31,7 +31,12 @@ echo "Created snapshot: ${TITLE} (disk: ${BOOT_DISK})"
 
 # Prune old snapshots (keep >=3 newest, remove those older than RETENTION_DAYS)
 BACKUPS=$(upctl server storage list "$PROD_SERVER_UUID" --output json 2>/dev/null | \
-  jq -r '[.[] | select(.description | startswith("oper-auto-"))] | sort_by(.created_at) | reverse' 2>/dev/null || echo "[]")
+  jq -r '[.[] | select(.description | startswith("oper-auto-"))] | sort_by(.created_at) | reverse' 2>/dev/null)
+
+if [[ -z "$BACKUPS" || -z "$(echo "$BACKUPS" | jq -r 'length' 2>/dev/null)" ]]; then
+  "$NOTIFY" --key "snapshot-prune" "RED ${BOX}: snapshot - failed to list backups for pruning"
+  exit 1
+fi
 
 COUNT=$(echo "$BACKUPS" | jq 'length')
 if [[ $COUNT -gt $RETENTION_MIN ]]; then
@@ -48,7 +53,9 @@ if [[ $COUNT -gt $RETENTION_MIN ]]; then
 
     if [[ $BACKUP_EPOCH -lt $CUTOFF && $BACKUP_EPOCH -gt 0 ]]; then
       echo "Pruning old snapshot: ${DESC} (${UUID}, created ${CREATED})"
-      upctl storage delete "$UUID" --delete-backups >/dev/null 2>&1 || true
+      if ! upctl storage delete "$UUID" --delete-backups >/dev/null 2>&1; then
+        "$NOTIFY" --key "snapshot-prune" "RED ${BOX}: snapshot - failed to prune ${DESC} (${UUID})"
+      fi
     fi
   done
 fi
