@@ -12,6 +12,12 @@ vi.mock('@/lib/db', () => ({
     default: { connect: (...args: unknown[]) => mockConnect(...args) },
 }));
 
+// The sitemap wraps its DB queries in cache.cached(); pass through to the loader
+// so these tests exercise the query logic (redis is not available under test).
+vi.mock('@/lib/cache', () => ({
+    cached: <T>(_key: string, _ttl: number, fn: () => Promise<T>) => fn(),
+}));
+
 // The sitemap issues its queries in a fixed order: markets, then properties.
 function mockQueries(marketRows: Record<string, unknown>[], propertyRows: Record<string, unknown>[]) {
     mockQuery

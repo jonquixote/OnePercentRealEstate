@@ -145,10 +145,12 @@ smoke_test() {
     fail "health" "curl failed"
   fi
 
-  # 2. /sitemap.xml — must be XML with <urlset
+  # 2. /sitemap.xml — must be XML with <urlset. Generous timeout: a cold-cache
+  #    generation builds ~31k URLs from two large queries (~20s); it is cached
+  #    for an hour after, but the first hit post-deploy pays the full cost.
   local sitemap_ct sitemap_body
-  sitemap_ct=$(curl -sf -m5 -o /dev/null -w '%{content_type}' http://127.0.0.1:3001/sitemap.xml 2>/dev/null || echo "")
-  sitemap_body=$(curl -sf -m5 http://127.0.0.1:3001/sitemap.xml 2>/dev/null | sed -n '1,5p' || echo "")
+  sitemap_ct=$(curl -sf -m45 -o /dev/null -w '%{content_type}' http://127.0.0.1:3001/sitemap.xml 2>/dev/null || echo "")
+  sitemap_body=$(curl -sf -m45 http://127.0.0.1:3001/sitemap.xml 2>/dev/null | sed -n '1,5p' || echo "")
   if echo "$sitemap_ct" | grep -qi 'xml' && echo "$sitemap_body" | grep -q '<urlset'; then
     pass "sitemap"
   else
