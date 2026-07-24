@@ -1,0 +1,10 @@
+[Unit]
+Description=Run healthcheck every 2 minutes
+
+[Timer]
+OnUnitActiveSec=120
+Persistent=true
+Unit=oper-healthcheck.service
+
+[Install]
+WantedBy=timers.target
