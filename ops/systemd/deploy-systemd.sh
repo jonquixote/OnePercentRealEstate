@@ -137,6 +137,14 @@ smoke_test() {
     fi
   }
 
+  # Wait for the app to accept connections after restart — a cold curl races
+  # Next standalone's startup and gives a spurious "health curl failed".
+  echo "  Waiting for oper-app to become ready..."
+  for _i in $(seq 1 30); do
+    curl -s -m3 -o /dev/null http://127.0.0.1:3001/api/health 2>/dev/null && break
+    sleep 1
+  done
+
   # 1. HTTP health endpoint
   local health_resp
   if health_resp=$(curl -sf -m5 http://127.0.0.1:3001/api/health 2>/dev/null); then
@@ -177,11 +185,14 @@ smoke_test() {
     fail "oper-two" "curl to port 3002 failed"
   fi
 
-  # 5. scraper (FastAPI on port 8001) — 200
-  if curl -sf -m5 http://127.0.0.1:8001/ >/dev/null 2>&1; then
+  # 5. scraper (FastAPI on port 8001) — REACHABLE. The root path has no route
+  #    (404 is normal for FastAPI); "up" means the port answers HTTP at all, so
+  #    accept any status code (curl without -f succeeds on 404). Only a
+  #    connection failure (port down) is a real failure.
+  if curl -s -m5 -o /dev/null http://127.0.0.1:8001/ 2>/dev/null; then
     pass "scraper"
   else
-    fail "scraper" "curl to port 8001 failed"
+    fail "scraper" "port 8001 not answering"
   fi
 
   # 6. property page — known property has non-generic title
