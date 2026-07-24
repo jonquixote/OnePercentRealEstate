@@ -67,9 +67,13 @@ build_node() {
   # without sourcing .env here, Stripe's publishable key (and any other
   # NEXT_PUBLIC config) ships as undefined.
   # systemd-run --scope creates a transient cgroup so a runaway build is
-  # reclaimed/killed instead of OOMing the live stack.
+  # reclaimed/killed instead of OOMing the live stack. Only cgroup memory
+  # properties are valid on a scope — `-p Nice=`/`-p IOWeight=` are rejected
+  # ("Unknown assignment: Nice=10") and abort the whole deploy, so priority is
+  # applied by wrapping the command in nice/ionice instead.
   systemd-run --scope \
-    -p MemoryMax=6G -p MemoryHigh=5G -p Nice=10 -p IOWeight=50 \
+    -p MemoryMax=6G -p MemoryHigh=5G \
+    nice -n 10 ionice -c2 -n5 \
     bash -c '
       set -euo pipefail
       set -a
