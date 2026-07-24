@@ -60,37 +60,42 @@ bash "$(dirname "$0")/gen-alertmanager.sh"
 
 # Build steps
 build_node() {
-  echo "--- Building Node.js (pnpm) ---"
+  echo "--- Building Node.js (pnpm) under memory cap ---"
   # NEXT_PUBLIC_* vars are baked into the client bundle AT BUILD TIME —
   # without sourcing .env here, Stripe's publishable key (and any other
   # NEXT_PUBLIC config) ships as undefined.
-  set -a; . ./.env; set +a
-  pnpm install --frozen-lockfile
-  pnpm build
+  # systemd-run --scope creates a transient cgroup so a runaway build is
+  # reclaimed/killed instead of OOMing the live stack.
+  systemd-run --scope \
+    -p MemoryMax=6G -p MemoryHigh=5G -p Nice=10 -p IOWeight=50 \
+    bash -c '
+      set -euo pipefail
+      set -a
+      . ./.env
+      set +a
+      pnpm install --frozen-lockfile
+      pnpm build
 
-  # Copy static assets into standalone directories (required for Next.js standalone mode).
-  # Standalone output omits both .next/static AND public/ — a hand rebuild that
-  # skips this copy serves HTML whose every chunk 404s (two.octavo.press, 2026-07-18).
-  for app in one two; do
-    src="apps/$app/.next/static"
-    dst="apps/$app/.next/standalone/apps/$app/.next/static"
-    if [[ -d "$src" ]]; then
-      echo "  Copying static assets: $src -> $dst"
-      rm -rf "$dst"
-      mkdir -p "$dst"
-      cp -a "$src/." "$dst/"
-    fi
-    pub="apps/$app/public"
-    pubdst="apps/$app/.next/standalone/apps/$app/public"
-    if [[ -d "$pub" ]]; then
-      echo "  Copying public assets: $pub -> $pubdst"
-      rm -rf "$pubdst"
-      mkdir -p "$pubdst"
-      # `/.` form copies contents and tolerates an empty dir (a bare glob under
-      # `set -e` aborts the script before any restart runs).
-      cp -a "$pub/." "$pubdst/"
-    fi
-  done
+      # Copy static assets into standalone directories (required for Next.js standalone mode).
+      for app in one two; do
+        src="apps/$app/.next/static"
+        dst="apps/$app/.next/standalone/apps/$app/.next/static"
+        if [[ -d "$src" ]]; then
+          echo "  Copying static assets: $src -> $dst"
+          rm -rf "$dst"
+          mkdir -p "$dst"
+          cp -a "$src/." "$dst/"
+        fi
+        pub="apps/$app/public"
+        pubdst="apps/$app/.next/standalone/apps/$app/public"
+        if [[ -d "$pub" ]]; then
+          echo "  Copying public assets: $pub -> $pubdst"
+          rm -rf "$pubdst"
+          mkdir -p "$pubdst"
+          cp -a "$pub/." "$pubdst/"
+        fi
+      done
+    '
 }
 
 build_ml() {

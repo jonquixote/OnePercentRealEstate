@@ -12,6 +12,7 @@ EnvironmentFile=-/etc/oper-role-worker.env
 ExecStart=/usr/bin/node apps/worker/dist/media-health.js
 Restart=on-failure
 RestartSec=5
+MemoryHigh=256M
 MemoryMax=384M
 
 [Install]

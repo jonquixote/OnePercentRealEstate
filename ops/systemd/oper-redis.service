@@ -13,6 +13,7 @@ ExecStart=/usr/bin/redis-server /etc/redis/redis.conf
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
+MemoryHigh=768M
 MemoryMax=1G
 
 [Install]
