@@ -104,6 +104,78 @@ build_ml() {
   services/ml/.venv/bin/pip install -q -r services/ml/requirements.txt
 }
 
+# Post-deploy smoke gate — fail-closed. Any failure = non-zero exit.
+smoke_test() {
+  echo "--- Running post-deploy smoke tests ---"
+  local failed=0
+  local notify_script="$(dirname "$0")/../monitoring/notify-telegram.sh"
+  local box=$(hostname)
+
+  fail() {
+    local check="$1"
+    local detail="$2"
+    echo "  SMOKE FAIL: ${check} — ${detail}"
+    if [[ -x "$notify_script" ]]; then
+      "$notify_script" --key "smoke-${check}" "RED ${box}: deploy smoke failed — ${check}: ${detail}"
+    fi
+    failed=1
+  }
+
+  pass() {
+    local check="$1"
+    echo "  SMOKE PASS: ${check}"
+    if [[ -x "$notify_script" ]]; then
+      "$notify_script" --resolved --key "smoke-${check}" "OK ${box}: deploy smoke passed — ${check}"
+    fi
+  }
+
+  # 1. HTTP health endpoint
+  local health_resp
+  if health_resp=$(curl -sf -m5 http://127.0.0.1:3001/api/health 2>/dev/null); then
+    if echo "$health_resp" | grep -q '"status":"ok"'; then
+      pass "health"
+    else
+      fail "health" "status not ok: ${health_resp}"
+    fi
+  else
+    fail "health" "curl failed"
+  fi
+
+  # 2. /sitemap.xml — must be XML with <urlset
+  local sitemap_ct sitemap_body
+  sitemap_ct=$(curl -sf -m5 -o /dev/null -w '%{content_type}' http://127.0.0.1:3001/sitemap.xml 2>/dev/null || echo "")
+  sitemap_body=$(curl -sf -m5 http://127.0.0.1:3001/sitemap.xml 2>/dev/null | head -5 || echo "")
+  if echo "$sitemap_ct" | grep -qi 'xml' && echo "$sitemap_body" | grep -q '<urlset'; then
+    pass "sitemap"
+  else
+    fail "sitemap" "content-type=${sitemap_ct}, body snippet: ${sitemap_body:0:100}"
+  fi
+
+  # 3. /robots.txt — 200 with Disallow
+  local robots_body
+  robots_body=$(curl -sf -m5 http://127.0.0.1:3001/robots.txt 2>/dev/null || echo "")
+  if echo "$robots_body" | grep -q 'Disallow'; then
+    pass "robots"
+  else
+    fail "robots" "missing Disallow directive"
+  fi
+
+  # 4. oper-two / — 200
+  if curl -sf -m5 http://127.0.0.1:3002/ >/dev/null 2>&1; then
+    pass "oper-two"
+  else
+    fail "oper-two" "curl to port 3002 failed"
+  fi
+
+  echo ""
+  if [[ $failed -ne 0 ]]; then
+    echo "=== SMOKE GATE FAILED — deploy marked failed (non-zero exit) ==="
+    echo "Fix the failing checks and re-deploy."
+    exit 1
+  fi
+  echo "=== Smoke tests passed ==="
+}
+
 # If specific services given, restart only those
 if [[ $# -gt 0 ]]; then
   targets=()
@@ -142,3 +214,5 @@ fi
 echo ""
 echo "=== Deploy complete ==="
 "$0" status
+
+smoke_test
