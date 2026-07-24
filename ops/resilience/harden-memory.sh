@@ -55,8 +55,7 @@ max_connections = 100
 "
 
 if [ -f "$PG_CONF_TARGET" ]; then
-  EXISTING_CONTENT=$(cat "$PG_CONF_TARGET")
-  if [ "$EXISTING_CONTENT" = "$PG_CONF_CONTENT" ]; then
+  if printf '%s\n' "$PG_CONF_CONTENT" | cmp -s - "$PG_CONF_TARGET"; then
     skip "Postgres conf drop-in already up to date at $PG_CONF_TARGET"
   else
     info "Updating $PG_CONF_TARGET"
@@ -142,8 +141,8 @@ add_memory_high "$SERVICE_DIR/oper-two.service"        "768M"  "1G"
 # ML service — already has MemoryMax=8G (P4 reclaimed budget)
 add_memory_high "$SERVICE_DIR/oper-ml.service"         "6G"    "8G"
 
-# Scraper — already has both MemoryHigh + MemoryMax, skip
-skip "oper-scraper.service already has MemoryHigh=1536M + MemoryMax=2G"
+# Scraper — verify (idempotent, self-corrects on drift)
+add_memory_high "$SERVICE_DIR/oper-scraper.service" "1536M" "2G"
 
 # Workers — standard sizing (384M high / 512M max)
 add_memory_high "$SERVICE_DIR/oper-worker.service"              "384M" "512M"
@@ -206,8 +205,7 @@ vm.overcommit_ratio = 80
 "
 
 if [ -f "$SYSCTL_CONF" ]; then
-  EXISTING=$(cat "$SYSCTL_CONF")
-  if [ "$EXISTING" = "$SYSCTL_CONTENT" ]; then
+  if printf '%s\n' "$SYSCTL_CONTENT" | cmp -s - "$SYSCTL_CONF"; then
     skip "sysctl conf already up to date at $SYSCTL_CONF"
   else
     info "Updating $SYSCTL_CONF"

@@ -69,6 +69,7 @@ build_node() {
   systemd-run --scope \
     -p MemoryMax=6G -p MemoryHigh=5G -p Nice=10 -p IOWeight=50 \
     bash -c '
+      set -euo pipefail
       set -a
       . ./.env
       set +a

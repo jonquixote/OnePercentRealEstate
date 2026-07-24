@@ -63,11 +63,14 @@ done
 # ---------------------------------------------------------------------------
 # State file — tracks progress so re-runs skip completed steps
 # ---------------------------------------------------------------------------
-STATE_DIR="/tmp/rescue-state-$$"
+STATE_DIR="${TMPDIR:-/tmp}/rescue-state-${DEAD_UUID}"
 STATE_FILE="$STATE_DIR/progress"
 mkdir -p "$STATE_DIR"
+chmod 700 "$STATE_DIR"
 touch "$STATE_FILE"
-trap 'rm -rf "$STATE_DIR"' EXIT
+# Deliberately not removed on exit: state must survive interruption so a
+# re-run of rescue.sh resumes from the last completed step. Clean up
+# manually (rm -rf) once the rescue is fully confirmed done.
 
 state_get() { grep -q "^$1$" "$STATE_FILE" 2>/dev/null; }
 state_set() { echo "$1" >> "$STATE_FILE"; }
@@ -110,10 +113,10 @@ print_cmd() {
 
 run_cmd() {
   if [[ "$MODE" == "plan-only" ]]; then
-    printf "  \033[1;37m$\033[0m %s\n" "$1"
+    printf "  \033[1;37m$\033[0m %s\n" "$*"
     return 0
   fi
-  bash -c "$1"
+  "$@"
 }
 
 require_upctl() {
@@ -200,16 +203,15 @@ step 2 "Stop the dead box (classifier-gated)"
 if state_get "step2_done"; then
   skip "Already completed"
 else
-  echo ""
-  echo "  \033[1;31m>>> CLASSIFIER-GATED — paste this into your shell with ! prefix: <<<\033[0m"
-  echo ""
-  echo "    ! upctl server stop $DEAD_UUID"
-  echo ""
+  printf "  \033[1;31m>>> CLASSIFIER-GATED — paste this into your shell with ! prefix: <<<\033[0m\n"
+  printf "\n"
+  printf "    ! upctl server stop $DEAD_UUID\n"
+  printf "\n"
   if [[ "$MODE" == "plan-only" ]]; then
     info "(plan-only: not executing)"
   else
     if confirm "Stop dead box $DEAD_UUID?"; then
-      run_cmd "upctl server stop $DEAD_UUID"
+      run_cmd upctl server stop "$DEAD_UUID"
       ok "Dead box stopped"
       state_set "step2_done"
     else
@@ -276,7 +278,7 @@ else
   else
     info "Waiting for SSH on $NEW_IP..."
     for i in $(seq 1 40); do
-      if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no root@"$NEW_IP" 'echo ok' &>/dev/null; then
+      if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new root@"$NEW_IP" 'echo ok' &>/dev/null; then
         ok "SSH is up"
         state_set "step4_done"
         break
@@ -370,7 +372,9 @@ else
     info "(plan-only: not attaching)"
   else
     if confirm "Attach floating IP to $NEW_UUID?"; then
-      ssh root@"$NEW_IP" 'bash -s' < "$REPO_ROOT/ops/resilience/attach-floating-ip.sh" "$NEW_UUID"
+      ATTACH_OUTPUT=$(ssh root@"$NEW_IP" 'bash -s' < "$REPO_ROOT/ops/resilience/attach-floating-ip.sh" "$NEW_UUID")
+      echo "$ATTACH_OUTPUT"
+      FLOAT_IP=$(printf '%s\n' "$ATTACH_OUTPUT" | grep -oE 'FLOATING IP READY: [0-9.]+' | awk '{print $NF}')
       ok "Floating IP attached"
       state_set "step7_done"
     else
@@ -434,13 +438,12 @@ fi
 # =========================================================================
 step 10 "[USER] Delete dead box (classifier-gated)"
 
-echo ""
-echo "  \033[1;31m>>> CLASSIFIER-GATED — paste this into your shell with ! prefix: <<<\033[0m"
-echo ""
-echo "    ! upctl server delete $DEAD_UUID"
-echo ""
-echo "  \033[1;33mWARNING: Only delete after new box has been stable for 24+ hours.\033[0m"
-echo "  The old box serves as fallback."
+printf "  \033[1;31m>>> CLASSIFIER-GATED — paste this into your shell with ! prefix: <<<\033[0m\n"
+printf "\n"
+printf "    ! upctl server delete $DEAD_UUID\n"
+printf "\n"
+printf "  \033[1;33mWARNING: Only delete after new box has been stable for 24+ hours.\033[0m\n"
+printf "  The old box serves as fallback.\n"
 
 if [[ "$MODE" == "plan-only" ]]; then
   info "(plan-only: not deleting)"
@@ -456,6 +459,7 @@ echo "============================================================"
 echo ""
 echo "  New server:  $NEW_UUID"
 echo "  New IP:      $NEW_IP"
+echo "  Floating IP: ${FLOAT_IP:-<not attached>}"
 echo "  Dead box:    $DEAD_UUID (stopped, ready for deletion)"
 echo ""
 echo "  Remaining manual steps:"

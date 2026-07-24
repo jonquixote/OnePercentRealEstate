@@ -10,9 +10,10 @@
 #
 #     Layer 1 — authorized_keys file (/root/.ssh/authorized_keys)
 #               The immediate SSH login key. Wiped on reboot was the root cause.
-#     Layer 2 — UpCloud stored SSH key (upctl ssh-key)
-#               Account-level key attached at `upctl server create --ssh-keys`
-#               and any rebuild, so a fresh box always gets it.
+#     Layer 2 — UpCloud Control Panel SSH key registration
+#               Ensure the pubkey is registered at hub.upcloud.com so
+#               `upctl server create --ssh-keys <file>` can use it on rebuilds.
+#               (SSH keys are managed via the Control Panel, not the CLI.)
 #     Layer 3 — cloud-init user-data snippet (/etc/cloud/cloud.cfg.d/99-oper-keys.cfg)
 #               Re-applies the key on every cloud-init run (boot/rebuild).
 #               ssh_deletekeys: false guarantees cloud-init never wipes it.
@@ -124,60 +125,19 @@ layer_authorized_keys() {
 
 layer_upcloud() {
   local key="$1"
-  local name="onepercent-deploy-202606"
 
-  if ! command -v upctl >/dev/null 2>&1; then
-    echo "Layer 2 (upcloud ssh-key): SKIP (upctl not installed on this host)"
-    return 0
-  fi
+  # SSH keys are managed via the UpCloud Control Panel, not the CLI.
+  # The --ssh-keys flag on `upctl server create` accepts a file path or
+  # raw public key content. This layer documents that the key should be
+  # registered in the Control Panel so it's available for future server
+  # creates — it cannot be automated via upctl.
 
-  # Make sure upctl is actually authenticated; an auth error is a real failure.
-  if ! upctl ssh-key list >/dev/null 2>&1; then
-    echo "ERROR (layer 2): 'upctl ssh-key list' failed — check upctl auth." >&2
-    return 1
-  fi
-
-  # Does a key with this name already exist?
-  if upctl ssh-key list 2>/dev/null | grep -Eq "(^|\s)${name}(\s|$)"; then
-    # Key exists. Verify the stored body matches; if not, delete+recreate.
-    local stored
-    stored="$(upctl ssh-key list 2>/dev/null | awk -v n="$name" '$0 ~ n {print $NF}' | head -n1)"
-    # The list output is human-readable; compare bodies defensively.
-    local body_stored body_local
-    body_stored="$(printf '%s' "$stored" | awk '{print $1 " " $2}')"
-    body_local="$(key_body "$key")"
-
-    if [[ "$body_stored" == "$body_local" ]]; then
-      echo "Layer 2 (upcloud ssh-key): SKIP (already stored, body matches)"
-      return 0
-    fi
-
-    # Mismatch: delete and recreate so the stored key tracks the real one.
-    if ! upctl ssh-key delete "$name" >/dev/null 2>&1; then
-      echo "ERROR (layer 2): stored key body mismatch and delete failed." >&2
-      return 1
-    fi
-    if ! upctl ssh-key create --name "$name" --ssh-key "$key" >/dev/null 2>&1; then
-      echo "ERROR (layer 2): recreate after delete failed." >&2
-      return 1
-    fi
-    echo "Layer 2 (upcloud ssh-key): UPDATED (body mismatch → delete+recreate)"
-    return 0
-  fi
-
-  # Not present: create.
-  if upctl ssh-key create --name "$name" --ssh-key "$key" >/dev/null 2>&1; then
-    echo "Layer 2 (upcloud ssh-key): UPDATED (created)"
-    return 0
-  fi
-
-  # Race / unknown error. Re-check: maybe another process created it concurrently.
-  if upctl ssh-key list 2>/dev/null | grep -Eq "(^|\s)${name}(\s|$)"; then
-    echo "Layer 2 (upcloud ssh-key): SKIP (create lost a race but key now present)"
-    return 0
-  fi
-  echo "ERROR (layer 2): 'upctl ssh-key create' failed and key is not present." >&2
-  return 1
+  echo "Layer 2 (upcloud ssh-key): INFO"
+  echo "  SSH keys are managed via the UpCloud Control Panel (not the CLI)."
+  echo "  Ensure the following pubkey is registered at https://hub.upcloud.com/account/ssh-keys:"
+  echo "    $key"
+  echo "  The --ssh-keys flag on 'upctl server create' accepts a file path to this key."
+  return 0
 }
 
 # ---------------------------------------------------------------------------

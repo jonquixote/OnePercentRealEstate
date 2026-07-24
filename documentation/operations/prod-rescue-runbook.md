@@ -51,12 +51,12 @@ upctl server show 009821f6 --output json | jq '.state'
 # Find latest snapshot
 upctl server storage list 009821f6 --output json | jq 'sort_by(.created_at) | last | .uuid'
 
-# Create rescue server
+# Create rescue server (--ssh-keys accepts a file path, not a named key)
 upctl server create \
   --plan PREMIUM-2xCPU-16GB \
   --os <latest-snapshot-uuid> \
   --enable-metadata \
-  --ssh-keys onepercent-deploy-202606 \
+  --ssh-keys ~/.ssh/id_onepercent.pub \
   --name oper-prod-rescue \
   --zone us-sjo1
 ```
