@@ -10,7 +10,10 @@ Type=simple
 User=root
 WorkingDirectory=/opt/onepercent/ops/pgbouncer
 EnvironmentFile=/etc/oper.env
-ExecStart=/usr/bin/pgbouncer pgbouncer.ini
+# Debian/Ubuntu install the binary at /usr/sbin/pgbouncer — /usr/bin/pgbouncer
+# does not exist and gave status=203/EXEC. (Type=simple permits exactly one
+# ExecStart, so this must be the correct absolute path, not a fallback list.)
+ExecStart=/usr/sbin/pgbouncer pgbouncer.ini
 Restart=on-failure
 RestartSec=5
 MemoryHigh=192M
