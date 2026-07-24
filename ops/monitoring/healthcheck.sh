@@ -61,6 +61,14 @@ fi
 # indentation, so the pattern must anchor at `^oper-` (not `^  oper-`, which
 # matched nothing and silently checked zero services).
 for unit in $(systemctl list-units --type=service --all --plain --no-legend | awk '/^oper-/ {print $1}'); do
+  # Oneshot units (backup, snapshot, audit-rotate, index-snapshot, the
+  # healthcheck itself) are timer-triggered and inactive between runs by
+  # design — alerting on their inactivity is a false positive. Only
+  # long-running (Type=simple/notify/exec) daemons should be "always active".
+  unit_type="$(systemctl show "$unit" -p Type --value 2>/dev/null)"
+  if [[ "$unit_type" == "oneshot" ]]; then
+    continue
+  fi
   key="unit-${unit}"
   if systemctl is-active --quiet "$unit" 2>/dev/null; then
     check_pass "$key"

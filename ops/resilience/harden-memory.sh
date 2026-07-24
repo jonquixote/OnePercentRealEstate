@@ -35,47 +35,28 @@ warn()  { printf "\033[1;31m[WARN]\033[0m  %s\n" "$*"; }
 # ---- Step 1: Postgres conf drop-in -----------------------------------------
 info "Step 1: Postgres memory tuning conf drop-in"
 
-PG_CONF_TARGET="/etc/postgresql/16/main/conf.d/10-oper-mem.conf"
-PG_CONF_CONTENT="# oper-postgres memory tuning (harden-memory.sh)
-# Shared buffers: ~25% of 8G RAM = 2G. Keeps hot pages cached without
-# starving the OS page cache needed by pg_tileserv and app processes.
-shared_buffers = 2GB
-
-# Per-query working memory. Was 64MB; combined with 100 connections +
-# parallel workers this was the spike surface for the 2026-07-24 OOM.
-# 32MB is enough for most queries; complex sorts/hash joins spill to disk.
-work_mem = 32MB
-
-# VACUUM/CREATE INDEX memory. 256MB speeds up maintenance without starving
-# the running workload.
-maintenance_work_mem = 256MB
-
-# Cap connections to prevent connection-spike OOM. PgBouncer handles pooling.
-max_connections = 100
-"
-
-if [ -f "$PG_CONF_TARGET" ]; then
-  if printf '%s\n' "$PG_CONF_CONTENT" | cmp -s - "$PG_CONF_TARGET"; then
-    skip "Postgres conf drop-in already up to date at $PG_CONF_TARGET"
-  else
-    info "Updating $PG_CONF_TARGET"
-    cp "$PG_CONF_TARGET" "${PG_CONF_TARGET}.bak.$(date +%s)"
-    printf '%s\n' "$PG_CONF_CONTENT" > "$PG_CONF_TARGET"
-    ok "Postgres conf drop-in updated (backup saved)"
-  fi
-else
-  info "Creating $PG_CONF_TARGET"
-  mkdir -p "$(dirname "$PG_CONF_TARGET")"
-  printf '%s\n' "$PG_CONF_CONTENT" > "$PG_CONF_TARGET"
-  ok "Postgres conf drop-in created"
-fi
-
-# Reload Postgres config (not restart — zero downtime)
-info "Reloading Postgres config via pg_reload_conf()..."
+# Apply via ALTER SYSTEM (writes postgresql.auto.conf in PGDATA, always loaded
+# last) rather than a conf.d drop-in — this box's postgresql.conf does NOT
+# `include_dir conf.d`, so a drop-in silently never loaded (work_mem stayed
+# 64MB after the first run). ALTER SYSTEM is layout-independent. Each statement
+# runs in its own psql -c because ALTER SYSTEM cannot run in a transaction block.
+# work_mem was the 2026-07-24 OOM spike surface (64MB × connections × parallel).
+# shared_buffers/max_connections need a restart to change; we set them so they
+# apply on the next pg restart, and reload the ones that take effect live.
 if command -v psql &>/dev/null; then
-  sudo -u postgres psql -c "SELECT pg_reload_conf();" 2>/dev/null && ok "Postgres config reloaded" || warn "pg_reload_conf() failed — reload manually"
+  PSQL="sudo -u postgres psql -qtA"
+  for kv in "work_mem=32MB" "maintenance_work_mem=256MB" "shared_buffers=2GB" "max_connections=100"; do
+    if $PSQL -c "ALTER SYSTEM SET ${kv%%=*} = '${kv#*=}'" >/dev/null 2>&1; then
+      ok "ALTER SYSTEM SET ${kv}"
+    else
+      warn "ALTER SYSTEM SET ${kv} failed — apply manually"
+    fi
+  done
+  $PSQL -c "SELECT pg_reload_conf()" >/dev/null 2>&1 \
+    && ok "Postgres config reloaded (work_mem/maintenance_work_mem live; shared_buffers/max_connections apply on next restart)" \
+    || warn "pg_reload_conf() failed — reload manually"
 else
-  skip "psql not found — reload Postgres config manually: sudo -u postgres psql -c 'SELECT pg_reload_conf();'"
+  skip "psql not found — set work_mem/maintenance_work_mem via ALTER SYSTEM manually"
 fi
 
 # ---- Step 2: Verify Postgres OOM protection ----------------------------------
@@ -164,8 +145,10 @@ info "Step 4: Swap headroom + sysctl tuning"
 # Grow swapfile to 8GB (idempotent)
 SWAPFILE="/swapfile"
 if [ -f "$SWAPFILE" ]; then
-  SWAP_SIZE_KB=$(swapon --show=SIZE --noheadings "$SWAPFILE" 2>/dev/null | awk '{print $1}' || echo "0")
-  SWAP_SIZE_GB=$((SWAP_SIZE_KB / 1048576))
+  # --bytes gives a machine-readable size; the default is human ("4G"), which
+  # broke the arithmetic below and made the grow silently no-op.
+  SWAP_SIZE_BYTES=$(swapon --show=SIZE --noheadings --bytes "$SWAPFILE" 2>/dev/null | awk '{print $1}' || echo "0")
+  SWAP_SIZE_GB=$(( ${SWAP_SIZE_BYTES:-0} / 1073741824 ))
   if [ "$SWAP_SIZE_GB" -ge 8 ]; then
     skip "Swapfile already ${SWAP_SIZE_GB}GB (>= 8GB)"
   else
