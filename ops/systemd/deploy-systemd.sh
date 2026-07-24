@@ -132,22 +132,22 @@ assert_rebuilt_and_restarted() {
   local problem=0
   echo "--- Verifying build output + restarts are fresh ---"
 
-  # a) the standalone server bundle must be newer than the deploy start
-  local built_any=0
+  # a) the standalone bundles must EXIST.
+  #    Deliberately NOT an mtime-vs-deploy-start check: turbo caches the build,
+  #    so an unchanged app legitimately does not rewrite server.js and a
+  #    freshness assertion false-positives on every no-source-change deploy.
+  #    A build that truly produced nothing is caught here; a build that ABORTED
+  #    is already caught by `set -e` (it exits before reaching the restarts,
+  #    which check (b) then proves did not happen).
   for app in one two; do
     local server_js="apps/$app/.next/standalone/apps/$app/server.js"
-    [[ -f "$server_js" ]] || continue
-    local mtime
-    mtime=$(stat -c %Y "$server_js" 2>/dev/null || stat -f %m "$server_js" 2>/dev/null || echo 0)
-    if [[ "$mtime" -ge "$DEPLOY_START_EPOCH" ]]; then
-      echo "  fresh build: $server_js"
-      built_any=1
+    if [[ -f "$server_js" ]]; then
+      echo "  bundle present: $server_js"
     else
-      echo "  STALE build: $server_js was not rewritten by this deploy" >&2
+      echo "  MISSING bundle: $server_js — the build produced no server output" >&2
       problem=1
     fi
   done
-  [[ $built_any -eq 0 ]] && echo "  (no standalone bundles present to check)"
 
   # b) every restarted unit must have entered active AFTER the deploy started
   for u in "${units[@]}"; do
