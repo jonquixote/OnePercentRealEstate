@@ -1,9 +1,12 @@
 [Unit]
 Description=Timer for rent_predictions_audit partition rotation (daily; archives + drops months >90d old)
-Persistent=true
 
 [Timer]
 OnCalendar=*-*-* 04:17:00
+# Persistent belongs in [Timer], not [Unit] — systemd was ignoring it
+# ("Unknown key name 'Persistent' in section 'Unit'"), so a run missed while
+# the box was down was never caught up on boot. Found by ops-lint.
+Persistent=true
 Unit=oper-audit-rotate.service
 
 [Install]
