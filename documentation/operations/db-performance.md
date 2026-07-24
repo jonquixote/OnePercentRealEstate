@@ -85,6 +85,27 @@ The `_old` table was cruft (pre-partition migration remnant). It does not exist 
 
 ## 3. PgBouncer Runbook
 
+### 3.-1 STATUS (2026-07-24): PgBouncer is LIVE and the cutover is ON
+
+| Item | State |
+|---|---|
+| `pgbouncer` binary | installed (1.25.2, `/usr/sbin/pgbouncer`); distro `pgbouncer.service` disabled |
+| `oper-pgbouncer.service` | **active** — runs as `postgres` (it refuses to run as root), `:6432` |
+| Auth | `scram-sha-256` + plaintext userlist (0600, postgres-owned, **gitignored**) — 6 roles |
+| Cutover | **ON** — `.env` has `USE_PGBOUNCER=1`; `/etc/oper.env` + role env files use `:6432` |
+| Verified | `SHOW POOLS` shows real multiplexing (oper_worker: 3 clients → 1 server conn), health `db:up` |
+| Direct (`:5432`) consumers | the 2 LISTEN clients (crawl, rent-estimator) + migrations — via `DATABASE_URL_DIRECT` |
+
+**The cutover is fail-safe.** `gen-env.sh` writes `:6432` only when `USE_PGBOUNCER=1`
+**AND** a live `SELECT 1` through `:6432` succeeds; otherwise it falls back to `:5432`
+with a warning (proven by test: with the pooler stopped, the flag on, it fell back).
+The deploy smoke gate additionally fails if `DATABASE_URL` says `:6432` but the pooler
+is not answering. Worst case is "no pooling", never "no database".
+
+**Rollback (instant):** `sed -i '/^USE_PGBOUNCER=/d' /opt/onepercent/.env && bash
+ops/systemd/gen-env.sh && systemctl restart oper-app oper-worker …` — or just stop
+`oper-pgbouncer` and re-run `gen-env.sh`; it will fall back on its own.
+
 ### 3.0 Session-dependence audit (2026-07-24) — what may move behind the pooler
 
 Transaction pooling breaks any state that must survive **between** statements on the
@@ -260,6 +281,21 @@ Zero-scan indexes at the time of measurement (NOT proof of unused -- see Section
 ---
 
 ## 5. Index Audit Protocol
+
+> **GATE — window opened 2026-07-24 18:59 UTC.** `oper-pg-stat.timer` is **enabled and
+> active**; the first snapshot captured 182 index rows + 50 statement rows. Do **not**
+> drop any index before **2026-07-31** (≥2 weekly snapshots). Until then `idx_scan`
+> readings are post-reboot artifacts, not evidence. Check readiness with:
+> `SELECT count(DISTINCT captured_at) FROM perf_index_scan_history;` (need ≥2).
+>
+> Known candidates awaiting the window (non-constraint, >50MB, zero scans at capture):
+> `idx_listings_type_sale_price_geom` (159MB), `idx_mv_cluster_tiles_zoom_geom` (158MB),
+> `idx_parcels_addr` (151MB), `idx_listings_lat_lon` (143MB). **Never** drop
+> `listings_addr_type_saletype_uniq` / `uq_mv_cluster_tiles_zoom_xy` (UNIQUE = integrity).
+>
+> Also queued for this step: an index supporting the sitemap's property sort
+> (`ORDER BY rent_price_ratio DESC NULLS LAST, last_seen_at DESC` over ~450k rows,
+> ~18s cold) — see plan Task 5 Step 3.
 
 Execute when the >=7-day measurement window (Section 1) is complete.
 
