@@ -7,7 +7,12 @@ StartLimitIntervalSec=300
 
 [Service]
 Type=simple
-User=root
+# PgBouncer refuses to start as root ("FATAL PgBouncer should not run as root").
+# Run as postgres, which also owns the unix socket dir (/var/run/postgresql).
+# setup-pgbouncer.sh chowns pgbouncer.ini + userlist.txt to postgres so this
+# user can read them (userlist stays 0600 — it holds plaintext passwords).
+User=postgres
+Group=postgres
 WorkingDirectory=/opt/onepercent/ops/pgbouncer
 EnvironmentFile=/etc/oper.env
 # Debian/Ubuntu install the binary at /usr/sbin/pgbouncer — /usr/bin/pgbouncer

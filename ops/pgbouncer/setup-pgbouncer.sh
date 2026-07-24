@@ -47,8 +47,12 @@ fi
 info "Generating userlist..."
 bash "$SCRIPT_DIR/gen-pgbouncer-userlist.sh"
 [[ -s "$SCRIPT_DIR/userlist.txt" ]] || fail "userlist.txt missing/empty"
+# The service runs as postgres (pgbouncer refuses to run as root), so the
+# config + secret must be readable by it. userlist stays 0600 (plaintext pwds).
+chown postgres:postgres "$SCRIPT_DIR/userlist.txt" "$SCRIPT_DIR/pgbouncer.ini" 2>/dev/null || true
 chmod 600 "$SCRIPT_DIR/userlist.txt"
-ok "userlist.txt present (0600)"
+chmod 644 "$SCRIPT_DIR/pgbouncer.ini"
+ok "userlist.txt present (0600, postgres-owned)"
 
 # ---- 3. Install + start our unit -------------------------------------------
 if [[ -f "$UNIT_DST" ]] && diff -q "$UNIT_SRC" "$UNIT_DST" >/dev/null 2>&1; then
@@ -59,6 +63,9 @@ else
 fi
 systemctl daemon-reload
 systemctl enable oper-pgbouncer >/dev/null 2>&1 || true
+# Clear any prior crash-loop rate limit ("Start request repeated too quickly"),
+# otherwise systemd refuses to start even a now-correct unit.
+systemctl reset-failed oper-pgbouncer >/dev/null 2>&1 || true
 systemctl restart oper-pgbouncer
 sleep 2
 
