@@ -13,6 +13,10 @@ export const CACHE_TTL = {
   listing: 60,
   stats: 300,
   hud: 86400,
+  comps: 300,
+  context: 3600,
+  history: 3600,
+  rentalComps: 300,
 } as const;
 
 export async function getCacheVersion(): Promise<string> {

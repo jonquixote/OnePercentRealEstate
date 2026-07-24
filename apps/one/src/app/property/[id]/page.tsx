@@ -28,6 +28,9 @@ import { fetchValuationRow, computeValuation, getSessionPrefs } from '@/lib/valu
 import { shapeResponse } from '@/app/api/valuation/[id]/route';
 import { getSessionUser } from '@/lib/auth';
 import Breadcrumbs from '@/components/Breadcrumbs';
+import { cached, CACHE_TTL } from '@/lib/cache';
+import { resetRequestStats, getRequestStats } from '@/lib/query-trace';
+import { LazySection } from '@/components/property/LazySection';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -113,6 +116,7 @@ function NotFound() {
 }
 
 export default async function PropertyPage({ params }: { params: Promise<{ id: string }> }) {
+    resetRequestStats();
     const { id } = await params;
     const property = await getProperty(id);
     if (!property) return <NotFound />;
@@ -120,13 +124,14 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     const zip = property.raw_data?.zip_code;
     const [hudData, demographics, valuation] = await Promise.all([
         zip ? getHudBenchmark(zip).catch(() => null) : null,
-        zip ? getDemographics(zip).catch(() => null) : null,
+        zip ? cached(`demographics:${zip}`, CACHE_TTL.stats, () => getDemographics(zip)).catch(() => null) : null,
         (async () => {
             const row = await fetchValuationRow(id).catch(() => null);
             if (!row) return null;
             const user = await getSessionUser();
-            const isPro = user?.tier === 'pro';
-            const prefs = user ? await getSessionPrefs(user.id) : null;
+            if (!user) return shapeResponse(computeValuation(row, null), false);
+            const isPro = user.tier === 'pro';
+            const prefs = await getSessionPrefs(user.id);
             return shapeResponse(computeValuation(row, prefs), isPro);
         })(),
     ]);
@@ -165,17 +170,19 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     const hudFmr = hudRow ? Number(hudRow.safmr) : null;
 
     const compsMedianRow = zip
-        ? await pool
-            .query(
-                `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent) AS comps_median
-                 FROM listings WHERE zip_code = $1 AND estimated_rent IS NOT NULL
-                 AND estimated_rent > 0
-                 AND listing_status NOT IN ('sold','stale','rental_misfiled')
-                 AND id::text != $2`,
-                [zip, id],
-            )
-            .then((r) => r.rows[0])
-            .catch(() => null)
+        ? await cached(`compsMedian:${zip}:${id}`, CACHE_TTL.stats, () =>
+            pool
+                .query(
+                    `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent) AS comps_median
+                     FROM listings WHERE zip_code = $1 AND estimated_rent IS NOT NULL
+                     AND estimated_rent > 0
+                     AND listing_status NOT IN ('sold','stale','rental_misfiled')
+                     AND id::text != $2`,
+                    [zip, id],
+                )
+                .then((r) => r.rows[0])
+                .catch(() => null)
+          ).catch(() => null)
         : null;
     const areaCompMedian = compsMedianRow?.comps_median != null ? Number(compsMedianRow.comps_median) : null;
 
@@ -218,6 +225,8 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
     if (raw.year_built) specParts.push(`built ${raw.year_built}`);
     if (raw.city) specParts.push(raw.city);
     if (property.style) specParts.push(property.style);
+
+    getRequestStats();
 
     return (
         <div style={{ background: 'var(--ink)', color: 'var(--text)', fontFamily: 'var(--font-ui)' }} className="pb-24 lg:pb-0">
@@ -379,18 +388,20 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                         </section>
 
                         {/* ── Comps ─────────────────────────── */}
-                        <section id="comps" className="scroll-mt-32">
-                            <h2 className="prov mb-5 inline-block">what actually sold nearby</h2>
-                            <Suspense fallback={<SectionSkeleton lines={4} />}>
-                                <SoldCompsList id={id} property={property} sqft={sqft} />
-                            </Suspense>
-
-                            <div className="mt-8">
-                                <Suspense fallback={<SectionSkeleton lines={2} />}>
-                                    <RentalCompsSection id={id} />
+                        <LazySection>
+                            <section id="comps" className="scroll-mt-32">
+                                <h2 className="prov mb-5 inline-block">what actually sold nearby</h2>
+                                <Suspense fallback={<SectionSkeleton lines={4} />}>
+                                    <SoldCompsList id={id} property={property} sqft={sqft} />
                                 </Suspense>
-                            </div>
-                        </section>
+
+                                <div className="mt-8">
+                                    <Suspense fallback={<SectionSkeleton lines={2} />}>
+                                        <RentalCompsSection id={id} />
+                                    </Suspense>
+                                </div>
+                            </section>
+                        </LazySection>
 
                         {/* ── Location ────────────────────── */}
                         <section id="location" className="scroll-mt-32">
@@ -449,41 +460,53 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                         </section>
 
                         {/* ── Analysis (streamed) ────────── */}
-                        <section id="analysis" className="scroll-mt-32">
-                            <h2 className="prov mb-5 inline-block">deal analysis</h2>
-                            <Suspense fallback={<SectionSkeleton lines={6} />}>
-                                <AnalysisSection property={property} hudData={hudData} demographics={demographics} />
-                            </Suspense>
-                        </section>
+                        <LazySection>
+                            <section id="analysis" className="scroll-mt-32">
+                                <h2 className="prov mb-5 inline-block">deal analysis</h2>
+                                <Suspense fallback={<SectionSkeleton lines={6} />}>
+                                    <AnalysisSection property={property} hudData={hudData} demographics={demographics} />
+                                </Suspense>
+                            </section>
+                        </LazySection>
 
                         {/* ── Calculator ─────────────────── */}
-                        <section id="calculator" className="scroll-mt-32">
-                            <FinancialCalculatorSection property={property} />
-                        </section>
+                        <LazySection>
+                            <section id="calculator" className="scroll-mt-32">
+                                <FinancialCalculatorSection property={property} />
+                            </section>
+                        </LazySection>
 
                         {/* ── Nearby ─────────────────────── */}
-                        <section id="nearby" className="scroll-mt-32">
-                            <h2 className="prov mb-5 inline-block">nearby by strategy</h2>
-                            <NearbyStrategiesSection id={id} zipCode={zip} lat={property.latitude} lng={property.longitude} beds={beds} />
-                        </section>
+                        <LazySection>
+                            <section id="nearby" className="scroll-mt-32">
+                                <h2 className="prov mb-5 inline-block">nearby by strategy</h2>
+                                <NearbyStrategiesSection id={id} zipCode={zip} lat={property.latitude} lng={property.longitude} beds={beds} />
+                            </section>
+                        </LazySection>
 
                         {/* ── Risk ───────────────────────── */}
-                        <section id="risk" className="scroll-mt-32">
-                            <h2 className="prov mb-5 inline-block">risk & safety</h2>
-                            <RiskPanel propertyId={id} />
-                        </section>
+                        <LazySection>
+                            <section id="risk" className="scroll-mt-32">
+                                <h2 className="prov mb-5 inline-block">risk & safety</h2>
+                                <RiskPanel propertyId={id} />
+                            </section>
+                        </LazySection>
 
                         {/* ── Neighborhood ───────────────── */}
-                        <section id="neighborhood" className="scroll-mt-32">
-                            <h2 className="prov mb-5 inline-block">neighborhood</h2>
-                            <NeighborhoodPanel propertyId={id} />
-                        </section>
+                        <LazySection>
+                            <section id="neighborhood" className="scroll-mt-32">
+                                <h2 className="prov mb-5 inline-block">neighborhood</h2>
+                                <NeighborhoodPanel propertyId={id} />
+                            </section>
+                        </LazySection>
 
                         {/* ── Market Context ─────────────── */}
-                        <section id="market" className="scroll-mt-32">
-                            <h2 className="prov mb-5 inline-block">market context</h2>
-                            <MarketContextPanel propertyId={id} />
-                        </section>
+                        <LazySection>
+                            <section id="market" className="scroll-mt-32">
+                                <h2 className="prov mb-5 inline-block">market context</h2>
+                                <MarketContextPanel propertyId={id} />
+                            </section>
+                        </LazySection>
                     </main>
 
                     {/* ── Right: verdict rail ─────────────── */}
