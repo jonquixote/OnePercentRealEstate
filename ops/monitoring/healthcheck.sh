@@ -57,7 +57,10 @@ else
 fi
 
 # --- oper-* units (include inactive/failed so they surface as failures) ---
-for unit in $(systemctl list-units --type=service --all --plain --no-legend | awk '/^  oper-/ {print $1}'); do
+# `--plain --no-legend` prints the unit name in column 1 with NO leading
+# indentation, so the pattern must anchor at `^oper-` (not `^  oper-`, which
+# matched nothing and silently checked zero services).
+for unit in $(systemctl list-units --type=service --all --plain --no-legend | awk '/^oper-/ {print $1}'); do
   key="unit-${unit}"
   if systemctl is-active --quiet "$unit" 2>/dev/null; then
     check_pass "$key"
