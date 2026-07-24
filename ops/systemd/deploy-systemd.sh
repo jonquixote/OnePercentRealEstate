@@ -185,6 +185,17 @@ smoke_test() {
     fail "oper-two" "curl to port 3002 failed"
   fi
 
+  # 4b. PgBouncer — only assert when the cutover is actually on (DATABASE_URL
+  #     resolved to :6432). If the app is on direct :5432 this is not a failure.
+  if grep -q '^DATABASE_URL=.*:6432/' /etc/oper.env 2>/dev/null; then
+    if systemctl is-active --quiet oper-pgbouncer 2>/dev/null \
+       && psql "$(grep '^DATABASE_URL=' /etc/oper.env | cut -d= -f2-)" -tAc 'SELECT 1' >/dev/null 2>&1; then
+      pass "pgbouncer"
+    else
+      fail "pgbouncer" "DATABASE_URL points at :6432 but the pooler is not answering"
+    fi
+  fi
+
   # 5. scraper (FastAPI on port 8001) — REACHABLE. The root path has no route
   #    (404 is normal for FastAPI); "up" means the port answers HTTP at all, so
   #    accept any status code (curl without -f succeeds on 404). Only a
