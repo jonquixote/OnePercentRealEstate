@@ -9,6 +9,7 @@
 
 export interface WorkerEnv {
   readonly DATABASE_URL: string;
+  readonly DATABASE_URL_DIRECT: string;
   readonly SCRAPER_URL: string;
   // Wave — horizontal scaling. Pool of scraper endpoints (comma-separated
   // SCRAPER_URLS), falling back to [SCRAPER_URL] for single-IP setups.
@@ -116,6 +117,7 @@ export function loadEnv(): WorkerEnv {
     .split(',').map((s) => s.trim()).filter(Boolean);
   return {
     DATABASE_URL: readString('DATABASE_URL'),
+    DATABASE_URL_DIRECT: readString('DATABASE_URL_DIRECT'),
     SCRAPER_URL: readString('SCRAPER_URL', 'http://scraper:8000'),
     SCRAPER_URLS: scraperUrls.length ? scraperUrls : [readString('SCRAPER_URL', 'http://scraper:8000')],
     aimd: {

@@ -98,6 +98,7 @@ bash "${SCRIPT_DIR}/gen-env.sh"
 # ── Step 7: Copy systemd unit files ─────────────────────────────────
 echo "--- [7/7] Installing systemd unit files ---"
 cp -v "${SCRIPT_DIR}/"oper-*.service /etc/systemd/system/
+cp -v "${SCRIPT_DIR}/"oper-*.timer /etc/systemd/system/ 2>/dev/null || true
 systemctl daemon-reload
 
 echo ""
