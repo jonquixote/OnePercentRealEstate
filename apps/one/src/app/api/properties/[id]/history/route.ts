@@ -23,12 +23,12 @@ type HistoryResponse = z.infer<typeof HistoryResponseSchema>;
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<HistoryResponse>> {
   try {
-    const id = params.id;
+    const { id } = await params;
 
-    if (!id || isNaN(Number(id))) {
+    if (!id || isNaN(Number(id)) || !Number.isInteger(Number(id))) {
       return NextResponse.json({ error: 'Invalid property id', points: [] }, { status: 400 });
     }
 

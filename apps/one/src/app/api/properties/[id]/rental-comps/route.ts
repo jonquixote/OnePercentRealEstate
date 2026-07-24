@@ -12,7 +12,9 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid property id' }, { status: 400 });
   }
 
-  const data = await cached(`rentalComps:${id}`, CACHE_TTL.rentalComps, async () => {
+  let data;
+  try {
+    data = await cached(`rentalComps:${id}`, CACHE_TTL.rentalComps, async () => {
     const client = await pool.connect();
     try {
       const listingRes = await client.query(`
@@ -53,7 +55,7 @@ export async function GET(
           AND listing_date >= CURRENT_DATE - INTERVAL '180 days'
         ORDER BY
           CASE WHEN zip_code = $3 THEN 0 ELSE 1 END,
-          ABS(bedrooms - COALESCE($4::numeric, 3)) ASC,
+          ABS(bedrooms - $4::numeric) ASC,
           distance_meters ASC
         LIMIT 20
       `, [lng, lat, zip ?? '', beds ?? 3]);
@@ -101,11 +103,15 @@ export async function GET(
       };
     } catch (error) {
       console.error('Rental comps fetch error:', error);
-      return null;
+      throw error;
     } finally {
       client.release();
     }
   });
+  } catch (error) {
+    console.error('Rental comps route error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 
   if (!data) {
     return NextResponse.json({ error: 'Property not found or no rental comps' }, { status: 404 });

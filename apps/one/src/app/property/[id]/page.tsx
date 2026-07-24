@@ -388,8 +388,8 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                         </section>
 
                         {/* ── Comps ─────────────────────────── */}
-                        <LazySection>
-                            <section id="comps" className="scroll-mt-32">
+                        <LazySection id="comps" className="scroll-mt-32">
+                            <section>
                                 <h2 className="prov mb-5 inline-block">what actually sold nearby</h2>
                                 <Suspense fallback={<SectionSkeleton lines={4} />}>
                                     <SoldCompsList id={id} property={property} sqft={sqft} />
@@ -460,8 +460,8 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                         </section>
 
                         {/* ── Analysis (streamed) ────────── */}
-                        <LazySection>
-                            <section id="analysis" className="scroll-mt-32">
+                        <LazySection id="analysis" className="scroll-mt-32">
+                            <section>
                                 <h2 className="prov mb-5 inline-block">deal analysis</h2>
                                 <Suspense fallback={<SectionSkeleton lines={6} />}>
                                     <AnalysisSection property={property} hudData={hudData} demographics={demographics} />
@@ -470,39 +470,39 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                         </LazySection>
 
                         {/* ── Calculator ─────────────────── */}
-                        <LazySection>
-                            <section id="calculator" className="scroll-mt-32">
+                        <LazySection id="calculator" className="scroll-mt-32">
+                            <section>
                                 <FinancialCalculatorSection property={property} />
                             </section>
                         </LazySection>
 
                         {/* ── Nearby ─────────────────────── */}
-                        <LazySection>
-                            <section id="nearby" className="scroll-mt-32">
+                        <LazySection id="nearby" className="scroll-mt-32">
+                            <section>
                                 <h2 className="prov mb-5 inline-block">nearby by strategy</h2>
                                 <NearbyStrategiesSection id={id} zipCode={zip} lat={property.latitude} lng={property.longitude} beds={beds} />
                             </section>
                         </LazySection>
 
                         {/* ── Risk ───────────────────────── */}
-                        <LazySection>
-                            <section id="risk" className="scroll-mt-32">
+                        <LazySection id="risk" className="scroll-mt-32">
+                            <section>
                                 <h2 className="prov mb-5 inline-block">risk & safety</h2>
                                 <RiskPanel propertyId={id} />
                             </section>
                         </LazySection>
 
                         {/* ── Neighborhood ───────────────── */}
-                        <LazySection>
-                            <section id="neighborhood" className="scroll-mt-32">
+                        <LazySection id="neighborhood" className="scroll-mt-32">
+                            <section>
                                 <h2 className="prov mb-5 inline-block">neighborhood</h2>
                                 <NeighborhoodPanel propertyId={id} />
                             </section>
                         </LazySection>
 
                         {/* ── Market Context ─────────────── */}
-                        <LazySection>
-                            <section id="market" className="scroll-mt-32">
+                        <LazySection id="market" className="scroll-mt-32">
+                            <section>
                                 <h2 className="prov mb-5 inline-block">market context</h2>
                                 <MarketContextPanel propertyId={id} />
                             </section>

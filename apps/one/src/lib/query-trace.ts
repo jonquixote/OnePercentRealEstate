@@ -65,6 +65,8 @@ if (!traceEnabled) {
   } as typeof pool.query;
 
   resetRequestStats = (): void => {
+    // enterWith is acceptable here: only runs when QUERY_TRACE=1 (dev/flag-gated).
+    // runWithQueryTrace (below) is the preferred bounded-context API for new call sites.
     als.enterWith({ queryCount: 0, totalMs: 0, slowest: null });
   };
 
@@ -81,6 +83,11 @@ if (!traceEnabled) {
 
     return stats;
   };
+}
+
+export function runWithQueryTrace<T>(fn: () => Promise<T>): Promise<T> {
+  if (!traceEnabled) return fn();
+  return als.run({ queryCount: 0, totalMs: 0, slowest: null }, fn);
 }
 
 export { getRequestStats, resetRequestStats };

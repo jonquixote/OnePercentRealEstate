@@ -33,7 +33,7 @@ export async function GET(
     const fipsCode: string | null = listing.fips_code;
     const address: string | null = listing.address;
 
-    const countyFips = fipsCode ?? (censusTract ? censusTract.slice(0, 5) : null);
+    const countyFips = fipsCode;
     const tractGeoid = censusTract ? censusTract.slice(0, 11) : null;
 
     if (lat == null || lng == null) {

@@ -12,7 +12,9 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid property id' }, { status: 400 });
   }
 
-  const data = await cached(`comps:${id}`, CACHE_TTL.comps, async () => {
+  let data;
+  try {
+    data = await cached(`comps:${id}`, CACHE_TTL.comps, async () => {
     const client = await pool.connect();
     try {
       const listingRes = await client.query(`
@@ -56,10 +58,10 @@ export async function GET(
           AND sold_date <= now()
         ORDER BY
           CASE WHEN city = $3 THEN 0 ELSE 1 END,
-          ABS(bedrooms - COALESCE($4::numeric, bedrooms)) ASC,
+          ABS(bedrooms - $4::numeric) ASC,
           distance_meters ASC
         LIMIT 20
-      `, [lng, lat, city ?? '', beds]);
+      `, [lng, lat, city ?? '', beds ?? 3]);
 
       const comps = compsRes.rows.map((r: any) => ({
         id: r.id,
@@ -103,11 +105,15 @@ export async function GET(
       };
     } catch (error) {
       console.error('Comps fetch error:', error);
-      return null;
+      throw error;
     } finally {
       client.release();
     }
   });
+  } catch (error) {
+    console.error('Comps route error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 
   if (!data) {
     return NextResponse.json({ error: 'Property not found or no comps' }, { status: 404 });

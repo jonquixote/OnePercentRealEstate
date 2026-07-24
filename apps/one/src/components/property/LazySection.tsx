@@ -6,9 +6,11 @@ interface LazySectionProps {
   children: ReactNode;
   fallback?: ReactNode;
   rootMargin?: string;
+  id?: string;
+  className?: string;
 }
 
-export function LazySection({ children, fallback = null, rootMargin = '200px' }: LazySectionProps) {
+export function LazySection({ children, fallback = null, rootMargin = '200px', id, className }: LazySectionProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -29,5 +31,5 @@ export function LazySection({ children, fallback = null, rootMargin = '200px' }:
     return () => observer.disconnect();
   }, [rootMargin]);
 
-  return <div ref={ref}>{visible ? children : fallback}</div>;
+  return <div ref={ref} id={id} className={className}>{visible ? children : fallback}</div>;
 }
