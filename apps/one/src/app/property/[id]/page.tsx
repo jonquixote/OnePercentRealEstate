@@ -4,6 +4,8 @@ import { getProperty, getHudBenchmark, getDemographics } from '@/app/actions';
 import { buildDealTitle, buildDealDescription, type DealLite } from '@/lib/deal-meta';
 import { Schema, type RealEstateListingData } from '@oper/primitives';
 import { calculatePropertyMetrics } from '@/lib/calculators';
+import pool from '@/lib/db';
+import { assessRent } from '@/lib/rent-trust';
 import { PhotoGallery } from '@/components/property/PhotoGallery';
 import { PriceSparkline } from '@/components/property/PriceSparkline';
 import { parseSchools } from '@/lib/schools';
@@ -160,6 +162,48 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
         : null;
     const hudFmr = hudRow ? Number(hudRow.safmr) : null;
 
+    const compsMedianRow = zip
+        ? await pool
+            .query(
+                `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent) AS comps_median
+                 FROM listings WHERE zip_code = $1 AND estimated_rent IS NOT NULL
+                 AND estimated_rent > 0
+                 AND listing_status NOT IN ('sold','stale','rental_misfiled')
+                 AND id::text != $2`,
+                [zip, id],
+            )
+            .then((r) => r.rows[0])
+            .catch(() => null)
+        : null;
+    const areaCompMedian = compsMedianRow?.comps_median != null ? Number(compsMedianRow.comps_median) : null;
+
+    const rentAssessment = assessRent({
+        price: price > 0 ? price : null,
+        modelRent: rent > 0 ? rent : null,
+        hudFmr,
+        areaComp: areaCompMedian,
+    });
+
+    const hasBand = rentLow != null && rentHigh != null && rent > 0;
+    const showImplausibleWidened = rentAssessment.verdict === 'implausible' && rent > 0;
+    let bandLow: number | null = rentLow;
+    let bandHigh: number | null = rentHigh;
+    if (showImplausibleWidened && (hudFmr != null || areaCompMedian != null)) {
+        // Per plan: floor = min(price * 0.004, hudFmr); ceiling = max(modelRent, areaComp).
+        // areaComp deliberately excluded from floor; HUD FMR is the lease-floor anchor;
+        // rule-of-thumb catches the case where HUD is absent/very high.
+        const monthlyRuleOfThumb = price > 0 ? price * 0.004 : Number.POSITIVE_INFINITY;
+        const floor = Math.min(monthlyRuleOfThumb, hudFmr ?? Number.POSITIVE_INFINITY);
+        const ceilingInputs = [rent];
+        if (areaCompMedian != null && areaCompMedian > 0) ceilingInputs.push(areaCompMedian);
+        const ceiling = Math.max(...ceilingInputs);
+        bandLow = Math.round(floor);
+        bandHigh = Math.round(ceiling);
+    } else if (showImplausibleWidened) {
+        bandLow = null;
+        bandHigh = null;
+    }
+
     const provParts: string[] = [];
     if (cutPct != null && firstPrice != null) provParts.push(`−${(cutPct * 100).toFixed(1)}% since list`);
     if (dom != null) provParts.push(`${dom} days on market`);
@@ -275,9 +319,9 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                             {hasRent ? `${usd0.format(rent)}/mo` : '\u2014'}
                                         </span>
                                     </div>
-                                    {hasRent && rentLow != null && rentHigh != null && (() => {
-                                        const loPct = Math.max(0, (rentLow / rent) * 100);
-                                        const hiPct = Math.min(100, (rentHigh / rent) * 100);
+                                    {hasRent && bandLow != null && bandHigh != null && bandHigh > bandLow && (() => {
+                                        const loPct = Math.max(0, (bandLow / rent) * 100);
+                                        const hiPct = Math.min(100, (bandHigh / rent) * 100);
                                         const markPct = (loPct + hiPct) / 2;
                                         return (
                                             <div className="band mt-2">
@@ -286,11 +330,21 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                                             </div>
                                         );
                                     })()}
-                                    {hasRent && rentLow != null && rentHigh != null && (
+                                    {hasRent && bandLow != null && bandHigh != null && bandHigh > bandLow ? (
                                         <p className="mt-1 text-[11px]" style={{ color: 'var(--mute)' }}>
-                                            p10–p90 confidence band
+                                            {rentAssessment.verdict === 'implausible'
+                                                ? `wide honest range — HUD/comp anchors · ${usd0.format(bandLow)}–${usd0.format(bandHigh)}`
+                                                : 'p10–p90 confidence band'}
                                         </p>
-                                    )}
+                                    ) : hasRent && rentAssessment.verdict === 'implausible' ? (
+                                        <p className="mt-1 text-[11px]" style={{ color: 'var(--brass)' }}>
+                                            estimate unverified — no HUD/comp anchors
+                                        </p>
+                                    ) : hasRent ? (
+                                        <p className="mt-1 text-[11px]" style={{ color: 'var(--mute)' }}>
+                                            point estimate — add comps for a band
+                                        </p>
+                                    ) : null}
                                 </div>
 
                                 {/* HUD FMR */}
@@ -448,6 +502,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
                             monthlyCashflow={monthlyCashflow}
                             capRate={capRate}
                             cashOnCash={cashOnCash}
+                            rentAssessment={rentAssessment}
                         />
                         <ValuationPanel valuation={valuation} />
                     </aside>

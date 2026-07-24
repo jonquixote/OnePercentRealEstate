@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 
 interface MarketData {
   hpi?: Array<{ date: string; value: number }> | null;
-  cagr_5yr?: number | null;
+  cagr?: number | null;
+  cagr_span_years?: number | null;
   unemployment?: number | null;
 }
 
@@ -71,8 +72,11 @@ export function MarketContextPanel({ propertyId }: { propertyId: string | number
   if (!data) return null;
 
   const hasHpi = data.hpi && data.hpi.length >= 2;
-  const hasCagr = data.cagr_5yr != null;
-  const hasUnemp = data.unemployment != null;
+  const cagr = data.cagr ?? null;
+  const cagrSpanYears = data.cagr_span_years;
+  const hasCagr = cagr != null;
+  const unemp = data.unemployment ?? null;
+  const hasUnemp = unemp != null;
   const hasAny = hasHpi || hasCagr || hasUnemp;
   if (!hasAny) return null;
 
@@ -86,24 +90,24 @@ export function MarketContextPanel({ propertyId }: { propertyId: string | number
         </div>
       )}
 
-      {/* 5-yr CAGR */}
-      {hasCagr && (
+      {/* CAGR (span labelled dynamically) */}
+      {hasCagr && cagr != null && (
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-foreground">5-yr CAGR</span>
+          <span className="text-sm font-semibold text-foreground">{cagrSpanYears ?? 5}-yr CAGR</span>
           <span
             className="figure text-sm"
-            style={{ color: data.cagr_5yr! >= 0 ? 'var(--pass-hi)' : 'var(--loss)' }}
+            style={{ color: cagr >= 0 ? 'var(--pass-hi)' : 'var(--loss)' }}
           >
-            {data.cagr_5yr! >= 0 ? '+' : ''}{(data.cagr_5yr! * 100).toFixed(1)}%
+            {cagr >= 0 ? '+' : ''}{cagr.toFixed(1)}%
           </span>
         </div>
       )}
 
       {/* Unemployment */}
-      {hasUnemp && (
+      {hasUnemp && unemp != null && (
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">Unemployment</span>
-          <span className="figure text-sm">{data.unemployment!.toFixed(1)}%</span>
+          <span className="figure text-sm">{unemp.toFixed(1)}%</span>
         </div>
       )}
     </div>

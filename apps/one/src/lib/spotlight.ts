@@ -21,10 +21,12 @@ export type SpotlightEntry = { metro: { label: string; zip: string }; deal: Spot
 // interpolation, so these are documented here rather than passed as `${}`).
 //
 // Sanity bounds: below this price it's almost always a data error (a $1 "listing"
-// with real rent tops an unbounded ratio sort); above this monthly ratio it's
-// not a believable deal. Verified against prod 2026-07-16: price >= 30000 AND
-// ratio <= 0.05 keeps 93,294 legitimate 1%-clearers with believable top deals
-// (3.2-3.4% in Houston). MIN_PRICE = 30000, MAX_RATIO = 0.05.
+// with real rent tops an unbounded ratio sort). MIN_PRICE = 30000.
+//
+// Mirrors RENT_TRUST.maxRatio (0.02) from apps/one/src/lib/rent-trust.ts.
+// Bulk-feed SQL proxy for the absolute plausibility ceiling; the trusted
+// spotlight hero must also satisfy it (no HUD/comp joins here). Threshold
+// values must be kept identical to RENT_TRUST.maxRatio; both cite each other.
 //
 // Schema notes (verified against prod 2026-07-16, see task-2-supplement.md):
 // - the price column is `price`, not `listing_price` (aliased back in SELECT
@@ -42,7 +44,7 @@ export function buildSpotlightQuery(loc: SpotlightLoc): { sql: string; params: u
       AND price >= 30000
       AND estimated_rent > 0
       AND rent_price_ratio >= 0.01
-      AND rent_price_ratio <= 0.05
+      AND rent_price_ratio <= 0.02
       AND geom IS NOT NULL
       AND COALESCE(primary_photo, images->>0) IS NOT NULL
       AND (zip_code = $1 OR ST_DWithin(geom, ST_SetSRID(ST_MakePoint($2, $3), 4326), 0.6))

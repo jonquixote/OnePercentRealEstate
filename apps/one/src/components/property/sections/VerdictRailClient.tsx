@@ -5,6 +5,12 @@ import SaveButton from '@/components/SaveButton';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
+export type RentAssessment = {
+  verdict: 'trusted' | 'wide' | 'implausible';
+  ratio: number;
+  reason: string;
+};
+
 interface Props {
   property: any;
   hudData: any;
@@ -21,12 +27,14 @@ interface Props {
   monthlyCashflow: number | null;
   capRate: number | null;
   cashOnCash: number | null;
+  rentAssessment?: RentAssessment;
 }
 
 export default function VerdictRailClient({
   property, price, rent, hasRent, ratioPct, targetPct,
   taxAnnual, insurance, hoa,
   monthlyCashflow, capRate, cashOnCash,
+  rentAssessment,
 }: Props) {
   const [mortgageRate, setMortgageRate] = useState<number | null>(null);
 
@@ -37,19 +45,38 @@ export default function VerdictRailClient({
       .catch(() => {});
   }, []);
 
+  const verdict = rentAssessment?.verdict;
+  const isImplausible = verdict === 'implausible';
+  const isWide = verdict === 'wide';
+
   return (
     <div className="rounded-[var(--r-panel)] p-6" style={{ background: 'var(--ink-panel)', border: '1px solid var(--line)' }}>
       <p className="prov mb-4 inline-block">the verdict</p>
 
       <div className="flex items-baseline gap-3">
-        <span className={`figure text-[40px] ${ratioPct && ratioPct >= targetPct ? 'figure--pass' : ''}`}
-          style={ratioPct != null && ratioPct < targetPct ? { color: 'var(--haze)' } : undefined}>
+        <span
+          className={`figure text-[40px] ${ratioPct && ratioPct >= targetPct && !isImplausible ? 'figure--pass' : ''}`}
+          style={isImplausible ? { color: 'var(--brass)' } : ratioPct != null && ratioPct < targetPct ? { color: 'var(--haze)' } : undefined}
+        >
           {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '—'}
+          {isImplausible && <span aria-label="unverified" style={{ marginLeft: '0.4rem' }}>⚠</span>}
         </span>
         <span className="text-[13px]" style={{ color: 'var(--haze)' }}>
           vs {targetPct.toFixed(1)}% target
         </span>
       </div>
+
+      {isImplausible && (
+        <p className="mt-1 text-[12px]" style={{ color: 'var(--brass)' }}>
+          Unverified — model rent disagrees with HUD/comps
+        </p>
+      )}
+      {isWide && (
+        <p className="mt-1 text-[12px]" style={{ color: 'var(--brass)' }}>
+          wide confidence band
+        </p>
+      )}
+
       <div className="rule-line my-4" />
 
       <dl className="space-y-3 text-[14px]">
@@ -102,8 +129,18 @@ export default function VerdictRailClient({
       >
         <div className="min-w-0">
           <p className="figure text-[17px] leading-tight">{usd0.format(price)}</p>
-          <p className="figure text-[12px]" style={{ color: ratioPct != null && ratioPct >= targetPct ? 'var(--pass)' : 'var(--haze)' }}>
-            {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '—'} · rent {hasRent ? usd0.format(rent) : '—'}
+          <p
+            className="figure text-[12px]"
+            style={{
+              color: isImplausible
+                ? 'var(--brass)'
+                : ratioPct != null && ratioPct >= targetPct
+                  ? 'var(--pass)'
+                  : 'var(--haze)',
+            }}
+          >
+            {ratioPct != null ? `${ratioPct.toFixed(2)}%` : '—'}
+            {isImplausible ? ' · unverified' : ` · rent ${hasRent ? usd0.format(rent) : '—'}`}
           </p>
         </div>
         <div className="ml-auto shrink-0">
