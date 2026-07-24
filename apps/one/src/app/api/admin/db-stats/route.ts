@@ -41,9 +41,12 @@ export async function GET(req: Request) {
          LIMIT 20`,
       ),
       client.query(
-        `SELECT schemaname, relname, indexrelname, idx_scan, idx_blks_read,
-                pg_relation_size(indexrelid) AS size_bytes
-         FROM pg_stat_user_indexes
+        `SELECT s.schemaname, s.relname, s.indexrelname, s.idx_scan,
+                t.idx_blks_read,
+                pg_relation_size(s.indexrelid) AS size_bytes
+         FROM pg_stat_user_indexes s
+         LEFT JOIN pg_statio_user_indexes t
+           ON s.indexrelid = t.indexrelid
          ORDER BY size_bytes DESC
          LIMIT 50`,
       ),

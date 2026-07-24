@@ -117,7 +117,7 @@ export function loadEnv(): WorkerEnv {
     .split(',').map((s) => s.trim()).filter(Boolean);
   return {
     DATABASE_URL: readString('DATABASE_URL'),
-    DATABASE_URL_DIRECT: readString('DATABASE_URL_DIRECT'),
+    DATABASE_URL_DIRECT: readString('DATABASE_URL_DIRECT', readString('DATABASE_URL')),
     SCRAPER_URL: readString('SCRAPER_URL', 'http://scraper:8000'),
     SCRAPER_URLS: scraperUrls.length ? scraperUrls : [readString('SCRAPER_URL', 'http://scraper:8000')],
     aimd: {

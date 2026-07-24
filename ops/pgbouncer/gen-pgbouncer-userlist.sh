@@ -22,6 +22,11 @@ fi
 # Use printf (shell builtin) instead of echo to avoid password in /proc argv
 HASH=$(printf '%s' "${POSTGRES_PASSWORD}postgres" | md5sum | awk '{print $1}')
 
-printf '"postgres" "md5%s"\n' "$HASH" > "$OUT"
-chmod 600 "$OUT"
+TMP=$(mktemp "${OUT}.XXXXXX")
+trap 'rm -f "$TMP"' EXIT
+
+printf '"postgres" "md5%s"\n' "$HASH" > "$TMP"
+chmod 600 "$TMP"
+mv -f "$TMP" "$OUT"
+trap - EXIT
 echo "Generated $OUT"

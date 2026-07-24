@@ -20,26 +20,33 @@ if [[ ! -x "$SNAPSHOT" ]]; then
 fi
 
 echo "Running snapshot..."
-bash "$SNAPSHOT"
 
-# Verify rows exist
-IDX_COUNT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -c \
+# Capture baseline counts before snapshot
+IDX_BEFORE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -c \
   "SELECT count(*) FROM perf_index_scan_history;" 2>/dev/null || echo "0")
-
-STMT_COUNT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -c \
+STMT_BEFORE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -c \
   "SELECT count(*) FROM perf_statement_history;" 2>/dev/null || echo "0")
 
-echo "perf_index_scan_history rows: ${IDX_COUNT}"
-echo "perf_statement_history rows:  ${STMT_COUNT}"
+bash "$SNAPSHOT"
 
-if [[ "$IDX_COUNT" -lt 1 ]]; then
-  echo "FAIL: expected >= 1 row in perf_index_scan_history"
+# Verify rows were added (count must increase)
+IDX_AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -c \
+  "SELECT count(*) FROM perf_index_scan_history;" 2>/dev/null || echo "0")
+
+STMT_AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -c \
+  "SELECT count(*) FROM perf_statement_history;" 2>/dev/null || echo "0")
+
+echo "perf_index_scan_history: ${IDX_BEFORE} -> ${IDX_AFTER}"
+echo "perf_statement_history:  ${STMT_BEFORE} -> ${STMT_AFTER}"
+
+if [[ "$IDX_AFTER" -le "$IDX_BEFORE" ]]; then
+  echo "FAIL: expected perf_index_scan_history to grow (was ${IDX_BEFORE}, now ${IDX_AFTER})"
   exit 1
 fi
 
-if [[ "$STMT_COUNT" -lt 1 ]]; then
-  echo "FAIL: expected >= 1 row in perf_statement_history"
+if [[ "$STMT_AFTER" -le "$STMT_BEFORE" ]]; then
+  echo "FAIL: expected perf_statement_history to grow (was ${STMT_BEFORE}, now ${STMT_AFTER})"
   exit 1
 fi
 
-echo "PASS: snapshot inserted rows into both tables"
+echo "PASS: snapshot added rows to both tables"

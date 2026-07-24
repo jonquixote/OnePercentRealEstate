@@ -18,7 +18,7 @@ Gated on `ADMIN_API_KEY` (same header as other `/api/admin/*` routes). Returns:
 }
 ```
 
-**Source:** `pg_stat_statements` (top 20 by total time, top 20 by mean time) + `pg_stat_user_indexes` (top 50 by size).
+**Source:** `pg_stat_statements` (top 20 by total time, top 20 by mean time) + a join of `pg_stat_user_indexes` + `pg_statio_user_indexes` (top 50 by size, with disk-block reads from `pg_statio_user_indexes`).
 
 **Reset baseline:** After deploying, run `SELECT pg_stat_statements_reset()` once. Counters start accumulating from that point. The endpoint never mutates stats.
 
@@ -39,7 +39,7 @@ DATABASE_URL_DIRECT=postgres://... ./ops/monitoring/pg-stat-snapshot.sh
 
 ### The 7-Day Window Rule
 
-Index-drop decisions require a **DELTA across >=2 weekly snapshots** (minimum 7 days). A single reading is never sufficient because `pg_stat_statements` and `pg_stat_user_indexes` reset on Postgres restart -- a post-reboot `idx_scan=0` proves nothing. The DELTA between two snapshots captures scans that actually happened during the measurement window.
+Index-drop decisions require a **DELTA across >=2 weekly snapshots** (minimum 7 days). A single reading is never sufficient. `pg_stat_user_indexes` counters reset on Postgres restart, while `pg_stat_statements` counters persist when `pg_stat_statements.save = on` (the default). A post-reboot `idx_scan=0` proves nothing. The DELTA between two snapshots captures scans that actually happened during the measurement window.
 
 ---
 
@@ -259,6 +259,7 @@ FROM perf_index_scan_history old
 JOIN perf_index_scan_history new
   ON old.indexrelname = new.indexrelname
   AND old.relname = new.relname
+  AND old.schemaname = new.schemaname
   AND new.captured_at = (SELECT MAX(captured_at) FROM perf_index_scan_history)
 WHERE old.captured_at = (SELECT MIN(captured_at) FROM perf_index_scan_history)
   AND new.idx_scan - old.idx_scan = 0

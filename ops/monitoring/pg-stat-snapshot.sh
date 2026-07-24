@@ -33,7 +33,7 @@ fail() {
 }
 
 # --- Idempotent table creation ---
-psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL' || fail "table creation failed"
 CREATE TABLE IF NOT EXISTS perf_index_scan_history (
   captured_at   TIMESTAMPTZ NOT NULL,
   schemaname    TEXT,
@@ -59,13 +59,15 @@ echo "[pg-stat-snapshot] tables ready"
 IDX_ROWS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -c "
 INSERT INTO perf_index_scan_history
 SELECT now(),
-       schemaname,
-       relname,
-       indexrelname,
-       idx_scan,
-       idx_blks_read,
-       pg_relation_size(indexrelid)
-FROM pg_stat_user_indexes
+       s.schemaname,
+       s.relname,
+       s.indexrelname,
+       s.idx_scan,
+       t.idx_blks_read,
+       pg_relation_size(s.indexrelid)
+FROM pg_stat_user_indexes s
+LEFT JOIN pg_statio_user_indexes t
+  ON s.indexrelid = t.indexrelid
 RETURNING 1;
 " 2>&1) || fail "index snapshot failed: ${IDX_ROWS}"
 
