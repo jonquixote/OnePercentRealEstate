@@ -134,7 +134,7 @@ export default function SearchPage() {
     debounceRef.current = setTimeout(() => loadProperties(1), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, qs.sold, qs.pmin, qs.pmax, qs.beds, qs.baths, qs.op, qs.cap, qs.coc, qs.type, qs.sale, qs.strat, qs.hoamax, qs.dom, qs.cut, qs.q, mapBounds, polygon]);
+  }, [sortBy, qs.sold, qs.unverified, qs.pmin, qs.pmax, qs.beds, qs.baths, qs.op, qs.cap, qs.coc, qs.type, qs.sale, qs.strat, qs.hoamax, qs.dom, qs.cut, qs.q, mapBounds, polygon]);
 
   async function loadProperties(pageNum: number) {
     try {
@@ -158,6 +158,11 @@ export default function SearchPage() {
         // param → showSold → includeSold, relaxing the sold exclusion so SOLD
         // cards render. Stale + rental_misfiled stay hidden regardless.
         includeSold: filters.showSold || undefined,
+        // Unverified-feed opt-in (#53 task-3): the "Include unverified" pill
+        // flips the `unverified` nuqs param → showUnverified → includeUnverified,
+        // relaxing the 0.02 plausibility ceiling. The richer assessRent()
+        // gate still fires on each deal page (search is the bulk proxy).
+        includeUnverified: filters.showUnverified || undefined,
         q: qs.q || undefined,
         bounds: showMap && mapBounds ? mapBounds : undefined,
         polygon: showMap && polygon ? polygon : undefined,
@@ -247,6 +252,19 @@ export default function SearchPage() {
                 title={qs.sold ? 'Hide sold listings' : 'Include sold listings'}
               >
                 Include sold
+              </button>
+              <button
+                onClick={() => setQs({ unverified: !qs.unverified })}
+                aria-pressed={qs.unverified}
+                className="flex items-center gap-1 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors hover:border-line-hi"
+                style={{ borderColor: qs.unverified ? 'var(--pass)' : 'var(--line)', color: qs.unverified ? 'var(--pass)' : 'var(--haze)' }}
+                title={
+                  qs.unverified
+                    ? 'Hide unverified data (above the plausibility ceiling)'
+                    : 'Include unverified data (above the plausibility ceiling)'
+                }
+              >
+                Include unverified
               </button>
               <button
                 onClick={() => setTableView(!tableView)}

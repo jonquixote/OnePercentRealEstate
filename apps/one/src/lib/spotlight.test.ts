@@ -16,7 +16,11 @@ describe('buildSpotlightQuery', () => {
     expect(sql).toMatch(/estimated_rent\s*>\s*0/i);
     expect(sql).toMatch(/price\s*>=\s*30000/i);
     expect(sql).toMatch(/rent_price_ratio\s*>=\s*0.01/i);
-    expect(sql).toMatch(/rent_price_ratio\s*<=\s*0.05/i);
+    // Mirrors RENT_TRUST.maxRatio (0.02) from apps/one/src/lib/rent-trust.ts.
+    // Bulk-feed SQL proxy for the absolute plausibility ceiling; the trusted
+    // spotlight hero must also satisfy it (no HUD/comp joins here). Threshold
+    // values must be kept identical to RENT_TRUST.maxRatio; both cite each other.
+    expect(sql).toMatch(/rent_price_ratio\s*<=\s*0\.02/i);
     expect(sql).toMatch(/ST_DWithin/i);
     // Lifecycle: the hero must be a live listing — never a sold/stale/misfiled row.
     expect(sql).toMatch(/listing_status\s*=\s*'active'/i);
