@@ -44,7 +44,7 @@ Track here, not in code comments — that way a single grep for
 
 - [ ] Set up the B2 bucket + pgbackrest
   - Runbook: [`infrastructure/backup/setup-pgbackrest.md`](../../infrastructure/backup/setup-pgbackrest.md)
-  - Blocks the first DR drill.
+  - Note: UpCloud daily snapshots are now automated (`oper-snapshot.timer`), but offsite backup to B2 is still needed for geographic redundancy. See `documentation/operations/monitoring.md`.
 
 - [ ] Wire the monitoring stack into `docker-compose.yml`
   - Snippet: [`infrastructure/monitoring/README.md`](../../infrastructure/monitoring/README.md)
@@ -55,9 +55,7 @@ Track here, not in code comments — that way a single grep for
 - [ ] Add a `grafana.octavo.press` DNS record + nginx site
   - Only after Grafana is up. Mirror the `n8n` site config.
 
-- [ ] Schedule the first quarterly DR drill
-  - Target date: **2026-09-01**
-  - Checklist: [`documentation/operations/dr-runbook.md#quarterly-drill-checklist`](./dr-runbook.md#quarterly-drill-checklist)
+- [x] DR drill documented — monthly restore-drill steps in [`documentation/operations/monitoring.md`](./monitoring.md#monthly-restore-drill). First execution scheduled for next monthly review. UpCloud snapshots automated via `oper-snapshot.timer` (daily 04:30, 30-day retention, min 3 kept).
 
 ## Follow-up engineering (later waves)
 
