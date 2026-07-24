@@ -42,7 +42,9 @@ if [[ $COUNT -gt $RETENTION_MIN ]]; then
     UUID=$(echo "$backup" | jq -r '.uuid')
     DESC=$(echo "$backup" | jq -r '.description')
 
-    BACKUP_EPOCH=$(date -j -f "%Y-%m-%dT%H:%M:%S" "${CREATED%%.*}" +%s 2>/dev/null || echo 0)
+    BACKUP_EPOCH=$(date -j -f "%Y-%m-%dT%H:%M:%S" "${CREATED%%.*}" +%s 2>/dev/null \
+      || date -d "${CREATED%%.*}" +%s 2>/dev/null \
+      || echo 0)
 
     if [[ $BACKUP_EPOCH -lt $CUTOFF && $BACKUP_EPOCH -gt 0 ]]; then
       echo "Pruning old snapshot: ${DESC} (${UUID}, created ${CREATED})"
