@@ -126,3 +126,32 @@ describe('sitemap unknown id', () => {
         expect(result).toEqual([]);
     });
 });
+
+// Next passes the numeric position from generateSitemaps, not the id string —
+// the prod 500 (`e.startsWith is not a function`) came from assuming a string.
+describe('sitemap numeric ids (Next passes position, not the id string)', () => {
+    it('0 → markets', async () => {
+        mockRows([{ zip_code: '77002' }]);
+        const { default: sitemap } = await import('./sitemap');
+        const result = await sitemap({ id: 0 as unknown as string });
+        expect(result.map((r) => r.url)).toContain('https://one.octavo.press/market/77002');
+    });
+    it('1 → sold', async () => {
+        mockRows([{ id: 's1' }]);
+        const { default: sitemap } = await import('./sitemap');
+        const result = await sitemap({ id: 1 as unknown as string });
+        expect(result.map((r) => r.url)).toContain('https://one.octavo.press/sold/s1');
+    });
+    it('2 → index', async () => {
+        mockRows([]);
+        const { default: sitemap } = await import('./sitemap');
+        const result = await sitemap({ id: 2 as unknown as string });
+        expect(result.map((r) => r.url)).toContain('https://one.octavo.press/the-1-percent-index');
+    });
+    it('3 → first property shard (no throw)', async () => {
+        mockRows([{ id: 'p9', rent_price_ratio: 1.1 }]);
+        const { default: sitemap } = await import('./sitemap');
+        const result = await sitemap({ id: 3 as unknown as string });
+        expect(result.map((r) => r.url)).toContain('https://one.octavo.press/property/p9');
+    });
+});

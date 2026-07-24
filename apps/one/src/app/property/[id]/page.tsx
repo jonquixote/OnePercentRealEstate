@@ -58,7 +58,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const lite = toDealLite(property);
     const url = `${site}/property/${id}`;
     return {
-      title: buildDealTitle(lite),
+      // absolute: buildDealTitle already ends in "| OnePercent"; without this the
+      // root layout's title template would append a second "| OnePercent".
+      title: { absolute: buildDealTitle(lite) },
       description: buildDealDescription(lite),
       alternates: { canonical: url },
       openGraph: { title: buildDealTitle(lite), description: buildDealDescription(lite), url, type: 'website' },

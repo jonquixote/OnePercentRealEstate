@@ -59,14 +59,26 @@ export async function generateSitemaps(): Promise<{ id: string }[]> {
     ];
 }
 
+// Next passes the sitemap `id` as the numeric position from generateSitemaps
+// (0-based), NOT the `id` string we returned. Normalize both forms to a stable
+// string key: 0→markets, 1→sold, 2→index, 3+→property-<shard>. (A raw string
+// id, from future Next versions or tests, passes through unchanged.)
+function sitemapKey(id: string | number): string {
+    if (typeof id === 'number') {
+        return ['markets', 'sold', 'index'][id] ?? `property-${id - 3}`;
+    }
+    return id;
+}
+
 export default async function sitemap({
     id,
 }: {
-    id: string;
+    id: string | number;
 }): Promise<MetadataRoute.Sitemap> {
     const now = new Date();
+    const key = sitemapKey(id);
 
-    if (id === 'markets') {
+    if (key === 'markets') {
         const rows = await query<{ zip_code: string | null }>(
             `SELECT DISTINCT zip_code
              FROM listings
@@ -96,7 +108,7 @@ export default async function sitemap({
         return [...coreRoutes, ...marketRoutes];
     }
 
-    if (id === 'sold') {
+    if (key === 'sold') {
         const rows = await query<{ id: string }>(
             `SELECT id FROM listings
              WHERE listing_status = 'sold'
@@ -112,7 +124,7 @@ export default async function sitemap({
         }));
     }
 
-    if (id === 'index') {
+    if (key === 'index') {
         const routes: MetadataRoute.Sitemap = [
             {
                 url: `${BASE_URL}/the-1-percent-index`,
@@ -130,8 +142,8 @@ export default async function sitemap({
         return routes;
     }
 
-    if (id.startsWith('property-')) {
-        const shard = parseInt(id.split('-')[1], 10);
+    if (key.startsWith('property-')) {
+        const shard = parseInt(key.split('-')[1], 10);
         const offset = shard * PAGE_SIZE;
         const rows = await query<{ id: string; rent_price_ratio: number | null }>(
             `SELECT id, rent_price_ratio FROM listings
