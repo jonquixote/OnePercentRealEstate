@@ -3,8 +3,6 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import redis from '@/lib/redis';
 
-const startTime = Date.now();
-
 export async function GET() {
   let db: 'up' | 'down' = 'down';
   let redis_status: 'up' | 'down' = 'down';

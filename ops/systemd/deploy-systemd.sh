@@ -20,7 +20,7 @@ ALL_UNITS=(
   oper-worker oper-worker-rent oper-worker-refresh
   oper-worker-watchlist oper-worker-media oper-worker-ml-scheduler
   oper-worker-digest oper-worker-alerts
-  oper-healthcheck
+  oper-healthcheck oper-snapshot
 )
 
 # Service name → systemd unit mapping
