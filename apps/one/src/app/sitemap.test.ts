@@ -142,8 +142,7 @@ describe('sitemap numeric ids (Next passes position, not the id string)', () => 
         const result = await sitemap({ id: 1 as unknown as string });
         expect(result.map((r) => r.url)).toContain('https://one.octavo.press/sold/s1');
     });
-    it('2 → index', async () => {
-        mockRows([]);
+    it('2 → index (static, issues no DB query)', async () => {
         const { default: sitemap } = await import('./sitemap');
         const result = await sitemap({ id: 2 as unknown as string });
         expect(result.map((r) => r.url)).toContain('https://one.octavo.press/the-1-percent-index');
