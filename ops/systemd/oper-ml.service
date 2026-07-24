@@ -19,6 +19,7 @@ RestartSec=5
 TimeoutStartSec=60
 OOMScoreAdjust=-500
 # P4: reclaimed budget — 8G ceiling (was 4G under Docker)
+MemoryHigh=6G
 MemoryMax=8G
 
 [Install]

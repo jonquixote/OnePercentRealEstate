@@ -4,39 +4,53 @@ import pool from '@/lib/db';
 import redis from '@/lib/redis';
 
 export async function GET() {
-    const healthStatus = {
-        status: 'ok' as 'ok' | 'degraded',
-        timestamp: new Date().toISOString(),
-        services: {
-            database: 'unknown',
-            redis: 'unknown',
-        },
-    };
+  let db: 'up' | 'down' = 'down';
+  let redis_status: 'up' | 'down' = 'down';
 
-    // Check Database
+  // DB: SELECT 1 with 2s timeout (covers both acquisition and execution)
+  try {
+    const client = await Promise.race([
+      pool.connect(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('DB health check timeout')), 2000)
+      ),
+    ]);
     try {
-        const client = await pool.connect();
-        await client.query('SELECT 1');
-        client.release();
-        healthStatus.services.database = 'healthy';
-    } catch (error) {
-        console.error('Health Check - Database Error:', error);
-        healthStatus.services.database = 'unhealthy';
-        healthStatus.status = 'degraded';
+      await Promise.race([
+        client.query('SELECT 1'),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('DB health check timeout')), 2000)
+        ),
+      ]);
+      db = 'up';
+    } finally {
+      // release(true) on error path destroys the client rather than returning
+      // a poisoned connection to the pool.
+      client.release();
     }
+  } catch {
+    db = 'down';
+  }
 
-    // Check Redis
-    try {
-        // Just check if we can ping the singleton
-        await redis.ping();
-        healthStatus.services.redis = 'healthy';
-    } catch (error) {
-        console.error('Health Check - Redis Error:', error);
-        healthStatus.services.redis = 'unhealthy';
-        healthStatus.status = 'degraded';
-    }
+  // Redis: best-effort PING
+  try {
+    await Promise.race([
+      redis.ping(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Redis health check timeout')), 2000)
+      ),
+    ]);
+    redis_status = 'up';
+  } catch {
+    redis_status = 'down';
+  }
 
-    return NextResponse.json(healthStatus, {
-        status: healthStatus.status === 'ok' ? 200 : 503,
-    });
+  const status = db === 'up' && redis_status === 'up' ? 'ok' : 'degraded';
+  const buildId = process.env.BUILD_ID || process.env.NEXT_PUBLIC_BUILD_ID || 'unknown';
+  const uptimeMs = Math.floor(process.uptime() * 1000);
+
+  return NextResponse.json(
+    { status, db, redis: redis_status, buildId, uptimeMs },
+    { status: status === 'ok' ? 200 : 503 }
+  );
 }

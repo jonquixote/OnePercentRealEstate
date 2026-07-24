@@ -10,6 +10,7 @@ WorkingDirectory=/opt/onepercent
 EnvironmentFile=/etc/oper.env
 EnvironmentFile=-/etc/oper-role-worker.env
 ExecStart=/opt/onepercent/apps/worker/node_modules/.bin/tsx apps/worker/src/index-snapshot.ts
+MemoryMax=1G
 
 [Install]
 WantedBy=multi-user.target

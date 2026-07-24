@@ -13,6 +13,7 @@ Environment=PORT=3001
 ExecStart=/usr/bin/node apps/one/server.js
 Restart=on-failure
 RestartSec=5
+MemoryHigh=1536M
 MemoryMax=2G
 
 [Install]

@@ -12,6 +12,7 @@ EnvironmentFile=-/etc/oper-role-worker.env
 ExecStart=/usr/bin/node apps/worker/dist/watchlist-alerts.js
 Restart=on-failure
 RestartSec=5
+MemoryHigh=192M
 MemoryMax=256M
 
 [Install]

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily UpCloud snapshot (off-peak)
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+Unit=oper-snapshot.service
+
+[Install]
+WantedBy=timers.target

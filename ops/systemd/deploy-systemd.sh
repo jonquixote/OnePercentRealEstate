@@ -20,6 +20,7 @@ ALL_UNITS=(
   oper-worker oper-worker-rent oper-worker-refresh
   oper-worker-watchlist oper-worker-media oper-worker-ml-scheduler
   oper-worker-digest oper-worker-alerts
+  oper-healthcheck oper-snapshot
 )
 
 # Service name → systemd unit mapping
@@ -60,42 +61,138 @@ bash "$(dirname "$0")/gen-alertmanager.sh"
 
 # Build steps
 build_node() {
-  echo "--- Building Node.js (pnpm) ---"
+  echo "--- Building Node.js (pnpm) under memory cap ---"
   # NEXT_PUBLIC_* vars are baked into the client bundle AT BUILD TIME —
   # without sourcing .env here, Stripe's publishable key (and any other
   # NEXT_PUBLIC config) ships as undefined.
-  set -a; . ./.env; set +a
-  pnpm install --frozen-lockfile
-  pnpm build
+  # systemd-run --scope creates a transient cgroup so a runaway build is
+  # reclaimed/killed instead of OOMing the live stack.
+  systemd-run --scope \
+    -p MemoryMax=6G -p MemoryHigh=5G -p Nice=10 -p IOWeight=50 \
+    bash -c '
+      set -euo pipefail
+      set -a
+      . ./.env
+      set +a
+      pnpm install --frozen-lockfile
+      pnpm build
 
-  # Copy static assets into standalone directories (required for Next.js standalone mode).
-  # Standalone output omits both .next/static AND public/ — a hand rebuild that
-  # skips this copy serves HTML whose every chunk 404s (two.octavo.press, 2026-07-18).
-  for app in one two; do
-    src="apps/$app/.next/static"
-    dst="apps/$app/.next/standalone/apps/$app/.next/static"
-    if [[ -d "$src" ]]; then
-      echo "  Copying static assets: $src -> $dst"
-      rm -rf "$dst"
-      mkdir -p "$dst"
-      cp -a "$src/." "$dst/"
-    fi
-    pub="apps/$app/public"
-    pubdst="apps/$app/.next/standalone/apps/$app/public"
-    if [[ -d "$pub" ]]; then
-      echo "  Copying public assets: $pub -> $pubdst"
-      rm -rf "$pubdst"
-      mkdir -p "$pubdst"
-      # `/.` form copies contents and tolerates an empty dir (a bare glob under
-      # `set -e` aborts the script before any restart runs).
-      cp -a "$pub/." "$pubdst/"
-    fi
-  done
+      # Copy static assets into standalone directories (required for Next.js standalone mode).
+      for app in one two; do
+        src="apps/$app/.next/static"
+        dst="apps/$app/.next/standalone/apps/$app/.next/static"
+        if [[ -d "$src" ]]; then
+          echo "  Copying static assets: $src -> $dst"
+          rm -rf "$dst"
+          mkdir -p "$dst"
+          cp -a "$src/." "$dst/"
+        fi
+        pub="apps/$app/public"
+        pubdst="apps/$app/.next/standalone/apps/$app/public"
+        if [[ -d "$pub" ]]; then
+          echo "  Copying public assets: $pub -> $pubdst"
+          rm -rf "$pubdst"
+          mkdir -p "$pubdst"
+          cp -a "$pub/." "$pubdst/"
+        fi
+      done
+    '
 }
 
 build_ml() {
   echo "--- Installing ML Python deps ---"
   services/ml/.venv/bin/pip install -q -r services/ml/requirements.txt
+}
+
+# Post-deploy smoke gate — fail-closed. Any failure = non-zero exit.
+smoke_test() {
+  echo "--- Running post-deploy smoke tests ---"
+  local failed=0
+  local notify_script="$(dirname "$0")/../monitoring/notify-telegram.sh"
+  local box=$(hostname)
+
+  fail() {
+    local check="$1"
+    local detail="$2"
+    echo "  SMOKE FAIL: ${check} — ${detail}"
+    # Telegram outage must not fail an otherwise-healthy deploy.
+    if [[ -x "$notify_script" ]]; then
+      "$notify_script" --key "smoke-${check}" "RED ${box}: deploy smoke failed — ${check}: ${detail}" \
+        || echo "WARN: failed to send smoke alert for ${check}" >&2
+    fi
+    failed=1
+  }
+
+  pass() {
+    local check="$1"
+    echo "  SMOKE PASS: ${check}"
+    if [[ -x "$notify_script" ]]; then
+      "$notify_script" --resolved --key "smoke-${check}" "OK ${box}: deploy smoke passed — ${check}" \
+        || echo "WARN: failed to send smoke resolution for ${check}" >&2
+    fi
+  }
+
+  # 1. HTTP health endpoint
+  local health_resp
+  if health_resp=$(curl -sf -m5 http://127.0.0.1:3001/api/health 2>/dev/null); then
+    if echo "$health_resp" | grep -q '"status":"ok"'; then
+      pass "health"
+    else
+      fail "health" "status not ok: ${health_resp}"
+    fi
+  else
+    fail "health" "curl failed"
+  fi
+
+  # 2. /sitemap.xml — must be XML with <urlset
+  local sitemap_ct sitemap_body
+  sitemap_ct=$(curl -sf -m5 -o /dev/null -w '%{content_type}' http://127.0.0.1:3001/sitemap.xml 2>/dev/null || echo "")
+  sitemap_body=$(curl -sf -m5 http://127.0.0.1:3001/sitemap.xml 2>/dev/null | sed -n '1,5p' || echo "")
+  if echo "$sitemap_ct" | grep -qi 'xml' && echo "$sitemap_body" | grep -q '<urlset'; then
+    pass "sitemap"
+  else
+    fail "sitemap" "content-type=${sitemap_ct}, body snippet: ${sitemap_body:0:100}"
+  fi
+
+  # 3. /robots.txt — 200 with Disallow
+  local robots_body
+  robots_body=$(curl -sf -m5 http://127.0.0.1:3001/robots.txt 2>/dev/null || echo "")
+  if echo "$robots_body" | grep -q 'Disallow'; then
+    pass "robots"
+  else
+    fail "robots" "missing Disallow directive"
+  fi
+
+  # 4. oper-two / — 200
+  if curl -sf -m5 http://127.0.0.1:3002/ >/dev/null 2>&1; then
+    pass "oper-two"
+  else
+    fail "oper-two" "curl to port 3002 failed"
+  fi
+
+  # 5. scraper (FastAPI on port 8001) — 200
+  if curl -sf -m5 http://127.0.0.1:8001/ >/dev/null 2>&1; then
+    pass "scraper"
+  else
+    fail "scraper" "curl to port 8001 failed"
+  fi
+
+  # 6. property page — known property has non-generic title
+  local prop_title
+  prop_title=$(curl -sf -m5 http://127.0.0.1:3001/property/1 2>/dev/null | grep -oP '<title>\K[^<]+' || echo "")
+  if [[ -n "$prop_title" && "$prop_title" != *"Error"* && "$prop_title" != *"404"* && "$prop_title" != *"Not Found"* ]]; then
+    pass "property-page"
+  else
+    fail "property-page" "property page title empty or generic: ${prop_title:0:60}"
+  fi
+
+  echo ""
+  if [[ $failed -ne 0 ]]; then
+    echo "=== SMOKE GATE FAILED — deploy marked failed (non-zero exit) ==="
+    echo "Fix the failing checks and re-deploy."
+    exit 1
+  fi
+  echo "=== Smoke tests passed ==="
 }
 
 # If specific services given, restart only those
@@ -136,3 +233,5 @@ fi
 echo ""
 echo "=== Deploy complete ==="
 "$0" status
+
+smoke_test

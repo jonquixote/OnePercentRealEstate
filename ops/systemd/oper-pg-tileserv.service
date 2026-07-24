@@ -12,6 +12,7 @@ WorkingDirectory=/usr/local/share/pg_tileserv
 ExecStart=/usr/local/bin/pg_tileserv
 Restart=on-failure
 RestartSec=5
+MemoryHigh=384M
 MemoryMax=512M
 
 [Install]

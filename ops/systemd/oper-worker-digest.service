@@ -19,6 +19,7 @@ EnvironmentFile=-/etc/oper-role-worker.env
 ExecStart=/opt/onepercent/apps/worker/node_modules/.bin/tsx apps/worker/src/digest.ts
 Restart=on-failure
 RestartSec=5
+MemoryHigh=144M
 MemoryMax=192M
 
 [Install]
