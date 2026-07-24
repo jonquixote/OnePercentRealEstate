@@ -13,6 +13,7 @@ Environment=PORT=3002
 ExecStart=/usr/bin/node apps/two/server.js
 Restart=on-failure
 RestartSec=5
+MemoryHigh=768M
 MemoryMax=1G
 
 [Install]

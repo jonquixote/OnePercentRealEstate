@@ -14,6 +14,7 @@ RestartSec=5
 TimeoutStartSec=120
 LimitNOFILE=65536
 OOMScoreAdjust=-900
+MemoryHigh=4G
 MemoryMax=6G
 
 [Install]

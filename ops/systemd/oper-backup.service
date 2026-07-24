@@ -9,4 +9,5 @@ Type=oneshot
 Nice=10
 IOSchedulingClass=idle
 ExecStart=/opt/onepercent/ops/systemd/backup-postgres.sh
+MemoryMax=512M
 # Alert via OPS webhook on failure (oper-backup-failure.service)

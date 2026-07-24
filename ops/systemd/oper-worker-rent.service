@@ -12,6 +12,7 @@ EnvironmentFile=-/etc/oper-role-worker.env
 ExecStart=/usr/bin/node apps/worker/dist/rent-estimator.js
 Restart=on-failure
 RestartSec=5
+MemoryHigh=384M
 MemoryMax=512M
 
 [Install]
