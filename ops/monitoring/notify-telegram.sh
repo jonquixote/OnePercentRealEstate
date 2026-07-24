@@ -6,7 +6,7 @@
 #   --resolved   Send a RESOLVED message for the given key and remove state file.
 set -euo pipefail
 
-STATE_DIR="/run/oper-alerts"
+STATE_DIR="/var/lib/oper-alerts"
 COOLDOWN=1800  # 30 minutes in seconds
 
 set +u

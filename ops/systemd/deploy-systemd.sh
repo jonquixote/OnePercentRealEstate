@@ -167,6 +167,22 @@ smoke_test() {
     fail "oper-two" "curl to port 3002 failed"
   fi
 
+  # 5. scraper (FastAPI on port 8001) — 200
+  if curl -sf -m5 http://127.0.0.1:8001/ >/dev/null 2>&1; then
+    pass "scraper"
+  else
+    fail "scraper" "curl to port 8001 failed"
+  fi
+
+  # 6. property page — known property has non-generic title
+  local prop_title
+  prop_title=$(curl -sf -m5 http://127.0.0.1:3001/property/1 2>/dev/null | grep -oP '<title>\K[^<]+' || echo "")
+  if [[ -n "$prop_title" && "$prop_title" != *"Error"* && "$prop_title" != *"404"* && "$prop_title" != *"Not Found"* ]]; then
+    pass "property-page"
+  else
+    fail "property-page" "property page title empty or generic: ${prop_title:0:60}"
+  fi
+
   echo ""
   if [[ $failed -ne 0 ]]; then
     echo "=== SMOKE GATE FAILED — deploy marked failed (non-zero exit) ==="

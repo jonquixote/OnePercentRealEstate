@@ -30,6 +30,7 @@ Runs every 2 minutes. Checks:
 | `oper-*` units | `is-active` | `unit-<name>` |
 | HTTP health (port 3001) | `status:ok` | `http-app` |
 | oper-two (port 3002) | HTTP 200 | `http-two` |
+| scraper (port 8001) | HTTP 200 | `http-scraper` |
 
 ### Silencing during maintenance
 
@@ -58,6 +59,8 @@ Runs after every deploy. Fail-closed: any failure = non-zero exit.
 | `/sitemap.xml` | Content-Type XML + `<urlset>` in body |
 | `/robots.txt` | Contains `Disallow` |
 | `oper-two` (port 3002) | HTTP 200 |
+| `scraper` (port 8001) | HTTP 200 |
+| `/property/1` | Non-generic title (not Error/404/Not Found) |
 
 Failed smoke tests alert via Telegram with key `smoke-<check>`.
 

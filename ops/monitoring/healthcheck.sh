@@ -15,7 +15,7 @@ DISK_USED_PCT_MAX=85    # alert if disk / used > 85%
 check_pass() {
   local key="$1"
   # Send resolved if previously alerting
-  if [[ -f "/run/oper-alerts/${key}" ]]; then
+  if [[ -f "/var/lib/oper-alerts/${key}" ]]; then
     "$NOTIFY" --resolved --key "$key" "✅ ${BOX}: ${key} — RESOLVED"
   fi
 }
@@ -78,4 +78,11 @@ if curl -sf -m5 http://127.0.0.1:3002/ >/dev/null 2>&1; then
   check_pass "http-two"
 else
   check_fail "http-two" "oper-two unreachable on port 3002"
+fi
+
+# --- scraper reachability (FastAPI on port 8001) ---
+if curl -sf -m5 http://127.0.0.1:8001/ >/dev/null 2>&1; then
+  check_pass "http-scraper"
+else
+  check_fail "http-scraper" "scraper unreachable on port 8001"
 fi

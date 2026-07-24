@@ -5,6 +5,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/oper.env
+ExecStartPre=/bin/mkdir -p /var/lib/oper-alerts
 ExecStart=/opt/onepercent/ops/monitoring/healthcheck.sh
 MemoryMax=256M
 Nice=5
