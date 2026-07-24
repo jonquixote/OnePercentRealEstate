@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly pg index/statement snapshot (Sunday 03:00 UTC)
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 UTC
+Persistent=true
+Unit=oper-pg-stat.service
+
+[Install]
+WantedBy=timers.target

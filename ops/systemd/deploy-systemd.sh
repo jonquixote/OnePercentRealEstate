@@ -20,7 +20,7 @@ ALL_UNITS=(
   oper-worker oper-worker-rent oper-worker-refresh
   oper-worker-watchlist oper-worker-media oper-worker-ml-scheduler
   oper-worker-digest oper-worker-alerts
-  oper-healthcheck oper-snapshot
+  oper-healthcheck oper-snapshot oper-pg-stat.timer oper-pgbouncer
 )
 
 # Service name → systemd unit mapping
@@ -41,6 +41,7 @@ declare -A UNITS=(
   [worker-ml-scheduler]="oper-worker-ml-scheduler"
   [worker-digest]="oper-worker-digest"
   [worker-alerts]="oper-worker-alerts"
+  [pgbouncer]="oper-pgbouncer"
 )
 
 if [[ "${1:-}" == "status" ]]; then

@@ -5,14 +5,20 @@ export const CACHE_VERSION_KEY = 'props:version';
 /**
  * TTL taxonomy (seconds). Single source of truth — never inline a magic
  * number at a call site.
- *   listing data (properties / search) : 60
- *   stats (market aggregates)           : 300
- *   HUD / expensive computed            : 86400 (24h)
+ *   listing data (properties / search)  : 60
+ *   computed aggregates / demographics   : 300 (5min) — used by getDemographics,
+ *                                          comps median, rental comps median
+ *   HUD / expensive computed             : 86400 (24h)
+ *   section caches                        : comps/rentalComps 300, context/history 3600
  */
 export const CACHE_TTL = {
   listing: 60,
   stats: 300,
   hud: 86400,
+  comps: 300,
+  context: 3600,
+  history: 3600,
+  rentalComps: 300,
 } as const;
 
 export async function getCacheVersion(): Promise<string> {

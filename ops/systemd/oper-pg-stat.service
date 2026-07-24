@@ -1,0 +1,15 @@
+[Unit]
+Description=OnePercent — weekly pg index/statement snapshot
+After=oper-postgres.service
+Requires=oper-postgres.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/opt/onepercent/ops/monitoring/pg-stat-snapshot.sh
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

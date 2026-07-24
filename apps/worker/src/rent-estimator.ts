@@ -759,7 +759,7 @@ async function listenLoop(parentLog: WorkerLogger): Promise<void> {
   const MAX_BACKOFF = 60_000;
 
   while (!shuttingDown) {
-    const client = new Client({ connectionString: env.DATABASE_URL });
+    const client = new Client({ connectionString: env.DATABASE_URL_DIRECT });
     let connected = false;
 
     try {
