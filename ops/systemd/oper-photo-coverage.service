@@ -1,0 +1,12 @@
+[Unit]
+Description=OnePercent — alert when listings with images stop exposing a photo
+After=oper-postgres.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/opt/onepercent/ops/monitoring/photo-coverage.sh
+MemoryHigh=64M
+MemoryMax=96M

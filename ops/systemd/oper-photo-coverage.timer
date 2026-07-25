@@ -1,0 +1,11 @@
+[Unit]
+Description=Check photo coverage every 30 minutes
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=30min
+Persistent=true
+Unit=oper-photo-coverage.service
+
+[Install]
+WantedBy=timers.target
