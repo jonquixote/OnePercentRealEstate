@@ -17,6 +17,22 @@ set -uo pipefail
 TARGET="${1:-500000}"      # max rows to fill this run
 BATCH="${2:-5000}"         # rows per statement
 PAUSE="${3:-20}"           # seconds between batches — leaves headroom for the crawl
+ONLY_ACTIVE="${4:-0}"      # 1 = fill user-visible inventory first
+
+# ACTIVE FIRST, VIA A FILTER — NOT AN ORDER BY. Listing ids are roughly
+# chronological, so active inventory sits at the high end of the range and a
+# plain ORDER BY id fills ~900k sold/stale rows nobody can see before reaching
+# anything user-visible (measured: 460k rows filled, active coverage still 5%).
+#
+# The obvious fix, ORDER BY (listing_status='active') DESC, id, is a trap: it
+# cannot use the partial index and forces a parallel seq scan of every
+# candidate row on EVERY batch. Measured on prod: 9,520 ms per batch versus
+# 637 ms for the filtered form. Filter, then order.
+if [[ "$ONLY_ACTIVE" == "1" ]]; then
+  LIFECYCLE_FILTER="AND listing_status = 'active'"
+else
+  LIFECYCLE_FILTER=""
+fi
 
 if [[ -f /etc/oper.env ]]; then
   # shellcheck disable=SC1091
@@ -36,12 +52,8 @@ while (( filled < TARGET )); do
        WHERE primary_photo IS NULL
          AND images IS NOT NULL
          AND jsonb_array_length(images) > 0
-       -- ACTIVE FIRST. Listing ids are roughly chronological, so active
-       -- inventory sits at the high end; a plain ORDER BY id fills a million
-       -- sold/stale rows nobody looks at before reaching anything a user can
-       -- see. Ordering by lifecycle first means user-visible coverage climbs
-       -- from the first batch.
-       ORDER BY (listing_status = 'active') DESC, id
+       ${LIFECYCLE_FILTER}
+       ORDER BY id
        LIMIT ${lim}
     ), upd AS (
       UPDATE listings l
