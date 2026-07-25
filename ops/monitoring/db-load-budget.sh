@@ -27,32 +27,50 @@ fi
 DB="${DATABASE_URL_DIRECT:-${DATABASE_URL:-}}"
 [[ -z "$DB" ]] && { echo "[db-load-budget] no DATABASE_URL" >&2; exit 0; }
 
-# Top offender and its share. Excludes pg_stat_statements' own bookkeeping.
-read -r pct total_s query <<<"$(psql "$DB" -tA -F'|' -c "
-  WITH t AS (SELECT NULLIF(sum(total_exec_time),0) AS total FROM pg_stat_statements)
-  SELECT round((s.total_exec_time / t.total * 100)::numeric, 1),
-         round((s.total_exec_time/1000)::numeric)::text,
-         left(regexp_replace(s.query, '\s+', ' ', 'g'), 120)
-  FROM pg_stat_statements s, t
-  WHERE s.query NOT ILIKE '%pg_stat_statements%'
-  ORDER BY s.total_exec_time DESC
-  LIMIT 1;" 2>/dev/null | tr '|' ' ')"
+# DELTA-BASED, not cumulative. pg_stat_statements totals are since the last
+# reset, so a problem that has already been FIXED would keep alerting forever
+# while a NEW one hides behind its history. We snapshot per-query totals each
+# run and evaluate the share of work done *since the previous run*.
+STATE="/var/lib/oper-db-budget/prev.tsv"
+mkdir -p "$(dirname "$STATE")"
+
+CUR="$(psql "$DB" -tA -F$'\t' -c "
+  SELECT queryid, round(total_exec_time)::bigint, left(regexp_replace(query, '\s+', ' ', 'g'), 120)
+  FROM pg_stat_statements
+  WHERE query NOT ILIKE '%pg_stat_statements%' AND queryid IS NOT NULL;" 2>/dev/null)"
+
+if [[ -z "$CUR" ]]; then
+  echo "[db-load-budget] query failed" >&2; exit 0
+fi
+
+if [[ ! -s "$STATE" ]]; then
+  printf '%s\n' "$CUR" > "$STATE"
+  echo "[db-load-budget] baseline captured; deltas evaluated from the next run"
+  exit 0
+fi
+
+# Join previous totals to current and compute this window's share.
+read -r pct total_s query <<<"$(awk -F'\t' '
+  NR==FNR { prev[$1]=$2; next }
+  {
+    d = $2 - (($1 in prev) ? prev[$1] : 0)
+    if (d < 0) d = $2           # counters reset since last run
+    tot += d
+    if (d > maxd) { maxd = d; maxq = $3 }
+  }
+  END {
+    if (tot <= 0) { print "0 0 none"; exit }
+    printf "%.1f %d %s\n", (maxd/tot)*100, maxd/1000, maxq
+  }' "$STATE" <(printf '%s\n' "$CUR"))"
+
+printf '%s\n' "$CUR" > "$STATE"
 
 [[ -z "${pct:-}" ]] && { echo "[db-load-budget] query failed" >&2; exit 0; }
 
 if awk "BEGIN{exit !($pct > $BUDGET_PCT)}"; then
-  top5="$(psql "$DB" -tA -c "
-    SELECT round((total_exec_time/1000)::numeric)::text || 's  ' ||
-           left(regexp_replace(query, '\s+', ' ', 'g'), 70)
-    FROM pg_stat_statements
-    WHERE query NOT ILIKE '%pg_stat_statements%'
-    ORDER BY total_exec_time DESC LIMIT 5;" 2>/dev/null)"
   "$NOTIFY" --key "db-load-budget" \
-    "🔴 ${BOX}: db-load-budget — one query is ${pct}% of all DB time (${total_s}s, budget ${BUDGET_PCT}%)
-${query}
-
-Top 5 by total time:
-${top5}" || true
+    "🔴 ${BOX}: db-load-budget — one query used ${pct}% of DB time THIS WINDOW (${total_s}s, budget ${BUDGET_PCT}%)
+${query}" || true
 else
   if [[ -f "/var/lib/oper-alerts/db-load-budget" ]]; then
     "$NOTIFY" --resolved --key "db-load-budget" "✅ ${BOX}: db-load-budget — RESOLVED (top query now ${pct}%)" || true
