@@ -72,6 +72,20 @@ Measured 2026-07-25 on a **single** endpoint:
 - ~273 listings / 10 min ≈ **1,640 listings/hour**
 - Backlog at the time: **44,464 pending** ⇒ ~**24 days** to drain
 
+### Endpoints alone do nothing without concurrency
+
+`WORKER_CONCURRENCY` bounds how many crawl jobs are in flight at once. It was
+`1` (a single-IP-era setting), so adding endpoints only *rotated* which IP served
+each sequential job — all three sat idle at `ready_in_ms: 0` and throughput did
+not move. **Set `WORKER_CONCURRENCY` equal to the endpoint count.**
+
+This does **not** speed up any individual IP: `ScraperPool.acquire()` hands out
+one endpoint per in-flight job and `reserve()` holds it for that endpoint's own
+AIMD interval, so each IP keeps exactly its previous cadence. The boot-stagger
+(`endpoint.reserve(now + i*startInterval/n)`) exists for precisely this
+parallel-endpoint case. Watch `"blocked"` in the endpoint metrics after any
+increase; a block escalates that endpoint's cool-off automatically.
+
 **The answer to a backlog is more IPs, never a faster per-IP rate.** Politeness
 settings (`CRAWL_JOB_MIN_INTERVAL_MS`, jitter, AIMD cool-off) are what kept us
 un-blocked by Realtor.com for months; they are inviolable. Throughput scales by
