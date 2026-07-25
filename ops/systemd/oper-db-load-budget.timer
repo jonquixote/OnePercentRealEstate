@@ -1,0 +1,11 @@
+[Unit]
+Description=Check DB load budget hourly
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=oper-db-load-budget.service
+
+[Install]
+WantedBy=timers.target

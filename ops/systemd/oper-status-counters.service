@@ -1,0 +1,15 @@
+[Unit]
+Description=OnePercent — refresh monitoring counters (replaces per-scrape full scans)
+After=oper-postgres.service
+Wants=oper-postgres.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+# One GROUP BY over listings every 10 min instead of one per metrics scrape.
+# Uses DATABASE_URL_DIRECT: monitoring must keep working if the pooler is what broke.
+ExecStart=/bin/bash -c 'psql "$DATABASE_URL_DIRECT" -c "SELECT refresh_listing_status_counters();"'
+MemoryHigh=96M
+MemoryMax=128M
