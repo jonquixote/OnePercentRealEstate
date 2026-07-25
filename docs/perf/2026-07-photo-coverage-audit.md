@@ -13,16 +13,36 @@ Prod (`209.50.61.64`, database `postgres`), active for-sale listings:
 | …with the native `primary_photo` column set | **140** | **0.03%** |
 | …genuinely imageless | 3,215 | 0.7% |
 
-Effect on the primary card-rendering path:
+### Correction to this audit's original evidence
+
+The first version of this document led with:
 
 ```
-GET /api/properties/viewport?north=28.1&south=27.8&east=-82.3&west=-82.7&zoom=11
+GET /api/properties/viewport?…&zoom=11
   rows: 293
   with primary_photo: 0 / 293
 ```
 
-Zero of 293, every one of which has images. Not a data acquisition problem — a
-read-path problem plus a backfill that never ran.
+**That measurement was wrong**, and it is worth recording why rather than
+quietly deleting it. At `zoom < 14` the viewport route deliberately serves
+*clusters* from `mv_cluster_tiles`, not individual listings — those 293 "rows"
+were cluster aggregates, which have no photo by design. The probe was measuring
+the wrong thing and happened to produce a number that confirmed the hypothesis.
+
+Re-measured at listing-level zoom after the fix:
+
+```
+GET /api/properties/viewport?north=27.99&south=27.94&east=-82.44&west=-82.50&zoom=15
+  103 / 103 rows have a photo
+```
+
+The underlying defect was still real, and the column evidence below is what
+actually establishes it: `primary_photo` was set on 140 of 449,654 active
+listings, so before the fix a zoom-15 request would have returned essentially
+no photos. But the headline number in the first draft did not show that.
+
+Not a data acquisition problem — a read-path problem plus a backfill that
+never ran.
 
 ## `PHOTO_EXPR` — confirmed, not assumed
 
