@@ -93,3 +93,21 @@ band-integrity check, not in a new module.
    reaches the irreducible floor.
 2. State what that floor is and why, once reached.
 3. Assert the four invariants above on a timer, so their zero stays zero.
+
+## Task 3 was already done
+
+Task 3 asked for band-absence to be an honest product state and for
+`assessRent` to treat it as a first-class input rather than a silent default.
+Both were already true before this plan:
+
+- `assessRent` (`apps/one/src/lib/rent-trust.ts:48`) does not take `rent_low` /
+  `rent_high` at all. Its inputs are price, model rent, HUD FMR and area comp.
+  There is no band default to remove, silent or otherwise — the premise was
+  wrong.
+- The property page (`apps/one/src/app/property/[id]/page.tsx:201`) already
+  gates on `hasBand = rentLow != null && rentHigh != null && rent > 0`, and
+  explicitly nulls both bounds rather than inventing them when a widened band
+  cannot be anchored. The card (`components/ui/card.tsx:297`) renders the range
+  only when both bounds exist.
+
+The earlier trust work covered this. Nothing to build.
