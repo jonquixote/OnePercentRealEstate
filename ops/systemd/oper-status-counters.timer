@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh monitoring counters every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=oper-status-counters.service
+
+[Install]
+WantedBy=timers.target

@@ -54,7 +54,11 @@ fi
 q() { psql "$DB" -tAc "$1" 2>/dev/null | tr -d '[:space:]'; }
 
 # --- 1. Freshness — the check that would have caught the 10-hour outage ------
-fresh_min="$(q "SELECT COALESCE(EXTRACT(EPOCH FROM (now() - max(last_seen_at)))/60, 999999)::int FROM listings")"
+# Index-friendly: idx_listings_last_seen is PARTIAL
+# (listing_type='for_sale' AND listing_status IN ('active','pending_verify')),
+# so a bare max(last_seen_at) over the whole table cannot use it and cost 9.3s
+# per run. Matching the index predicate turns this into a backward index scan.
+fresh_min="$(q "SELECT COALESCE(EXTRACT(EPOCH FROM (now() - max(last_seen_at)))/60, 999999)::int FROM listings WHERE listing_type = 'for_sale' AND listing_status IN ('active','pending_verify')")"
 if [[ -z "$fresh_min" ]]; then
   echo "[crawl-health] freshness query failed; skipping" >&2
 elif [[ "$fresh_min" -gt "$CRAWL_FRESH_MAX_MIN" ]]; then

@@ -20,7 +20,8 @@ ALL_UNITS=(
   oper-worker oper-worker-rent oper-worker-refresh
   oper-worker-watchlist oper-worker-media oper-worker-ml-scheduler
   oper-worker-digest oper-worker-alerts
-  oper-healthcheck oper-snapshot oper-pg-stat.timer oper-pgbouncer
+  oper-healthcheck oper-pg-stat.timer oper-pgbouncer oper-crawl-health.timer
+  oper-stats-refresh.timer oper-status-counters.timer oper-db-load-budget.timer
 )
 
 # Service name → systemd unit mapping

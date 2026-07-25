@@ -1,0 +1,31 @@
+{
+  "_captured": "2026-07-25T06:00:59Z",
+  "_source": "prod GET /api/stats (strategy=buy_hold), before the stats_summary refactor",
+  "_why": "This is the refactor contract: precomputing must not change what the hero renders.",
+  "total": 509848,
+  "onePercentPasses": 58280,
+  "medianRatioPct": 0.635,
+  "markets": 51,
+  "rentable": 462247,
+  "rentCalcPending": 0,
+  "thresholdPct": 1,
+  "strategy": "buy_hold",
+  "histogram": [
+    { "loPct": 0.2, "hiPct": 0.3, "count": 23996 },
+    { "loPct": 0.3, "hiPct": 0.4, "count": 32092 },
+    { "loPct": 0.4, "hiPct": 0.5, "count": 59926 },
+    { "loPct": 0.5, "hiPct": 0.6, "count": 83794 },
+    { "loPct": 0.6, "hiPct": 0.7, "count": 86572 },
+    { "loPct": 0.7, "hiPct": 0.8, "count": 64977 },
+    { "loPct": 0.8, "hiPct": 0.9, "count": 37383 },
+    { "loPct": 0.9, "hiPct": 1, "count": 20706 },
+    { "loPct": 1, "hiPct": 1.1, "count": 12582 },
+    { "loPct": 1.1, "hiPct": 1.2, "count": 8441 },
+    { "loPct": 1.2, "hiPct": 1.3, "count": 5837 },
+    { "loPct": 1.3, "hiPct": 1.4, "count": 4354 },
+    { "loPct": 1.4, "hiPct": 1.5, "count": 3155 },
+    { "loPct": 1.5, "hiPct": 1.6, "count": 2428 },
+    { "loPct": 1.6, "hiPct": 1.7, "count": 15682 }
+  ],
+  "medianRent": 2508
+}

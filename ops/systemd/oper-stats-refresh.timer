@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh homepage stats every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=oper-stats-refresh.service
+
+[Install]
+WantedBy=timers.target

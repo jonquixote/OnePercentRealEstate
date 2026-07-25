@@ -22,12 +22,16 @@ crawl_jobs_status:
         description: "Number of crawl jobs in the given status"
 
 rent_calc_status:
+  # WAS: SELECT rent_calc_status, COUNT(*) FROM listings GROUP BY rent_calc_status
+  # That full-scanned 1.3M rows on EVERY scrape: 3,034 calls x 8.2s = 25,012s,
+  # which was 79% of ALL database execution time. It now reads a 3-row table
+  # refreshed by oper-status-counters.timer (every 10 min).
   query: |
     SELECT
-      rent_calc_status AS status,
-      COUNT(*)::float AS count
-    FROM listings
-    GROUP BY rent_calc_status
+      label AS status,
+      count::float AS count
+    FROM listing_status_counters
+    WHERE metric = 'rent_calc_status'
   master: true
   metrics:
     - status:
@@ -38,7 +42,10 @@ rent_calc_status:
         description: "Number of listings in the given rent_calc_status"
 
 listings_total:
-  query: "SELECT COUNT(*)::float AS count FROM listings"
+  # WAS: SELECT COUNT(*) FROM listings (167ms x 3,035 calls). This gauge is used
+  # for TREND, not accounting, so the planner's estimate is good enough and is
+  # a sub-millisecond catalog lookup.
+  query: "SELECT reltuples::float AS count FROM pg_class WHERE relname = 'listings'"
   master: true
   metrics:
     - count:
