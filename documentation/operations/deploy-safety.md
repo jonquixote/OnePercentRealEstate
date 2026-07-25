@@ -90,3 +90,22 @@ Add a new gate where the failure class lives:
 Rule of thumb: if an incident could have been caught before traffic hit it, it
 belongs in preflight; if it could have been caught before the box was touched at
 all, it belongs in ops-lint.
+
+## 6. Backups (2026-07-25)
+
+Daily backups are **provider-managed** via UpCloud Simple Backup:
+
+```bash
+upctl server modify 003b1626-d145-47b6-9cf6-b9fff3025829 --simple-backup 0430,dailies
+upctl server show   003b1626-d145-47b6-9cf6-b9fff3025829 | grep "Simple Backup"
+```
+
+`ops/monitoring/snapshot-cron.sh` + `oper-snapshot.timer` are **deprecated and
+disabled**. That script alerted nightly ("failed to discover boot disk") because
+it could never work: `upctl` is not installed on the server, its default UUID was
+truncated, and it passed `--description` where the CLI wants `--title`. Making it
+work would have required UpCloud API credentials — which can delete servers — on
+the most exposed host in the fleet. Simple Backup needs none of that.
+
+Ad-hoc snapshot before risky work stays manual and is still the right habit:
+`upctl storage backup create <boot-disk-uuid> --title "oper-<reason>-<date>"`.

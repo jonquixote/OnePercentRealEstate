@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+# =============================================================================
+# DEPRECATED 2026-07-25 — DO NOT ENABLE. Superseded by UpCloud "Simple Backup"
+# (`upctl server modify <uuid> --simple-backup 0430,dailies`), which is
+# provider-managed: daily snapshots with retention, no cron, no credentials.
+#
+# This script could never have worked on prod:
+#   1. `upctl` is not installed on the server (and installing it would require
+#      putting UpCloud API credentials — which can DELETE servers — on the
+#      most exposed host we run).
+#   2. PROD_SERVER_UUID defaulted to a TRUNCATED uuid ("003b1626"), which the
+#      API does not accept.
+#   3. `upctl storage backup create` takes --title, not --description.
+# It failed nightly and correctly alerted ("failed to discover boot disk").
+# Kept for reference only; oper-snapshot.timer is disabled.
+# =============================================================================
 # Daily UpCloud snapshot + retention prune.
 # Creates a snapshot of the prod boot disk, then prunes old oper-auto-* backups
 # keeping at least 3 newest. Alerts on failure.
