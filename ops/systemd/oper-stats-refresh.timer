@@ -1,9 +1,14 @@
 [Unit]
-Description=Refresh homepage stats every 5 minutes
+Description=Refresh homepage stats every 30 minutes
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+# 30 min, NOT 5: the aggregate costs ~30s per strategy x 4 strategies. At a
+# 5-minute cadence that is a 40% duty cycle on the database — MORE total work
+# than the on-demand path it replaced (18.5s per cold miss behind a 120s TTL).
+# The point was to take the cost OUT of user requests, not to multiply it.
+# Users are unaffected by the slower cadence: cachedSWR always serves instantly.
+OnUnitActiveSec=30min
 Persistent=true
 Unit=oper-stats-refresh.service
 
