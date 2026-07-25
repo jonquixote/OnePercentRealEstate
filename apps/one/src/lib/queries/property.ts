@@ -16,7 +16,7 @@ SELECT
   property_type,
   sale_type,
   (SELECT target_ratio FROM resolve_rule(listings.property_type, listings.sale_type, 'buy_hold')) as target_ratio,
-  primary_photo,
+  COALESCE(primary_photo, images->>0) AS primary_photo,
   images,
   media_blur,
   listing_status as status,

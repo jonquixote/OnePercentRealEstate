@@ -55,7 +55,7 @@ export async function GET(req: Request) {
               l.bedrooms,
               l.bathrooms,
               l.sqft,
-              l.primary_photo,
+              COALESCE(l.primary_photo, l.images->>0) AS primary_photo,
               l.property_type,
               l.created_at,
               CASE WHEN l.price > 0 AND l.estimated_rent IS NOT NULL AND l.estimated_rent > 0
@@ -71,7 +71,10 @@ export async function GET(req: Request) {
               -- ratios and dominate this ratio-DESC strip — the original complaint.
               AND l.listing_status = 'active'
               AND l.price > 10000
-              AND l.primary_photo IS NOT NULL
+              -- Coalesced, not the bare column: primary_photo was populated on
+              -- 140 of 449,654 active listings, so the bare filter reduced this
+              -- strip to almost nothing while the photos sat in the jsonb.
+              AND COALESCE(l.primary_photo, l.images->>0) IS NOT NULL
               AND public.is_rentable(l.property_type)
               AND l.rent_calc_status = 'done'
               AND l.estimated_rent > 0

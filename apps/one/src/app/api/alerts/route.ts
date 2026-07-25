@@ -27,7 +27,7 @@ const INBOX_SQL = `
     a.created_at,
     a.read_at,
     l.address,
-    l.primary_photo,
+    COALESCE(l.primary_photo, l.images->>0) AS primary_photo,
     l.property_url,
     l.city,
     l.state,
