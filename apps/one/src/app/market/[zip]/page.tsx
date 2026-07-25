@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Photo } from '@/components/Photo';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { getMarketRanking } from '@/lib/market-ranking';
+import { withSpan } from '@/lib/tracing';
 
 // ISR: market stats move on the scrape cadence, not per-request. force-dynamic
 // would silently disable revalidate — do not add it back alongside this.
@@ -123,7 +124,7 @@ export async function generateMetadata({ params }: { params: Promise<{ zip: stri
 async function lookupPlace(zip: string): Promise<{ city: string | null; state: string | null } | null> {
     try {
         const res = await pool.query(
-            `SELECT raw_data->>'city' AS city, raw_data->>'state' AS state FROM listings WHERE zip_code = $1 LIMIT 1`,
+            `SELECT city, state FROM listings WHERE zip_code = $1 LIMIT 1`,
             [zip],
         );
         const row = res.rows[0];
@@ -229,7 +230,7 @@ async function loadMarketData(zip: string): Promise<MarketData> {
             // cached in @/lib/market-ranking. See getMarketRanking() below.
             getMarketRanking(),
             pool.query(
-                `SELECT raw_data->>'city' AS city, raw_data->>'state' AS state FROM listings WHERE zip_code = $1 LIMIT 1`,
+                `SELECT city, state FROM listings WHERE zip_code = $1 LIMIT 1`,
                 [zip],
             ),
         ]);
@@ -357,6 +358,10 @@ async function loadMarketData(zip: string): Promise<MarketData> {
 }
 
 export default async function MarketPage({ params }: { params: Promise<{ zip: string }> }) {
+  return withSpan('market.zip', () => renderMarketPage({ params }));
+}
+
+async function renderMarketPage({ params }: { params: Promise<{ zip: string }> }) {
     const { zip } = await params;
 
     // Validate the param before touching the DB.

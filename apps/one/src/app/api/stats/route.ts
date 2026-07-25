@@ -35,6 +35,10 @@ const FRESH_S = 300;
 const STALE_S = 86_400;
 
 export async function GET(req: Request) {
+  return withSpan('api.stats', () => handleGet(req));
+}
+
+async function handleGet(req: Request) {
   const url = new URL(req.url);
   const strategyParam = url.searchParams.get('strategy') || 'buy_hold';
   const strategy = STRATEGY_WHITELIST.has(strategyParam) ? strategyParam : 'buy_hold';

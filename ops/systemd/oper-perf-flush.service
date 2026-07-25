@@ -1,0 +1,16 @@
+[Unit]
+Description=OnePercent — flush per-route latency aggregate to route_latency_samples
+After=oper-app.service oper-postgres.service
+Wants=oper-app.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+# One aggregated row per route per run — never one per request. The app holds
+# the samples in a bounded in-memory ring; this only persists the summary so
+# the admin view survives a restart.
+ExecStart=/bin/bash -c 'curl -sS -f -m 30 -X POST -H "Authorization: Bearer $ADMIN_API_KEY" http://127.0.0.1:3001/api/admin/perf'
+MemoryHigh=64M
+MemoryMax=96M

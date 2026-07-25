@@ -1,0 +1,11 @@
+[Unit]
+Description=Flush per-route latency aggregate every 5 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=oper-perf-flush.service
+
+[Install]
+WantedBy=timers.target

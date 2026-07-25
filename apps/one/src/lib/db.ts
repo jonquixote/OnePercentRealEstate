@@ -1,5 +1,6 @@
 import { Pool, QueryResult } from 'pg';
 import { env } from '@/lib/env';
+import { reportSlowQuery, slowQueryThresholdMs } from '@/lib/slow-query';
 
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
@@ -18,6 +19,10 @@ pool.query = async function wrappedQuery(text: string | { text: string; values?:
     if (duration > 200) {
       const queryText = typeof text === 'string' ? text : text.text;
       console.warn(`[SLOW QUERY] ${duration}ms: ${queryText?.substring(0, 100)}...`);
+      // Above the (higher) alert threshold this also pushes, deduped by query
+      // shape. Keep logging everything over 200ms — the journal stays the
+      // detailed record, the alert is only for the ones worth waking up for.
+      if (duration >= slowQueryThresholdMs()) reportSlowQuery(queryText ?? '', duration);
     }
     return result;
   } catch (error) {
