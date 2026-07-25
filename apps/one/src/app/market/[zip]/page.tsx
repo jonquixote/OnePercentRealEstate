@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Photo } from '@/components/Photo';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { getMarketRanking } from '@/lib/market-ranking';
+import { withSpan } from '@/lib/tracing';
 
 // ISR: market stats move on the scrape cadence, not per-request. force-dynamic
 // would silently disable revalidate — do not add it back alongside this.
@@ -357,6 +358,10 @@ async function loadMarketData(zip: string): Promise<MarketData> {
 }
 
 export default async function MarketPage({ params }: { params: Promise<{ zip: string }> }) {
+  return withSpan('market.zip', () => renderMarketPage({ params }));
+}
+
+async function renderMarketPage({ params }: { params: Promise<{ zip: string }> }) {
     const { zip } = await params;
 
     // Validate the param before touching the DB.

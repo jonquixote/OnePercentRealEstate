@@ -1,0 +1,11 @@
+[Unit]
+Description=Check per-route p95 against declared budgets every 10 minutes
+
+[Timer]
+OnBootSec=12min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=oper-perf-budget.service
+
+[Install]
+WantedBy=timers.target

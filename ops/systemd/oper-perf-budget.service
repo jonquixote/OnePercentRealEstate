@@ -1,0 +1,13 @@
+[Unit]
+Description=OnePercent — alert when a route's p95 breaches its declared budget
+After=oper-app.service
+Wants=oper-app.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/opt/onepercent/ops/monitoring/perf-budget.sh
+MemoryHigh=64M
+MemoryMax=96M

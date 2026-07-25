@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { withSpan } from '@/lib/tracing';
 
 // Top metros by active for_sale listing count, with live median price/rent,
 // price-to-rent ratio, and 5-yr FHFA HPI change — powers the homepage
@@ -66,6 +67,10 @@ const LIVE_AGGREGATION_SQL = `
 `;
 
 export async function GET() {
+  return withSpan('api.markets', () => handleGet());
+}
+
+async function handleGet() {
   if (cached) {
     if (Date.now() - cached.at >= CACHE_MS && !refreshing) {
       refreshing = refreshMarkets().finally(() => {

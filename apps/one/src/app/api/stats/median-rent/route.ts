@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cachedSWR } from '@/lib/cache-swr';
 import { computeAndStoreStats, readStatsSummary } from '@/lib/stats-compute';
+import { withSpan } from '@/lib/tracing';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,10 @@ const FRESH_S = 300;
 const STALE_S = 86_400;
 
 export async function GET() {
+  return withSpan('api.stats.median-rent', () => handleGet());
+}
+
+async function handleGet() {
   try {
     const medianRent = await cachedSWR<number | null>(
       'home:median-rent:v2',

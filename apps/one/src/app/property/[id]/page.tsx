@@ -31,6 +31,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import { cached, CACHE_TTL } from '@/lib/cache';
 import { resetRequestStats, getRequestStats } from '@/lib/query-trace';
 import { LazySection } from '@/components/property/LazySection';
+import { withSpan } from '@/lib/tracing';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -116,6 +117,10 @@ function NotFound() {
 }
 
 export default async function PropertyPage({ params }: { params: Promise<{ id: string }> }) {
+  return withSpan('property.id', () => renderPropertyPage({ params }));
+}
+
+async function renderPropertyPage({ params }: { params: Promise<{ id: string }> }) {
     resetRequestStats();
     const { id } = await params;
     const property = await getProperty(id);
