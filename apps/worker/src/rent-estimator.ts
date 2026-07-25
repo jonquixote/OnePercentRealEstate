@@ -23,6 +23,7 @@ import { getLogger, newTraceId, withTrace, type WorkerLogger } from './logger.js
 import { Redis } from 'ioredis';
 import { CircuitBreaker, classifyMlError } from './ml-errors.js';
 import { NON_RENTABLE_SETTLE_SQL, NO_GEO_SETTLE_SQL } from './rent-settle-sql.js';
+import { isScored } from './rent-scored.js';
 
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
@@ -290,7 +291,10 @@ async function callMlService(payload: ListingPayload, parentLog: WorkerLogger): 
       throw new Error(`ml ${res.status}: ${body.slice(0, 200)}`);
     }
     const json = (await res.json()) as Partial<PredictResponse>;
-    if (typeof json.predicted_rent !== 'number' || !Number.isFinite(json.predicted_rent)) {
+    // isScored rejects 0 as well as NaN/Infinity: a rent of zero is the absence
+    // of an estimate, and storing it as one is what produced 36,979 listings
+    // marked `done` while holding no usable rent.
+    if (!isScored(json.predicted_rent)) {
       throw new Error(`ml returned invalid predicted_rent: ${String(json.predicted_rent)}`);
     }
     if (typeof json.model_version !== 'string' || json.model_version.length === 0) {
@@ -617,7 +621,9 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
   breaker.recordSuccess();
 
   // 4. Bulk write-back in one transaction.
-  const scored = results.filter((s) => Number.isFinite(s.predicted_rent));
+  // isScored, not Number.isFinite: a predicted rent of 0 is the absence of an
+  // estimate, not an estimate of zero. See rent-scored.ts.
+  const scored = results.filter((s) => isScored(s.predicted_rent));
   const scoredIds = new Set(scored.map((s) => s.listing_id));
   const skipped = items.filter((i) => !scoredIds.has(i.listing_id)).map((i) => i.listing_id);
 
