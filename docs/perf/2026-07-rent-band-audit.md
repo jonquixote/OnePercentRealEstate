@@ -111,3 +111,45 @@ Both were already true before this plan:
   only when both bounds exist.
 
 The earlier trust work covered this. Nothing to build.
+
+## Results (2026-07-25)
+
+| Metric | Before | After |
+|---|---|---|
+| Banded share of estimated active listings | 59.3% | **93.2%** |
+| Unbanded | 172,686 | **28,896** |
+| Malformed bands | 0 | **0** |
+| Failures with no recorded reason | 6,211 | **0** |
+| Total rent failures | 6,308 | 3,027 |
+
+The failure re-queue recovered far more than predicted. The audit estimated 369
+recoverable rows (those with complete features); 3,281 actually left `failed`.
+The prediction was too conservative because "looks scoreable" only counted rows
+with a full feature set, while the model tolerates more sparsity than that.
+
+Every remaining failure now says why: 3,027 rows, all `missing latitude/longitude`.
+
+## The irreducible band floor, and what it exposes
+
+Of the 28,889 active listings that still have an estimate but no band:
+
+| | Count |
+|---|---|
+| `rent_model_version = 'non_rentable_skip'` | **28,756** |
+| `failed`, missing lat/lon | 13 |
+
+So the floor is ~28.8k and it is explainable: these listings' property types are
+not rentable, and a rent confidence interval for a plot of vacant land is
+meaningless. Banding them would be manufacturing confidence, which is the thing
+this plan refused to do.
+
+**But it exposes an inconsistency worth flagging rather than burying.** These
+28,756 rows are marked non-rentable *and still carry an `estimated_rent` that
+the product will display*. The band is correctly absent, but the point estimate
+arguably should not be there either — the same "the status says one thing and
+the data says another" problem the `done`-implies-an-estimate work fixed on
+2026-07-28, in a different column.
+
+This is not fixed here. It needs a decision first: does a non-rentable listing
+show no rent at all, or a rent labelled as not-applicable? That is a product
+call, not a backfill, and it should be made deliberately.
