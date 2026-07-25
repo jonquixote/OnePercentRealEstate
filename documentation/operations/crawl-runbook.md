@@ -113,13 +113,23 @@ Then add its mesh IP to `SCRAPER_URLS` in `/opt/onepercent/.env`, re-run
 > **custom plans are rejected**. Creating a node requires stopping something
 > first; `upctl server stop/start` is gated and must be run by the operator.
 
-## 6. Known gaps
+## 6. Current fleet (2026-07-25)
 
-- The original detached scraper box (`152.44.44.224` / mesh `10.8.3.41`,
-  UUID `003b3b44`) **rejects the deploy SSH key** — the same lockout the main box
-  had. Its disk is backed up (`0138702c-875d-48df-9621-65bd49ca5ff7`,
-  "oper-scraper-side-backup-20260725"). Replace it with cloud-init nodes rather
-  than rescuing it; nothing on it is stateful.
+Three endpoints, each its own egress IP:
+
+| Endpoint | Host | Mesh IP | Notes |
+|---|---|---|---|
+| `http://127.0.0.1:8001` | main (`209.50.61.64`) | 10.8.0.105 | driver's own scraper |
+| `http://10.8.0.182:80` | `oper-scraper-2` | 10.8.0.182 | 2GB cloud-init node |
+| `http://10.8.0.246:80` | `oper-scraper-3` | 10.8.0.246 | 2GB cloud-init node |
+
+The original detached box (`003b3b44`, 10.8.3.41) was **deleted** — it had lost
+its SSH key and nothing on it was stateful. Its disk is retained as backup
+`0138702c-875d-48df-9621-65bd49ca5ff7`. The superseded old main (`009821f6`) was
+deleted too (backup `01ab0355-b8f1-4519-915c-3dfeb1e442db`); both deletions were
+needed because **stopped servers still hold their IPv4 allocation**.
+
+## 7. Known gaps
 - `oper-worker-watchlist` is `Type=simple` but exits 0 immediately — it should be
   timer-driven. Harmless today (the healthcheck skips oneshots, not this), but it
   will keep showing as an inactive daemon.
