@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Photo } from '@/components/Photo';
 import Breadcrumbs from '@/components/Breadcrumbs';
+import { getMarketRanking } from '@/lib/market-ranking';
 
 // ISR: market stats move on the scrape cadence, not per-request. force-dynamic
 // would silently disable revalidate — do not add it back alongside this.
@@ -223,15 +224,10 @@ async function loadMarketData(zip: string): Promise<MarketData> {
                  LIMIT 6`,
                 [zip],
             ),
-            pool.query(
-                `SELECT zip_code FROM (
-                    SELECT zip_code, count(*) AS c
-                    FROM listings
-                    WHERE listing_type = 'for_sale' AND sale_type = 'standard' AND zip_code ~ '^\\d{5}$'
-                      AND listing_status NOT IN ('sold','stale','rental_misfiled')
-                    GROUP BY zip_code
-                ) t ORDER BY c DESC LIMIT 600`,
-            ),
+            // The nationwide ZIP ranking is IDENTICAL for every market page and
+            // cost ~10s per request here ([SLOW QUERY] 9985ms) — it is now
+            // cached in @/lib/market-ranking. See getMarketRanking() below.
+            getMarketRanking(),
             pool.query(
                 `SELECT raw_data->>'city' AS city, raw_data->>'state' AS state FROM listings WHERE zip_code = $1 LIMIT 1`,
                 [zip],
@@ -247,7 +243,7 @@ async function loadMarketData(zip: string): Promise<MarketData> {
         const nri = nriRes.rows[0] || null;
         const schools = schoolsRes.rows[0] || { school_count: 0 };
         const top = topRes.rows as ListingRow[];
-        const ranked = (rankedRes.rows as Array<{ zip_code: string }>).map((r) => r.zip_code);
+        const ranked = rankedRes; // already string[] from the cached ranking
         const placeRow = placeRes.rows[0] || null;
 
         const totalListings = Number(agg.total_listings) || 0;
