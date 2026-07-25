@@ -18,7 +18,11 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NOTIFY="${SCRIPT_DIR}/notify-telegram.sh"
 BOX=$(hostname)
-BUDGET_PCT="${DB_LOAD_BUDGET_PCT:-10}"   # alert above this share of total DB time
+BUDGET_PCT="${DB_LOAD_BUDGET_PCT:-25}"        # share of the window's DB time
+# ABSOLUTE FLOOR. On a mostly-idle database any single query is a huge share of
+# a quiet window — a percentage-only budget alerts forever and teaches everyone
+# to ignore it. Only care when the query also did real work.
+BUDGET_MIN_S="${DB_LOAD_BUDGET_MIN_S:-60}"    # seconds of DB time in the window
 
 if [[ -f /etc/oper.env ]]; then
   # shellcheck disable=SC1091
@@ -67,13 +71,13 @@ printf '%s\n' "$CUR" > "$STATE"
 
 [[ -z "${pct:-}" ]] && { echo "[db-load-budget] query failed" >&2; exit 0; }
 
-if awk "BEGIN{exit !($pct > $BUDGET_PCT)}"; then
+if awk "BEGIN{exit !($pct > $BUDGET_PCT && $total_s > $BUDGET_MIN_S)}"; then
   "$NOTIFY" --key "db-load-budget" \
-    "🔴 ${BOX}: db-load-budget — one query used ${pct}% of DB time THIS WINDOW (${total_s}s, budget ${BUDGET_PCT}%)
+    "🔴 ${BOX}: db-load-budget — one query used ${pct}% of DB time THIS WINDOW (${total_s}s; budget ${BUDGET_PCT}% + >${BUDGET_MIN_S}s)
 ${query}" || true
 else
   if [[ -f "/var/lib/oper-alerts/db-load-budget" ]]; then
     "$NOTIFY" --resolved --key "db-load-budget" "✅ ${BOX}: db-load-budget — RESOLVED (top query now ${pct}%)" || true
   fi
 fi
-echo "[db-load-budget] top query = ${pct}% of total DB time (budget ${BUDGET_PCT}%)"
+echo "[db-load-budget] top query = ${pct}% / ${total_s}s of window DB time (budget ${BUDGET_PCT}% AND >${BUDGET_MIN_S}s)"
