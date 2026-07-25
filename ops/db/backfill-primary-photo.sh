@@ -36,7 +36,12 @@ while (( filled < TARGET )); do
        WHERE primary_photo IS NULL
          AND images IS NOT NULL
          AND jsonb_array_length(images) > 0
-       ORDER BY id
+       -- ACTIVE FIRST. Listing ids are roughly chronological, so active
+       -- inventory sits at the high end; a plain ORDER BY id fills a million
+       -- sold/stale rows nobody looks at before reaching anything a user can
+       -- see. Ordering by lifecycle first means user-visible coverage climbs
+       -- from the first batch.
+       ORDER BY (listing_status = 'active') DESC, id
        LIMIT ${lim}
     ), upd AS (
       UPDATE listings l
