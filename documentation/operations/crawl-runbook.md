@@ -89,11 +89,22 @@ adding scraper nodes, each with its own egress IP and its own AIMD pacing.
 | `${DEPLOY_REF}` | the commit to pin the node to (never bare `main`) |
 
 ```bash
+# NOTE the "$(cat ...)": --user-data takes the script BODY or a URL, never a
+# local path. Passing a path makes the node receive the literal path string as
+# its user-data and boot completely unprovisioned (2026-07-25).
 upctl server create --title oper-scraper-N --hostname oper-scraper-N \
   --zone us-sjo1 --plan PREMIUM-1xCPU-2GB \
   --ssh-keys ~/.ssh/id_onepercent.pub \
-  --user-data /path/to/rendered-userdata.yaml --enable-metadata --wait
+  --user-data "$(cat /path/to/rendered-userdata.yaml)" --enable-metadata --wait
 ```
+
+Two things silently produce an unprovisioned node — verify both:
+- `#cloud-config` must be the **first line** of the rendered file.
+- `cloud-init status` saying `done` means only that it ran, not that it did
+  anything. Confirm with `systemctl is-active oper-scraper` on the node.
+
+> **Trial account also caps IPv4 addresses at 5.** Stopped servers still hold
+> theirs, so freeing an address means deleting a server, not just stopping it.
 
 Then add its mesh IP to `SCRAPER_URLS` in `/opt/onepercent/.env`, re-run
 `gen-env.sh`, and restart `oper-worker`. Verify with the endpoint metrics line.

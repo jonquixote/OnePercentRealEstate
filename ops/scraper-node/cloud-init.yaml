@@ -1,3 +1,7 @@
+#cloud-config
+# NOTE: `#cloud-config` MUST be line 1 — cloud-init reads the very first
+# line to pick a handler. It used to sit below the header comments, so
+# this file was silently ignored and nodes booted unprovisioned (2026-07-25).
 # ops/scraper-node/cloud-init.yaml
 #
 # Stands up a new Realtor.com scraper node on the private mesh
@@ -16,7 +20,6 @@
 # Same provider/region as the existing side box (10.8.3.41) is required so
 # the new node lands on the same private mesh and gets an eth1 address in
 # 10.8.0.0/22 automatically at boot.
-#cloud-config
 package_update: true
 packages: [git, python3-venv, python3-pip, build-essential, libpq-dev, nftables]
 
