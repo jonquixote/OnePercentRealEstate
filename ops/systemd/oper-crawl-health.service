@@ -1,0 +1,13 @@
+[Unit]
+Description=OnePercent — crawl productivity probes (freshness/throughput/backlog/endpoints)
+After=oper-postgres.service
+Wants=oper-postgres.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/opt/onepercent/ops/monitoring/crawl-health.sh
+MemoryHigh=96M
+MemoryMax=128M

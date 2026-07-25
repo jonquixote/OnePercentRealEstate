@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ScraperEndpoint, type AimdConfig } from './scraper-pool';
+import { ScraperEndpoint, ScraperPool, type AimdConfig } from './scraper-pool';
 
 const CFG: AimdConfig = {
   minIntervalMs: 5_000, maxIntervalMs: 120_000, startIntervalMs: 30_000,
@@ -88,5 +88,73 @@ describe('ScraperPool', () => {
     p.endpoints[0].settle('blocked', 1000);      // a cools off
     const e = p.acquire(1000)!;
     expect(e.url).toBe('http://b');               // b still available
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fail-away: a dead endpoint must leave rotation.
+//
+// 2026-07-24: the pool's only endpoint was unreachable. `settle('error')`
+// deliberately leaves pacing untouched (transient network blip), so the worker
+// retried it at full rate forever — 290 consecutive errors, 0 ok, ~10h of zero
+// listings. Sustained errors must now sideline the endpoint so a healthy one
+// takes the traffic; but the pool must never sideline ITSELF into doing nothing.
+// ---------------------------------------------------------------------------
+const FAILAWAY: AimdConfig = { ...CFG, failawayStreak: 3, failawayCooloffMs: 60_000 };
+
+describe('ScraperEndpoint fail-away', () => {
+  it('sidelines after N consecutive errors', () => {
+    const e = new ScraperEndpoint('http://dead', FAILAWAY, () => 0);
+    e.settle('error', 1000);
+    e.settle('error', 1000);
+    expect(e.isSidelined(1000)).toBe(false); // streak not reached yet
+    e.settle('error', 1000);
+    expect(e.isSidelined(1000)).toBe(true);
+    expect(e.available(1000)).toBe(false);
+  });
+
+  it('recovers after the sideline cool-off expires', () => {
+    const e = new ScraperEndpoint('http://dead', FAILAWAY, () => 0);
+    for (let i = 0; i < 3; i++) e.settle('error', 1000);
+    expect(e.isSidelined(1000)).toBe(true);
+    expect(e.isSidelined(61_001)).toBe(false); // cool-off elapsed
+  });
+
+  it('a single success clears the error streak', () => {
+    const e = new ScraperEndpoint('http://flaky', FAILAWAY, () => 0);
+    e.settle('error', 1000);
+    e.settle('error', 1000);
+    e.settle('ok', 1000);
+    e.settle('error', 1000);
+    e.settle('error', 1000);
+    expect(e.isSidelined(1000)).toBe(false); // streak restarted after the ok
+  });
+});
+
+describe('ScraperPool fail-away routing', () => {
+  it('routes all traffic to the healthy endpoint once the dead one sidelines', () => {
+    const pool = new ScraperPool(['http://dead', 'http://good'], FAILAWAY, () => 0);
+    const dead = pool.endpoints[0];
+    for (let i = 0; i < 3; i++) dead.settle('error', 0);
+    // Both are otherwise available at t=0; the sidelined one must not be picked.
+    const picked = pool.acquire(0);
+    expect(picked?.url).toBe('http://good');
+  });
+
+  it('NEVER returns null purely because every endpoint is sidelined', () => {
+    // A single-endpoint pool that sidelines itself would stop the crawl
+    // entirely — worse than retrying slowly. Sidelining is a preference,
+    // not a hard stop.
+    const pool = new ScraperPool(['http://only'], FAILAWAY, () => 0);
+    for (let i = 0; i < 3; i++) pool.endpoints[0].settle('error', 0);
+    expect(pool.endpoints[0].isSidelined(0)).toBe(true);
+    const picked = pool.acquire(0);
+    expect(picked?.url).toBe('http://only');
+  });
+
+  it('reports which endpoints are sidelined (for the degraded-pool log)', () => {
+    const pool = new ScraperPool(['http://dead', 'http://good'], FAILAWAY, () => 0);
+    for (let i = 0; i < 3; i++) pool.endpoints[0].settle('error', 0);
+    expect(pool.sidelined(0).map((e) => e.url)).toEqual(['http://dead']);
   });
 });

@@ -92,7 +92,10 @@ else
 fi
 
 # --- scraper reachability (FastAPI on port 8001) ---
-if curl -sf -m5 http://127.0.0.1:8001/ >/dev/null 2>&1; then
+# No -f: FastAPI has no route at / so it answers 404, which -f treats as a
+# failure. "Reachable" means the port speaks HTTP at all; only a connection
+# failure is down. (This false alarm is why http-scraper sat in alert state.)
+if curl -s -m5 -o /dev/null http://127.0.0.1:8001/ 2>/dev/null; then
   check_pass "http-scraper"
 else
   check_fail "http-scraper" "scraper unreachable on port 8001"

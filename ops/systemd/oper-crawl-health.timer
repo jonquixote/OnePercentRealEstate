@@ -1,0 +1,11 @@
+[Unit]
+Description=Run crawl productivity probes every 10 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=oper-crawl-health.service
+
+[Install]
+WantedBy=timers.target

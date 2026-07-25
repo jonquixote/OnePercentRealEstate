@@ -1,3 +1,7 @@
+#cloud-config
+# NOTE: `#cloud-config` MUST be line 1 — cloud-init reads the very first
+# line to pick a handler. It used to sit below the header comments, so
+# this file was silently ignored and nodes booted unprovisioned (2026-07-25).
 # ops/scraper-node/cloud-init.yaml
 #
 # Stands up a new Realtor.com scraper node on the private mesh
@@ -9,12 +13,13 @@
 # templating, or hand-edit a copy of this file per node before boot).
 # No secrets are committed here — ${SCRAPER_DB_PASSWORD} must be supplied
 # out-of-band (see ops/scraper-node/README.md, "Central DB access", step 1
-# for how the password was generated).
+# for how the password was generated). ${MAIN_MESH_IP} is the crawl
+# driver's private mesh address (today 10.8.0.105) — it is BOTH the DB host
+# and the only source allowed through the node's firewall.
 #
 # Same provider/region as the existing side box (10.8.3.41) is required so
 # the new node lands on the same private mesh and gets an eth1 address in
 # 10.8.0.0/22 automatically at boot.
-#cloud-config
 package_update: true
 packages: [git, python3-venv, python3-pip, build-essential, libpq-dev, nftables]
 
@@ -22,7 +27,7 @@ write_files:
   - path: /etc/oper.env
     permissions: '0600'
     content: |
-      DATABASE_URL=postgresql://oper_scraper:${SCRAPER_DB_PASSWORD}@10.8.2.241:5432/postgres
+      DATABASE_URL=postgresql://oper_scraper:${SCRAPER_DB_PASSWORD}@${MAIN_MESH_IP}:5432/postgres
       SCRAPE_TIMEOUT_MS=240000
 
 runcmd:
@@ -52,12 +57,23 @@ runcmd:
     install -m644 /opt/onepercent/ops/systemd/oper-scraper.service /etc/systemd/system/oper-scraper.service
     sed -i "s#--host [0-9.]*#--host ${PRIV_IP}#" /etc/systemd/system/oper-scraper.service
     sed -i "s#--port [0-9]*#--port 80#" /etc/systemd/system/oper-scraper.service
+    # The committed unit assumes Postgres is CO-LOCATED (After/Requires
+    # oper-postgres.service). A scraper node has no local Postgres — it talks
+    # to main over the mesh — so Requires= makes systemd refuse to start it
+    # ("Unit oper-postgres.service not found"). Drop both ordering lines here;
+    # the DB is a remote dependency, not a local unit.
+    sed -i '/^After=oper-postgres.service$/d; /^Requires=oper-postgres.service$/d' /etc/systemd/system/oper-scraper.service
+    # Same reason: the worker role env file only exists on main.
+    sed -i '\#^EnvironmentFile=-/etc/oper-role-worker.env$#d' /etc/systemd/system/oper-scraper.service
     systemctl daemon-reload && systemctl enable --now oper-scraper.service
 
   # Restrict the mesh port to the crawl driver only. The scraper unit binds
   # 0.0.0.0-equivalent on its eth1 mesh IP:80 (see above) — without a
   # firewall, any host that can route to 10.8.0.0/22 could hit /scrape.
-  # oper-worker on main (10.8.2.241) is the only legitimate client.
+  # oper-worker on main (${MAIN_MESH_IP}) is the only legitimate client.
+  # NOTE: main's mesh IP CHANGED when it was rebuilt from a snapshot
+  # (10.8.2.241 -> 10.8.0.105, 2026-07-24). It is a placeholder now precisely
+  # so a rebuilt driver never silently orphans its scraper nodes.
   - |
     cat >/etc/nftables.conf <<'NFT'
     #!/usr/sbin/nft -f
@@ -65,8 +81,8 @@ runcmd:
     table inet scraper {
       chain input {
         type filter hook input priority 0; policy accept;
-        # Only the crawl driver (main, mesh 10.8.2.241) may reach the scraper port.
-        iifname "eth1" tcp dport 80 ip saddr 10.8.2.241 accept
+        # Only the crawl driver (main, mesh ${MAIN_MESH_IP}) may reach the scraper port.
+        iifname "eth1" tcp dport 80 ip saddr ${MAIN_MESH_IP} accept
         iifname "eth1" tcp dport 80 drop
       }
     }

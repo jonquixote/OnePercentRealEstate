@@ -638,8 +638,23 @@ async function updateBlockState(parentLog: WorkerLogger): Promise<void> {
 
 function startMetricsLoop(parentLog: WorkerLogger): void {
   metricsTimer = setInterval(() => {
-    for (const m of formatEndpointMetrics(scraperPool, Date.now())) {
+    const now = Date.now();
+    for (const m of formatEndpointMetrics(scraperPool, now)) {
       parentLog.info(m, 'scraper endpoint metrics');
+    }
+    // Surface fail-away: an endpoint sidelined for sustained errors is invisible
+    // in the per-endpoint counters alone (they just stop moving). Naming it here
+    // is what tells an operator WHICH ip died — and crawl-health.sh alerts on it.
+    const sidelined = scraperPool.sidelined(now);
+    if (sidelined.length > 0) {
+      parentLog.warn(
+        {
+          sidelined: sidelined.map((e) => e.url),
+          healthy: scraperPool.endpoints.length - sidelined.length,
+          total: scraperPool.endpoints.length,
+        },
+        'scraper pool degraded',
+      );
     }
     void updateBlockState(parentLog);
   }, METRICS_INTERVAL_MS);

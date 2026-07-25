@@ -93,6 +93,36 @@ else
   skip "REDIS_URL not set"
 fi
 
+# --- 2b. Scraper pool has at least one reachable endpoint --------------------
+# The crawl stalled ~10h on 2026-07-24 because the pool's only endpoint was
+# unreachable. FAIL if none answer (deploying that ships a dead crawl); WARN if
+# some are dead — a partially degraded pool still crawls and must stay
+# deployable. "Answers" means it speaks HTTP at all: the scraper has no route
+# at / so 404 is a healthy response; only a connection failure is down.
+pool="$(read_key SCRAPER_URLS)"
+[[ -z "$pool" ]] && pool="$(read_key SCRAPER_URL)"
+if [[ -n "$pool" ]]; then
+  reachable=0; dead=""
+  IFS=',' read -ra endpoints <<< "$pool"
+  for ep in "${endpoints[@]}"; do
+    ep="$(printf '%s' "$ep" | tr -d '[:space:]')"
+    [[ -z "$ep" ]] && continue
+    if curl -s -m5 -o /dev/null "$ep" 2>/dev/null; then
+      pass "scraper endpoint ${ep} reachable"
+      reachable=$((reachable + 1))
+    else
+      dead="${dead} ${ep}"
+    fi
+  done
+  if [[ $reachable -eq 0 ]]; then
+    fail "NO scraper endpoint is reachable (${pool}) — deploying this ships a dead crawl"
+  elif [[ -n "$dead" ]]; then
+    skip "scraper pool degraded — unreachable:${dead} (${reachable} healthy, deploy allowed)"
+  fi
+else
+  skip "SCRAPER_URLS/SCRAPER_URL not set"
+fi
+
 # --- 3. The build scope's systemd properties actually parse ------------------
 # Catches an invalid `-p` (e.g. Nice=) BEFORE it aborts the build mid-deploy.
 if command -v systemd-run >/dev/null 2>&1 && [[ "$(id -u)" == "0" ]]; then
