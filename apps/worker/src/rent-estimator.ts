@@ -22,6 +22,7 @@ import { loadEnv } from './env.js';
 import { getLogger, newTraceId, withTrace, type WorkerLogger } from './logger.js';
 import { Redis } from 'ioredis';
 import { CircuitBreaker, classifyMlError } from './ml-errors.js';
+import { NON_RENTABLE_SETTLE_SQL, NO_GEO_SETTLE_SQL } from './rent-settle-sql.js';
 
 const env = loadEnv();
 const log = getLogger(env.LOG_LEVEL);
@@ -354,9 +355,10 @@ async function markFailed(listingId: number, reason: string): Promise<void> {
   await pool.query(
     `UPDATE listings
         SET rent_calc_status = 'failed',
+            rent_calc_error = $2,
             updated_at = NOW()
       WHERE id = $1`,
-    [listingId],
+    [listingId, reason.slice(0, 500)],
   );
   log.error({ listing_id: listingId, reason: reason.slice(0, 500) }, 'rent calc failed');
 }
@@ -501,9 +503,9 @@ function runJob(listingId: string, parentLog: WorkerLogger): void {
 // backlog; the LISTEN path still handles realtime single inserts.
 //
 // Row taxonomy inside a page:
-//   - non-rentable property types  -> settled in SQL (NULL rent, 'done',
-//     'non_rentable_skip') without touching ML. NULL, not 0: Wave 2
-//     retires the rent=0 encoding.
+//   - non-rentable property types  -> settled in SQL (NULL rent,
+//     'not_applicable', 'non_rentable_skip') without touching ML. NULL, not 0:
+//     Wave 2 retires the rent=0 encoding. NOT 'done' — see NON_RENTABLE_SETTLE_SQL.
 //   - rentable, missing lat/lng    -> 'failed' in SQL (permanent, same
 //     semantics as the single-row path).
 //   - rentable, scoreable          -> ML batch; rows the ML response
@@ -535,31 +537,8 @@ interface BatchRow {
 
 async function drainBatch(parentLog: WorkerLogger): Promise<number> {
   // 1. Settle non-rentables + geometry-less rows in SQL (bounded pages).
-  const settled = await pool.query(
-    `WITH nr AS (
-       SELECT id FROM listings
-        WHERE rent_calc_status = 'pending' AND NOT public.is_rentable(property_type)
-        ORDER BY id LIMIT $1
-     )
-     UPDATE listings l
-        SET estimated_rent = NULL, rent_low = NULL, rent_high = NULL,
-            rent_calc_status = 'done', rent_model_version = 'non_rentable_skip',
-            updated_at = NOW()
-       FROM nr WHERE l.id = nr.id`,
-    [env.RENT_BATCH_SIZE],
-  );
-  const noGeo = await pool.query(
-    `WITH ng AS (
-       SELECT id FROM listings
-        WHERE rent_calc_status = 'pending' AND public.is_rentable(property_type)
-          AND (latitude IS NULL OR longitude IS NULL)
-        ORDER BY id LIMIT $1
-     )
-     UPDATE listings l
-        SET rent_calc_status = 'failed', updated_at = NOW()
-       FROM ng WHERE l.id = ng.id`,
-    [env.RENT_BATCH_SIZE],
-  );
+  const settled = await pool.query(NON_RENTABLE_SETTLE_SQL, [env.RENT_BATCH_SIZE]);
+  const noGeo = await pool.query(NO_GEO_SETTLE_SQL, [env.RENT_BATCH_SIZE]);
   if (noGeo.rowCount && noGeo.rowCount > 0) {
     parentLog.warn({ noGeo: noGeo.rowCount }, `marked ${noGeo.rowCount} no-geo listings as failed`);
   }
@@ -688,7 +667,9 @@ async function drainBatch(parentLog: WorkerLogger): Promise<number> {
     }
     if (skipped.length > 0) {
       await client.query(
-        `UPDATE listings SET rent_calc_status = 'failed', updated_at = NOW()
+        `UPDATE listings SET rent_calc_status = 'failed',
+                rent_calc_error = 'ml returned no prediction for this listing',
+                updated_at = NOW()
           WHERE id = ANY($1::bigint[])`,
         [skipped],
       );

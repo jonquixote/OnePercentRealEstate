@@ -17,6 +17,9 @@ export async function GET() {
           count(*) FILTER (WHERE rent_calc_status = 'pending')::int AS pending,
           count(*) FILTER (WHERE rent_calc_status = 'done')::int AS done,
           count(*) FILTER (WHERE rent_calc_status = 'failed')::int AS failed,
+          -- Rows with nothing to estimate (vacant land etc). Counted separately
+          -- so they stop inflating 'done' — 88,188 of them once did.
+          count(*) FILTER (WHERE rent_calc_status = 'not_applicable')::int AS not_applicable,
           count(*)::int AS total_listings,
           max(updated_at) FILTER (WHERE rent_calc_status = 'done') AS last_completed
         FROM listings
@@ -33,6 +36,7 @@ export async function GET() {
         pending: Number(row.pending) || 0,
         done: Number(row.done) || 0,
         failed: Number(row.failed) || 0,
+        not_applicable: Number(row.not_applicable) || 0,
         totalListings: Number(row.total_listings) || 0,
         lastCompleted: row.last_completed ?? null,
         checkedAt: new Date().toISOString(),
