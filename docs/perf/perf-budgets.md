@@ -13,6 +13,13 @@ current value with headroom, so the alert means *regression*, not *aspiration*.
 | `api.markets` | 300 ms | — | native `city`/`state` columns instead of TOASTed `raw_data` |
 | `market.zip` | 1,000 ms | **~50 ms** | cached nationwide ZIP ranking (was 10,400 ms) |
 | `property.id` | 1,000 ms | — | first instrumented in this change |
+| `api.stats.health` | 500 ms | **9,975 ms → cached** | found by this work; see below |
+
+`api.stats.health` is the first regression the new instrumentation caught rather
+than a human noticing. It FILTERs over ~1.3M rows and `oper-healthcheck` calls
+it every 2 minutes, so it was spending roughly 8% of wall-clock time
+full-scanning `listings` to produce counts that move on a 10-minute cadence. Now
+SWR-cached at 30 min fresh / 24 h stale (~0.5% duty cycle).
 
 ### `market.zip` samples rarely — by design, and it matters
 

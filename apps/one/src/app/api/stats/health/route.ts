@@ -1,15 +1,42 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { cachedSWR } from '@/lib/cache-swr';
+import { withSpan } from '@/lib/tracing';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Data pipeline health endpoint. Returns counts of rent_calc_status
  * by state so ops can monitor backfill progress and catch stuck rows.
- * No caching — always returns fresh data.
+ *
+ * CACHED, deliberately. This aggregate FILTERs over ~1.3M rows and was
+ * measured at 9.98s on prod — and `oper-healthcheck` calls it every 2 minutes,
+ * so an uncached version spends ~8% of wall-clock time full-scanning `listings`
+ * to produce numbers that move on a 10-minute backfill cadence.
+ *
+ * 30 min fresh / 24 h stale puts the duty cycle near 0.5% while readers still
+ * get an instant answer. Freshness is not the point here: nobody diagnoses a
+ * stuck backfill from a 30-second-old count.
  */
 export async function GET() {
+  return withSpan('api.stats.health', () => handleGet());
+}
+
+async function handleGet() {
   try {
+    const payload = await cachedSWR('stats:health:v1', 1800, 86_400, computeHealth);
+    return NextResponse.json(
+      { ...payload, checkedAt: new Date().toISOString() },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  } catch (err) {
+    console.error('/api/stats/health error:', err);
+    return NextResponse.json({ error: 'health check failed' }, { status: 500 });
+  }
+}
+
+async function computeHealth() {
+  {
     const client = await pool.connect();
     try {
       const sql = `
@@ -32,22 +59,16 @@ export async function GET() {
       const result = await client.query(sql);
       const row = result.rows[0] ?? {};
 
-      return NextResponse.json({
+      return ({
         pending: Number(row.pending) || 0,
         done: Number(row.done) || 0,
         failed: Number(row.failed) || 0,
         not_applicable: Number(row.not_applicable) || 0,
         totalListings: Number(row.total_listings) || 0,
         lastCompleted: row.last_completed ?? null,
-        checkedAt: new Date().toISOString(),
-      }, {
-        headers: { 'Cache-Control': 'no-store' },
       });
     } finally {
       client.release();
     }
-  } catch (err) {
-    console.error('/api/stats/health error:', err);
-    return NextResponse.json({ error: 'health check failed' }, { status: 500 });
   }
 }

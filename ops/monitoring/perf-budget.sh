@@ -32,6 +32,7 @@ fi
 budget_for() {
   case "$1" in
     api.stats|api.stats.median-rent|api.markets) echo 300 ;;
+    api.stats.health)                            echo 500 ;;
     market.zip|property.id)                      echo 1000 ;;
     # Only routes that are actually instrumented get a budget. A budget for an
     # uninstrumented route never fires and reads as passing — worse than absent.
