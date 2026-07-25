@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { STRATEGY_WHITELIST, computeAndStoreStats } from '@/lib/stats-compute';
+import { getMarketRanking } from '@/lib/market-ranking';
 
 export const dynamic = 'force-dynamic';
 // The aggregate scans ~1.3M rows per strategy; give it room.
@@ -32,6 +33,17 @@ export async function POST(req: Request) {
       results[strategy] = { ms: Date.now() - started, error: (err as Error).message };
     }
   }
+  // Warm the nationwide ZIP ranking too. It is shared by all 21,466 market
+  // pages and costs ~10s cold — warming it here means the unlucky first
+  // visitor (often a crawler) never pays for it.
+  const rankStarted = Date.now();
+  try {
+    const ranking = await getMarketRanking();
+    results['market_ranking'] = { ms: Date.now() - rankStarted, total: ranking.length };
+  } catch (err) {
+    results['market_ranking'] = { ms: Date.now() - rankStarted, error: (err as Error).message };
+  }
+
   const failed = Object.values(results).some((r) => r.error);
   return NextResponse.json({ ok: !failed, results }, { status: failed ? 500 : 200 });
 }
