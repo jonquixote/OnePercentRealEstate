@@ -57,6 +57,14 @@ runcmd:
     install -m644 /opt/onepercent/ops/systemd/oper-scraper.service /etc/systemd/system/oper-scraper.service
     sed -i "s#--host [0-9.]*#--host ${PRIV_IP}#" /etc/systemd/system/oper-scraper.service
     sed -i "s#--port [0-9]*#--port 80#" /etc/systemd/system/oper-scraper.service
+    # The committed unit assumes Postgres is CO-LOCATED (After/Requires
+    # oper-postgres.service). A scraper node has no local Postgres — it talks
+    # to main over the mesh — so Requires= makes systemd refuse to start it
+    # ("Unit oper-postgres.service not found"). Drop both ordering lines here;
+    # the DB is a remote dependency, not a local unit.
+    sed -i '/^After=oper-postgres.service$/d; /^Requires=oper-postgres.service$/d' /etc/systemd/system/oper-scraper.service
+    # Same reason: the worker role env file only exists on main.
+    sed -i '\#^EnvironmentFile=-/etc/oper-role-worker.env$#d' /etc/systemd/system/oper-scraper.service
     systemctl daemon-reload && systemctl enable --now oper-scraper.service
 
   # Restrict the mesh port to the crawl driver only. The scraper unit binds
