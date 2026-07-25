@@ -147,6 +147,8 @@ search (opt-in to see it).
 | `oper-db-load-budget` | hourly | Any single query eating a share of DB time |
 | `oper-perf-flush` | 5 min | Persists per-route latency aggregates (one row per route) |
 | `oper-perf-budget` | 10 min | Per-route **p95 vs declared budget** (`docs/perf/perf-budgets.md`) |
+| `oper-photo-coverage` | 30 min | Share of image-bearing active listings that expose a photo |
+| `oper-rent-coverage` | 30 min | Banded share of estimated active listings **+ band integrity** |
 
 Alerts go to **Telegram** via `ops/monitoring/notify-telegram.sh` (30-min dedup,
 auto-RESOLVED). Credentials already live in `/etc/oper.env`.
@@ -176,6 +178,41 @@ journal; nothing aggregated it. Three signals now close that:
 > permanently passing. `/search` is client-rendered and `market.zip` is
 > ISR-cached (verified: cold ZIPs return from cache and record zero samples), so
 > neither is judged by p95. See the notes in `perf-budgets.md`.
+
+### Data-coverage probes: measure the thing users see
+
+Two gaps survived for months because nothing distinguished "no data available"
+from "data available but unreadable":
+
+- **Photos.** 446,437 of 449,654 active listings had images, but the native
+  `primary_photo` column was set on **140** of them, and seven read paths
+  selected that bare column. One of them (`/api/featured`) used it as a WHERE
+  filter, so the homepage strip was restricted to those 140 listings nationwide.
+- **Rent bands.** 40% of estimated active listings had no confidence band, which
+  looked like a model or write-path bug and was neither — the backfill walks
+  `ORDER BY id` and simply had not reached them.
+
+Both probes therefore measure against **the population that could have the
+thing**, not against all listings — otherwise genuinely photoless or
+genuinely unbandable inventory masks a real regression.
+
+`rent-coverage.sh` also asserts band *integrity* (no inverted, degenerate,
+half-populated, or estimate-outside-band rows — zero across 1,011,800 rows on
+2026-07-25). That assertion is why no `bandFor()` validation layer exists: the
+invariant is monitored rather than defended by an abstraction guarding a failure
+that has never occurred.
+
+> **Backfills: filter, then order — and never let the progress line cost more
+> than the work.** Both mistakes were made here in one session.
+> `ORDER BY (listing_status='active') DESC, id` cannot use a partial index and
+> forced a parallel seq scan every batch (9,520 ms vs 637 ms filtered). And a
+> progress count using `jsonb_array_length(images)` forced a TOAST read per
+> candidate row, reaching **75% of the window's database time** — the progress
+> line was more expensive than the backfill it described.
+
+> **Listing ids are roughly chronological.** A plain `ORDER BY id` backfill
+> fills ~900k sold and stale rows nobody can see before reaching anything
+> user-visible. Fill active inventory first.
 
 > **Liveness ≠ productivity.** The crawl once produced zero listings for ~10
 > hours while every monitor stayed green, because `oper-worker` was "active" the
