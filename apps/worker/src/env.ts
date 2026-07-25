@@ -130,6 +130,12 @@ export function loadEnv(): WorkerEnv {
       cooloffMs: readInt('CRAWL_BLOCK_COOLOFF_MS', 30 * 60_000),
       cooloffMaxMs: readInt('SCRAPER_COOLOFF_MAX_MS', 4 * 60 * 60_000),
       jitterFrac: 0.25,
+      // Fail-away: after this many consecutive 'error' outcomes an endpoint
+      // leaves rotation for the cool-off below, so a dead endpoint stops
+      // absorbing traffic a healthy one could serve. The pool still returns a
+      // sidelined endpoint when EVERY endpoint is sidelined (never-empty).
+      failawayStreak: readInt('SCRAPER_FAILAWAY_STREAK', 10),
+      failawayCooloffMs: readInt('SCRAPER_FAILAWAY_COOLOFF_MS', 5 * 60_000),
     },
     // Default 1 (serialized) to match the old n8n workflow's gentle, one-ZIP-
     // at-a-time cadence that avoided Realtor.com IP blocks for months.
