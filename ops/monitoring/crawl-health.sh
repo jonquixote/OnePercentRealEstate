@@ -95,6 +95,31 @@ if [[ -n "$pending" ]]; then
   fi
 fi
 
+# --- 3b. Retire alerts for endpoints that no longer exist --------------------
+# A decommissioned endpoint vanishes from the worker's metrics entirely, so the
+# per-endpoint probe below can never see it again to clear it — its alert would
+# sit "firing" forever (the deleted 10.8.3.41 box did exactly this). Resolve any
+# crawl-endpoint-* alert whose URL is no longer in the configured pool.
+pool_urls="${SCRAPER_URLS:-${SCRAPER_URL:-}}"
+if [[ -n "$pool_urls" ]]; then
+  for state in /var/lib/oper-alerts/crawl-endpoint-*; do
+    [[ -e "$state" ]] || continue
+    key="$(basename "$state")"
+    # Rebuild each configured URL's key and keep the alert only if it matches one.
+    still_configured=0
+    IFS=',' read -ra _eps <<< "$pool_urls"
+    for ep in "${_eps[@]}"; do
+      ep="$(printf '%s' "$ep" | tr -d '[:space:]')"
+      [[ -z "$ep" ]] && continue
+      ep_key="crawl-endpoint-$(printf '%s' "$ep" | tr -c 'a-zA-Z0-9' '-' | sed 's/--*/-/g; s/^-//; s/-$//')"
+      [[ "$ep_key" == "$key" ]] && still_configured=1
+    done
+    if [[ $still_configured -eq 0 ]]; then
+      "$NOTIFY" --resolved --key "$key" "✅ ${BOX}: ${key} — endpoint decommissioned, alert retired" || true
+    fi
+  done
+fi
+
 # --- 4. Per-endpoint scraper health -----------------------------------------
 # The worker logs `scraper endpoint metrics` per endpoint every 30s with
 # ok/blocked/error counters. An endpoint with traffic but zero successes is
