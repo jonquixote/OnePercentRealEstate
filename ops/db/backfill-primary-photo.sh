@@ -55,11 +55,15 @@ while (( filled < TARGET )); do
   fi
   filled=$(( filled + n ))
 
+  # Progress count deliberately does NOT filter on jsonb_array_length(images):
+  # that predicate forces a TOAST read per candidate row, which made this
+  # progress counter cost more database time than the work it was reporting on
+  # (observed at 75% of the window's DB time). Counting the partial-index
+  # predicate alone is index-only and effectively free; it slightly overcounts
+  # by including rows with no images, which is fine for a progress line.
   remaining=$(psql "$DB" -tA -c "
-    SELECT count(*) FROM listings
-     WHERE primary_photo IS NULL AND images IS NOT NULL
-       AND jsonb_array_length(images) > 0;" 2>/dev/null | tr -d '[:space:]')
-  echo "[photo-backfill] filled ${n} (run total ${filled}/${TARGET}); remaining: ${remaining:-?}"
+    SELECT count(*) FROM listings WHERE primary_photo IS NULL;" 2>/dev/null | tr -d '[:space:]')
+  echo "[photo-backfill] filled ${n} (run total ${filled}/${TARGET}); remaining<=${remaining:-?}"
 
   (( filled < TARGET )) && sleep "$PAUSE"
 done
