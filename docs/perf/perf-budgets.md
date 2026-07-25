@@ -8,11 +8,23 @@ current value with headroom, so the alert means *regression*, not *aspiration*.
 
 | Route (`withSpan` name) | Budget (p95) | Measured | How it got there |
 |---|---|---|---|
-| `api.stats` | 300 ms | **12 ms** | precomputed `stats_summary` + SWR (was 18,500 ms) |
+| `api.stats` | 300 ms | **3 ms** (p95, prod) | precomputed `stats_summary` + SWR (was 18,500 ms) |
 | `api.stats.median-rent` | 300 ms | **9 ms** | folded into the same precompute pass (was 7,100 ms) |
 | `api.markets` | 300 ms | — | native `city`/`state` columns instead of TOASTed `raw_data` |
 | `market.zip` | 1,000 ms | **~50 ms** | cached nationwide ZIP ranking (was 10,400 ms) |
 | `property.id` | 1,000 ms | — | first instrumented in this change |
+
+### `market.zip` samples rarely — by design, and it matters
+
+Market pages are ISR-cached (`revalidate = 86400`, served with
+`s-maxage=86400`). Verified on prod: three cold ZIPs (43701, 15201, 63104) all
+returned in ~100 ms from cache and recorded **zero** samples, because the page
+component never ran. `market.zip` therefore only samples on regeneration.
+
+Consequence: it will usually sit below the 20-sample minimum and the budget will
+not evaluate. That is not a bug, but it *is* a blind spot — a regression in the
+market page shows up as slow regeneration, not as a p95 breach. Judge that route
+by `[SLOW QUERY]` alerts and the regeneration timing, not by this table.
 
 ## What is deliberately NOT budgeted
 

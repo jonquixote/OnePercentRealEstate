@@ -144,9 +144,38 @@ search (opt-in to see it).
 | `oper-healthcheck` | 2 min | Host mem/swap/disk, every `oper-*` unit, HTTP surfaces |
 | `oper-crawl-health` | 10 min | **Productivity**: listing freshness, job throughput, backlog, per-endpoint health |
 | `oper-pg-stat` | weekly | Index/statement snapshots for windowed audits |
+| `oper-db-load-budget` | hourly | Any single query eating a share of DB time |
+| `oper-perf-flush` | 5 min | Persists per-route latency aggregates (one row per route) |
+| `oper-perf-budget` | 10 min | Per-route **p95 vs declared budget** (`docs/perf/perf-budgets.md`) |
 
 Alerts go to **Telegram** via `ops/monitoring/notify-telegram.sh` (30-min dedup,
 auto-RESOLVED). Credentials already live in `/etc/oper.env`.
+
+### Latency: how to find a slow page now
+
+Until 2026-07-28 every performance problem was found by a human noticing a page
+felt slow — the hero at 18.5 s, market pages at 10.4 s, an exporter query eating
+79% of all DB time, a freshness probe at 8.4 s. The evidence existed in the
+journal; nothing aggregated it. Three signals now close that:
+
+1. **`GET /api/admin/perf`** (Bearer `ADMIN_API_KEY`) — live per-route p50/p95/p99
+   from a bounded in-memory ring, plus the persisted trailing hour so it still
+   says something after a restart. Costs no query to read.
+2. **`[SLOW QUERY]` → Telegram** — anything over `SLOW_QUERY_MS` (default 1000)
+   pushes, deduped on the query's *shape* so one bad statement sends one message.
+3. **`perf-budget.sh`** — alerts when a route's p95 breaches
+   `docs/perf/perf-budgets.md`, requiring ≥20 samples so noise cannot fire it.
+
+> **Instrumentation must never become the load.** All of the above are bounded by
+> construction: a fixed-size ring per route, a capped number of routes, one
+> aggregated DB row per route per 5 min — never one write per request. This is
+> not theoretical: the postgres-exporter's per-scrape aggregate consumed **79% of
+> all database time** before it was replaced with a counter table.
+
+> **A budget on a route you cannot sample is worse than no budget** — it reads as
+> permanently passing. `/search` is client-rendered and `market.zip` is
+> ISR-cached (verified: cold ZIPs return from cache and record zero samples), so
+> neither is judged by p95. See the notes in `perf-budgets.md`.
 
 > **Liveness ≠ productivity.** The crawl once produced zero listings for ~10
 > hours while every monitor stayed green, because `oper-worker` was "active" the
