@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
           bedrooms,
           bathrooms,
           sqft,
-          primary_photo,
+          COALESCE(primary_photo, images->>0) AS primary_photo,
           listing_type as status,
           zip_code,
           ST_Y(geom) as latitude,

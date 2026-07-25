@@ -69,7 +69,7 @@ export async function GET(req: Request) {
               price AS listing_price,
               estimated_rent,
               listing_status AS status,
-          primary_photo,
+          COALESCE(primary_photo, images->>0) AS primary_photo,
           images,
           media_blur,
           bedrooms,

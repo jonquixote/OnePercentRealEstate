@@ -216,7 +216,7 @@ async function loadMarketData(zip: string): Promise<MarketData> {
                 [zip],
             ),
             pool.query(
-                `SELECT id, address, city, state, price, estimated_rent, rent_price_ratio, primary_photo, sqft, bedrooms, bathrooms
+                `SELECT id, address, city, state, price, estimated_rent, rent_price_ratio, COALESCE(primary_photo, images->>0) AS primary_photo, sqft, bedrooms, bathrooms
                  FROM listings
                  WHERE zip_code = $1 AND listing_type = 'for_sale' AND sale_type = 'standard'
                    AND price > 0 AND estimated_rent > 0

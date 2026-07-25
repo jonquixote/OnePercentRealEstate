@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
       sqft,
       estimated_rent,
       year_built,
-      primary_photo,
+      COALESCE(primary_photo, images->>0) AS primary_photo,
       sale_type,
       listing_status,
       days_on_market,
