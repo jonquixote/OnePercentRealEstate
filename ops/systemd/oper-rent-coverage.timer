@@ -1,0 +1,11 @@
+[Unit]
+Description=Check rent band coverage and integrity every 30 minutes
+
+[Timer]
+OnBootSec=18min
+OnUnitActiveSec=30min
+Persistent=true
+Unit=oper-rent-coverage.service
+
+[Install]
+WantedBy=timers.target
