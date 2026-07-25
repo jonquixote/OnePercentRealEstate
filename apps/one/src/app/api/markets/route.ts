@@ -38,8 +38,8 @@ let refreshing: Promise<void> | null = null;
 const LIVE_AGGREGATION_SQL = `
   WITH top AS (
     SELECT zip_code,
-           max(raw_data->>'city') AS city,
-           max(raw_data->>'state') AS state,
+           max(city) AS city,
+           max(state) AS state,
            count(*) AS n,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY price) AS median_price,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY estimated_rent)

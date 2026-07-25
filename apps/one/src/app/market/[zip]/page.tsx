@@ -123,7 +123,7 @@ export async function generateMetadata({ params }: { params: Promise<{ zip: stri
 async function lookupPlace(zip: string): Promise<{ city: string | null; state: string | null } | null> {
     try {
         const res = await pool.query(
-            `SELECT raw_data->>'city' AS city, raw_data->>'state' AS state FROM listings WHERE zip_code = $1 LIMIT 1`,
+            `SELECT city, state FROM listings WHERE zip_code = $1 LIMIT 1`,
             [zip],
         );
         const row = res.rows[0];
@@ -229,7 +229,7 @@ async function loadMarketData(zip: string): Promise<MarketData> {
             // cached in @/lib/market-ranking. See getMarketRanking() below.
             getMarketRanking(),
             pool.query(
-                `SELECT raw_data->>'city' AS city, raw_data->>'state' AS state FROM listings WHERE zip_code = $1 LIMIT 1`,
+                `SELECT city, state FROM listings WHERE zip_code = $1 LIMIT 1`,
                 [zip],
             ),
         ]);

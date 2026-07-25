@@ -42,7 +42,7 @@ export default async function MarketOpengraphImage({
       [zip],
     );
     const placeRes = await pool.query(
-      `SELECT raw_data->>'city' AS city, raw_data->>'state' AS state FROM listings WHERE zip_code = $1 LIMIT 1`,
+      `SELECT city, state FROM listings WHERE zip_code = $1 LIMIT 1`,
       [zip],
     );
     const row = agg.rows[0];
