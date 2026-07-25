@@ -243,8 +243,8 @@ have provisioned a node as written:
 |---|---|
 | **DNS not moved** | `one`/`two.octavo.press` still point at the old, deleted box. Must become `209.50.61.64`. |
 | **Scraper nodes idle** | Provisioned but out of the pool — they cannot reach Postgres (§9.13). Plan: `docs/superpowers/plans/2026-07-25-stateless-scraper-nodes.md`. |
-| **Homepage stats cold path** | `/api/stats` seq-scans 1.3 M rows (~18 s) with a 120 s TTL → periodic stampede. |
-| **Monitoring eats the DB** | postgres-exporter's `GROUP BY rent_calc_status` used **6.9 h of DB time in 25 h (~27 %)**. |
+| ~~Homepage stats cold path~~ | **FIXED 2026-07-26**: precomputed into `stats_summary` + SWR/single-flight. 18.5 s → **0.012 s**; 20 concurrent cold requests now peak at 0.12 s. |
+| ~~Monitoring eats the DB~~ | **FIXED 2026-07-26**: exporter reads `listing_status_counters`/`reltuples`. Was **79 % of all DB time**; now 0.02 ms. Guarded by `db-load-budget.sh`. |
 | `oper-worker-watchlist` | `Type=simple` but exits 0 immediately; should be timer-driven. |
 | Index audit | Gated until ≥2 weekly `oper-pg-stat` snapshots (~2026-07-31). |
 

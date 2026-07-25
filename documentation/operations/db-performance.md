@@ -376,3 +376,41 @@ Verify improvement with `EXPLAIN (ANALYZE)` before and after.
 ### Step 5: Record in Drop Log
 
 After any drop or add, update the table in Section 2 of this document with the index name, date, size, reason, and recreate DDL.
+
+## 6. Load budget (2026-07-26)
+
+### What we found
+`pg_stat_statements` over ~25h showed the Prometheus postgres-exporter's
+`GROUP BY rent_calc_status` at **25,012 s of 31,657 s total execution time —
+79% of ALL database work** — full-scanning 1.3 M rows on every metrics scrape,
+for a gauge nobody watches in real time.
+
+### What changed
+
+| Query | Before | After |
+|---|---|---|
+| exporter `GROUP BY rent_calc_status` | 8,244 ms × ~120/hr | reads `listing_status_counters` — **0.020 ms** |
+| exporter `COUNT(*) FROM listings` | 167 ms × ~120/hr | `pg_class.reltuples` — **0.009 ms** |
+| crawl-freshness probe | 8,435 ms (Parallel Seq Scan) | **0.134 ms** (Index Only Scan) |
+| `/api/stats` (user-facing) | 18.5 s cold | **0.012 s** |
+| stats refresh cadence | — | 4 × ~30 s every **30 min** (was 5 min = 40% duty cycle) |
+| MV refresh cadence | every 10 min (26 s + 33 s) | every **30 min** |
+
+### THE RULE
+
+**A metrics collector may never run an unbounded aggregate against `listings`.**
+Expose a counter table refreshed on a timer, or use a planner estimate. The
+same applies to health probes: match an existing index's predicate, or you are
+paying for a seq scan every time the probe runs.
+
+**And when you move work off the request path, verify the replacement costs
+LESS in total.** The first cut of the stats refresh ran every 5 minutes and
+cost more DB time than the on-demand path it replaced — `db-load-budget.sh`
+caught it within the hour.
+
+### The control
+`ops/monitoring/db-load-budget.sh` (hourly, `oper-db-load-budget.timer`) alerts
+when any single query exceeds `DB_LOAD_BUDGET_PCT` (default 10%) of the work
+done **since the previous run**. It is deliberately delta-based: cumulative
+`pg_stat_statements` totals would keep alerting about a problem already fixed
+while hiding a new one behind the history.
