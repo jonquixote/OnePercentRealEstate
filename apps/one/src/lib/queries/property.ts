@@ -59,6 +59,47 @@ export function buildPropertyQuery(): string {
   return PROPERTY_QUERY;
 }
 
+/**
+ * The same query against cold storage.
+ *
+ * Derived from PROPERTY_QUERY by substitution rather than written out, so the
+ * two can never drift — a divergent select list would make shapePropertyRow
+ * silently mis-map an archived row, and the failure would only appear on old
+ * URLs that nobody tests.
+ */
+export function buildArchivePropertyQuery(): string {
+  return PROPERTY_QUERY.replace(/\blistings\b/g, 'listings_archive');
+}
+
+interface Queryable {
+  query: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>;
+}
+
+/**
+ * Read-through: live table first, cold storage only on a miss.
+ *
+ * WHY: /property/[id] must keep rendering an archived listing. Old links,
+ * shared URLs and search traffic depend on it, and the sitemap publishes ~33k
+ * of them — moving rows without this turns every archived listing into a 404.
+ *
+ * The common path costs exactly what it costs today: one query, and the archive
+ * is never touched for a live row. An archive failure can never hide a live
+ * row, and a missing archive table (before the migration runs) degrades to
+ * "not found" rather than throwing.
+ */
+export async function loadPropertyRow(client: Queryable, id: string): Promise<unknown | null> {
+  const live = await client.query(buildPropertyQuery(), [id]);
+  if (live.rows.length > 0) return live.rows[0];
+
+  try {
+    const cold = await client.query(buildArchivePropertyQuery(), [id]);
+    return cold.rows[0] ?? null;
+  } catch {
+    // Archive unavailable or not yet created: the live table already said no.
+    return null;
+  }
+}
+
 function getNationalAvgRent(beds: number): number {
   const avgRents: Record<number, number> = {
     0: 1100,

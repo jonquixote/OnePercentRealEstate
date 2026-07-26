@@ -8,7 +8,7 @@ import {
   type PropertyFilters,
 } from '@/lib/queries/properties';
 import {
-  buildPropertyQuery,
+  loadPropertyRow,
   shapePropertyRow,
   buildDemographicsQueries,
   shapeDemographics,
@@ -81,9 +81,12 @@ export async function getProperty(id: string) {
   try {
     const client = await pool.connect();
     try {
-      const result = await client.query(buildPropertyQuery(), [id]);
-      if (result.rows.length === 0) return null;
-      return shapePropertyRow(result.rows[0]);
+      // Read-through: live table, then cold storage. An archived listing must
+      // still render — old links, shared URLs and ~33k sitemap entries depend
+      // on it.
+      const row = await loadPropertyRow(client, id);
+      if (!row) return null;
+      return shapePropertyRow(row);
     } finally {
       client.release();
     }
