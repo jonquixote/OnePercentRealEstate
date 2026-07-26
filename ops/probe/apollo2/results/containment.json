@@ -1,0 +1,42 @@
+[
+  {
+    "county": "Brazoria County, TX",
+    "zip": "77578",
+    "county_rows": 4416,
+    "zip_rows": 623,
+    "missed": 6,
+    "missed_status": "FOR_SALE,PENDING"
+  },
+  {
+    "county": "East Baton Rouge Parish, LA",
+    "zip": "70791",
+    "county_rows": 273,
+    "zip_rows": 408,
+    "missed": 406,
+    "missed_status": "FOR_SALE,PENDING"
+  },
+  {
+    "county": "Chemung County, NY",
+    "zip": "14845",
+    "county_rows": 551,
+    "zip_rows": 109,
+    "missed": 0,
+    "missed_status": ""
+  },
+  {
+    "county": "Jackson County, WV",
+    "zip": "26164",
+    "county_rows": 121,
+    "zip_rows": 34,
+    "missed": 0,
+    "missed_status": ""
+  },
+  {
+    "county": "Franklin County, MA",
+    "zip": "01364",
+    "county_rows": 320,
+    "zip_rows": 46,
+    "missed": 0,
+    "missed_status": ""
+  }
+]
