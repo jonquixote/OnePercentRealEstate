@@ -77,7 +77,13 @@ if awk "BEGIN{exit !($pct > $BUDGET_PCT && $total_s > $BUDGET_MIN_S)}"; then
 ${query}" || true
 else
   if [[ -f "/var/lib/oper-alerts/db-load-budget" ]]; then
-    "$NOTIFY" --resolved --key "db-load-budget" "✅ ${BOX}: db-load-budget — RESOLVED (top query now ${pct}%)" || true
+    # BOTH numbers, always. The alert fires on (pct > budget AND total_s >
+    # floor), so it can resolve because the WORK fell below the floor while the
+    # share stayed high. Printing the share alone produced
+    # "RESOLVED (top query now 85.8%)", which reads as nonsense to whoever gets
+    # woken up by it.
+    "$NOTIFY" --resolved --key "db-load-budget" \
+      "✅ ${BOX}: db-load-budget — RESOLVED — top query ${pct}% of window but only ${total_s}s of work (needs >${BUDGET_PCT}% AND >${BUDGET_MIN_S}s to alert)" || true
   fi
 fi
 echo "[db-load-budget] top query = ${pct}% / ${total_s}s of window DB time (budget ${BUDGET_PCT}% AND >${BUDGET_MIN_S}s)"
