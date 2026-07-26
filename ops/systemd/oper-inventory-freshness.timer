@@ -1,0 +1,11 @@
+[Unit]
+Description=Check inventory freshness hourly
+
+[Timer]
+OnBootSec=25min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=oper-inventory-freshness.service
+
+[Install]
+WantedBy=timers.target
