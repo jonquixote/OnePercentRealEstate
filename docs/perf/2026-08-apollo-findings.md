@@ -127,6 +127,48 @@ next mission should probe.**
 
 ---
 
+## Finding 5 — `updated_in_past_hours` works, and it changes everything
+
+Rung 3 completed unblocked. The state shape works and does not truncate:
+
+| probe | rows | ZIPs | wall | est. HTTP |
+|---|---|---|---|---|
+| Delaware (state) | 6,949 | 64 | 89.2 s | 35 |
+
+But the decisive result is the incremental filter, which production does not use:
+
+| query | rows | wall | est. HTTP |
+|---|---|---|---|
+| Cuyahoga County — full | 5,354 | 72.2 s | **27** |
+| **Cuyahoga County — `updated_in_past_hours=24`** | **212** (44 ZIPs) | **3.7 s** | **2** |
+| ZIP 44120 — full | 247 | 3.3 s | 2 |
+| ZIP 44120 — `updated_in_past_hours=24` | 11 | 1.5 s | 1 |
+
+**A county's entire daily change set costs 2 HTTP requests and 3.7 seconds** —
+against 27 requests and 72 seconds to re-fetch the county in full, and against
+the 44 separate ZIP scrapes the current architecture would spend to discover the
+same changes.
+
+### And containment holds on the incremental path
+
+The same test that failed for full county queries passes here:
+
+| | Cuyahoga, `updated_in_past_hours=24` |
+|---|---|
+| ZIP 44120 updated set | 11 |
+| county updated set | 212 |
+| in both | 11 |
+| **in ZIP not in county** | **0** |
+
+### What that implies nationally
+
+There are ~3,143 US counties. At ~2 requests per county per day, a **complete
+national daily change sweep costs roughly 6,300 requests** — against the ~22,700
+requests a day the current crawler spends to achieve a *six-day* sweep of *16%*
+of inventory.
+
+Daily national coverage for roughly a quarter of the current request budget.
+
 ## Verdict — recommended crawl architecture
 
 **1. Drop `past_days=30` from the for-sale crawl. This is the highest-value
@@ -146,9 +188,17 @@ the one thing ZIP-shaped scheduling structurally cannot do, since its queue is
 built from ZIPs we already know. That closes the ~5,500-ZIP coverage gap without
 trusting county queries for completeness.
 
-**4. Probe `updated_in_past_hours` next**, before building any scheduler. If it
-works at ZIP scale it changes the recheck economics entirely, and any scheduler
-built first would have to be rebuilt.
+**4. Restructure the recheck around `updated_in_past_hours` county sweeps**
+(Finding 5), backstopped by periodic full ZIP sweeps for the completeness gap in
+Finding 2. Incremental county sweeps are cheap, complete in testing, and
+enumerate ZIPs we have never seen; full ZIP sweeps are the only shape proven not
+to miss listings. Neither alone is sufficient — together they are both cheaper
+and more complete than what runs today.
+
+**5. There is no scheduler to build yet.** A yield- or deal-ranked scheduler
+solves "which ZIP next" — a question that largely disappears if a county's whole
+change set costs two requests. Build the incremental sweep first and re-measure
+before designing any priority queue.
 
 ## What must change in the already-written plans
 
