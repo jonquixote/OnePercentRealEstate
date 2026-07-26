@@ -21,6 +21,26 @@ it every 2 minutes, so it was spending roughly 8% of wall-clock time
 full-scanning `listings` to produce counts that move on a 10-minute cadence. Now
 SWR-cached at 30 min fresh / 24 h stale (~0.5% duty cycle).
 
+## apps/two — the terminal
+
+Unwatched entirely until 2026-07-26: it responded in ~7 ms and nothing would
+have noticed if it stopped. Route names are prefixed `two.` so a shared snapshot
+never confuses the two apps.
+
+| Route | Budget (p95) | Measured | Notes |
+|---|---|---|---|
+| `two.market-series` | 500 ms | **2 ms** (22 samples, prod) | in-memory TTL cache keyed `zip:series` |
+| `two.screens` | 500 ms | — | newly instrumented |
+| `two.layouts` | 500 ms | — | newly instrumented |
+| `two.screen-alerts` | 500 ms | — | newly instrumented |
+| `two.terminal` | 1,000 ms | — | see below |
+| `two.portfolio` | 1,000 ms | — | see below |
+
+`two.terminal` recorded no samples under 22 requests — the same
+instrumented-but-not-sampled category as `market.zip`, and for the same reason:
+the page is served without re-running the server component. Judge it by
+`[SLOW QUERY]` alerts, not by this table, until that changes.
+
 ### `market.zip` samples rarely — by design, and it matters
 
 Market pages are ISR-cached (`revalidate = 86400`, served with
