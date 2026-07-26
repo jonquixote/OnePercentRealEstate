@@ -1,0 +1,17 @@
+
+=== tier 6 req/min for 5 min (gap 10.0s)
+  tier 6: sent=30 ok=30 fails=0 first_fail=None
+
+=== tier 12 req/min for 5 min (gap 5.0s)
+  tier 12: sent=60 ok=60 fails=0 first_fail=None
+
+=== tier 30 req/min for 5 min (gap 2.0s)
+  tier 30: sent=126 ok=126 fails=0 first_fail=None
+
+=== tier 60 req/min for 5 min (gap 1.0s)
+  tier 60: sent=139 ok=139 fails=0 first_fail=None
+
+=== tier 120 req/min for 10 min (gap 0.5s)
+  tier 120: sent=282 ok=282 fails=0 first_fail=None
+
+=== RESULT: NEVER BLOCKED up to 120 req/min

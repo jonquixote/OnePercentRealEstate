@@ -1,0 +1,5 @@
+{"tier_summary": true, "rpm": 6, "sent": 30, "ok": 30, "first_fail": null}
+{"tier_summary": true, "rpm": 12, "sent": 60, "ok": 60, "first_fail": null}
+{"tier_summary": true, "rpm": 30, "sent": 126, "ok": 126, "first_fail": null}
+{"tier_summary": true, "rpm": 60, "sent": 139, "ok": 139, "first_fail": null}
+{"tier_summary": true, "rpm": 120, "sent": 282, "ok": 282, "first_fail": null}
