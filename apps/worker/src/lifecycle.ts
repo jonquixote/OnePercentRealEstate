@@ -20,6 +20,27 @@ export const STALE_SQL = `
      AND listing_status IN ('active','pending_verify')
      AND last_seen_at < now() - ($1 || ' days')::interval`;
 
+// Stale reviver — the inverse of the reaper, and the half that was missing.
+//
+// The reaper demotes active -> stale when a row has not been re-seen. Nothing
+// promoted it back, and the crawler's upsert sets last_seen_at on conflict
+// WITHOUT touching listing_status. So a listing that came back on the market was
+// re-confirmed by the crawler every day and stayed marked 'stale' forever,
+// hidden from every read surface.
+//
+// Measured on prod 2026-07-26: 35,521 for_sale rows were 'stale' while having
+// been seen within THREE DAYS; 3,287 within twenty-four hours. Those are live
+// listings the product was refusing to show.
+//
+// Same column and same bound param as STALE_SQL with the comparison reversed, so
+// a row can satisfy exactly one of the two at any instant and the pair cannot
+// oscillate within a tick.
+export const REVIVE_SQL = `
+  UPDATE listings SET listing_status = 'active'
+   WHERE listing_type = 'for_sale'
+     AND listing_status = 'stale'
+     AND last_seen_at > now() - ($1 || ' days')::interval`;
+
 // Sold matcher. Exact address equality to sold_listings — both tables build
 // `address` with the SAME scraper normalization, so raw equality is
 // index-friendly (no lower/trim wrappers that would defeat the indexes). Only
@@ -65,14 +86,18 @@ export const RECHECK_ENQUEUE_SQL = `
                         AND c.status IN ('pending','processing'))`;
 
 export type LifecycleCfg = { staleAfterDays: number; pendingVerifyAfterDays: number; recheckBatch: number };
-export type LifecycleStats = { staled: number; soldMatched: number; pendingFlagged: number; rechecksEnqueued: number };
+export type LifecycleStats = { staled: number; revived: number; soldMatched: number; pendingFlagged: number; rechecksEnqueued: number };
 
 export async function runLifecycleTick(pool: Pool, log: WorkerLogger, cfg: LifecycleCfg): Promise<LifecycleStats> {
   const staled = (await pool.query(STALE_SQL, [cfg.staleAfterDays])).rowCount ?? 0;
+  // Revive AFTER the reaper, using the same cutoff: a row the reaper just
+  // demoted cannot satisfy the reviver's predicate, so ordering is safe and the
+  // pair is idempotent within a tick.
+  const revived = (await pool.query(REVIVE_SQL, [cfg.staleAfterDays])).rowCount ?? 0;
   const soldMatched = (await pool.query(SOLD_MATCH_SQL)).rowCount ?? 0;
   const pendingFlagged = (await pool.query(PENDING_FLAG_SQL, [cfg.pendingVerifyAfterDays])).rowCount ?? 0;
   const rechecksEnqueued = (await pool.query(RECHECK_ENQUEUE_SQL, [cfg.recheckBatch])).rowCount ?? 0;
-  const stats = { staled, soldMatched, pendingFlagged, rechecksEnqueued };
+  const stats = { staled, revived, soldMatched, pendingFlagged, rechecksEnqueued };
   log.info(stats, 'lifecycle tick');
   return stats;
 }

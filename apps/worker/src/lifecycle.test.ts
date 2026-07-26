@@ -1,11 +1,38 @@
 import { describe, it, expect } from 'vitest';
 import {
+  REVIVE_SQL,
   STALE_SQL,
   SOLD_MATCH_SQL,
   PENDING_FLAG_SQL,
   RECHECK_ENQUEUE_SQL,
   runLifecycleTick,
 } from './lifecycle';
+
+describe('revive: a listing the crawler sees again must come back', () => {
+  // 35,521 for_sale rows were marked 'stale' while the crawler had seen them
+  // within THREE DAYS — 3,287 within 24 hours. The reaper demoted them and
+  // nothing ever promoted them back, so a listing that returned to market
+  // stayed hidden from the product forever.
+  it('promotes stale rows re-seen inside the cutoff', () => {
+    expect(REVIVE_SQL).toMatch(/SET\s+listing_status\s*=\s*'active'/i);
+    expect(REVIVE_SQL).toMatch(/listing_status\s*=\s*'stale'/i);
+    expect(REVIVE_SQL).toMatch(/last_seen_at\s*>\s*now\(\)\s*-\s*\(\$1\s*\|\|\s*' days'\)::interval/i);
+  });
+
+  it('only for_sale, and never touches sold or rental_misfiled', () => {
+    expect(REVIVE_SQL).toMatch(/listing_type\s*=\s*'for_sale'/i);
+    expect(REVIVE_SQL).not.toMatch(/'sold'/i);
+    expect(REVIVE_SQL).not.toMatch(/rental_misfiled/i);
+  });
+
+  it('is the exact inverse of the reaper, so the pair cannot oscillate', () => {
+    // Reaper: stale when last_seen_at <  cutoff. Revive: active when >  cutoff.
+    // Same column, same bound param, opposite comparison — a row can satisfy
+    // exactly one of them at any instant.
+    expect(STALE_SQL).toMatch(/last_seen_at\s*</);
+    expect(REVIVE_SQL).toMatch(/last_seen_at\s*>/);
+  });
+});
 
 describe('lifecycle SQL', () => {
   it('stale: only active/pending_verify for_sale rows, param-driven cutoff, never sold/misfiled', () => {
@@ -49,26 +76,31 @@ describe('runLifecycleTick orchestration (mock pool)', () => {
     return { pool, calls };
   }
 
-  it('runs stale → sold → pending → recheck in order with the right params', async () => {
-    const { pool, calls } = recordingPool([3, 5, 7, 2]);
+  it('runs stale → revive → sold → pending → recheck in order with the right params', async () => {
+    const { pool, calls } = recordingPool([3, 4, 5, 7, 2]);
     const stats = await runLifecycleTick(pool as any, noop, cfg);
 
     // Order: exactly the 4 exported SQL constants, in sequence.
     expect(calls.map((c) => c.sql)).toEqual([
       STALE_SQL,
+      REVIVE_SQL,
       SOLD_MATCH_SQL,
       PENDING_FLAG_SQL,
       RECHECK_ENQUEUE_SQL,
     ]);
     // Params threaded from cfg; SOLD_MATCH_SQL takes none.
     expect(calls[0].params).toEqual([10]); // staleAfterDays
-    expect(calls[1].params).toBeUndefined(); // sold match — no bind
-    expect(calls[2].params).toEqual([7]); // pendingVerifyAfterDays
-    expect(calls[3].params).toEqual([40]); // recheckBatch
+    // Revive shares the reaper's cutoff on purpose: same column, opposite
+    // comparison, so a row can satisfy only one of them.
+    expect(calls[1].params).toEqual([10]); // staleAfterDays
+    expect(calls[2].params).toBeUndefined(); // sold match — no bind
+    expect(calls[3].params).toEqual([7]); // pendingVerifyAfterDays
+    expect(calls[4].params).toEqual([40]); // recheckBatch
 
     // Stats aggregate the per-step rowCounts.
     expect(stats).toEqual({
       staled: 3,
+      revived: 4,
       soldMatched: 5,
       pendingFlagged: 7,
       rechecksEnqueued: 2,
@@ -76,10 +108,11 @@ describe('runLifecycleTick orchestration (mock pool)', () => {
   });
 
   it('coerces a null rowCount to 0', async () => {
-    const { pool } = recordingPool([null, null, null, null]);
+    const { pool } = recordingPool([null, null, null, null, null]);
     const stats = await runLifecycleTick(pool as any, noop, cfg);
     expect(stats).toEqual({
       staled: 0,
+      revived: 0,
       soldMatched: 0,
       pendingFlagged: 0,
       rechecksEnqueued: 0,
