@@ -91,6 +91,20 @@ WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-1}
 # ties up a runner for minutes, not the 10-min code default (which throttled
 # throughput at low concurrency and delayed the stuck-job reaper).
 SCRAPE_TIMEOUT_MS=${SCRAPE_TIMEOUT_MS:-240000}
+# How far back the for-sale crawl looks, by LIST DATE (not activity). Emitted
+# EXPLICITLY rather than left to the passthrough filter — SCRAPER_URLS was once
+# silently swallowed by a prefix match in that filter and the crawl died for ten
+# hours, so anything the crawl depends on is stated here where it is visible.
+#
+# 30 was the historical hardcoded value and is the safe default. It also means
+# the crawl only ever sees property LISTED in the last 30 days: measured, ZIP
+# 33020 returns 567 listings unfiltered against 89 at 30 days, so ~16% of
+# available inventory. Empty string = no filter (see _env_past_days in
+# services/scraper_service/main.py). Widen in stages and watch the rent queue.
+# NOTE the single dash: ${VAR-default}, not ${VAR:-default}. With :- an
+# explicitly EMPTY value would be rewritten back to 30, making the "no filter"
+# setting silently impossible to express. With - an empty value survives.
+SCRAPE_PAST_DAYS=${SCRAPE_PAST_DAYS-30}
 # Anti-block pacing: min gap between job starts (~old schedule tick), jitter
 # between a ZIP's passes, and the initial block cool-off (doubles per block).
 CRAWL_JOB_MIN_INTERVAL_MS=${CRAWL_JOB_MIN_INTERVAL_MS:-30000}
