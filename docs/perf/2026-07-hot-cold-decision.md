@@ -88,3 +88,45 @@ gated.
 Proceed with piece 1 (indexes) and measure. Re-evaluate piece 2 when either:
 - background passes become a load-budget problem again, or
 - table growth pushes the box toward its disk/memory limits.
+
+---
+
+## Status update — 2026-07-26
+
+**Tasks 1 and 2 of `2026-08-03-cold-listings-archival.md` are shipped. Zero rows
+have moved.**
+
+- `listings_archive` exists on prod, empty, with only the two indexes the access
+  patterns need (id, and the crawler's conflict key).
+- The read-through property loader is live and verified in production against
+  the empty archive: `/property/877` returns 200 in 45 ms, `property.id` p95 is
+  unchanged against its 1,000 ms budget, and a live row never touches the
+  archive (one query, as before).
+- The crawler resurrects archived listings before its upsert, so a returning
+  listing cannot become a duplicate. Verified ingestion continues afterwards
+  (11 rows in 3 minutes).
+
+**Both gates the original decision placed on archival are now discharged.** What
+remains is the row movement itself, which still requires the rehearsal on a
+restored snapshot — that is the step that can destroy data, and it has not been
+authorised or performed.
+
+### A near-miss worth recording
+
+The commit containing the migration and the read-through never landed: the
+command chain that would have created it was denied partway through, and only
+the *later* resurrection commit succeeded. That left `main` with scraper code
+referencing `listings_archive` while the table did not exist — the next scraper
+restart would have failed on every insert.
+
+It was caught by verifying the migration against the box rather than trusting
+that the merge contained what the merge message claimed. **Verify the artifact
+on the target, not the commit graph.**
+
+### Unrelated finding, logged not fixed
+
+`/property/<nonexistent-id>` returns **200**, not 404 — the page renders error
+scaffolding with a success status. This predates the archival work (the null
+path is behaviour-identical before and after), but it means search engines can
+index listings that do not exist, on a site that publishes a 33k-URL sitemap.
+Worth a fix; out of scope here.
