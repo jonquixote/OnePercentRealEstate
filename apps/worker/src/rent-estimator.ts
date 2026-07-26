@@ -355,6 +355,26 @@ async function markDone(
   }
 }
 
+/**
+ * Terminal, but not a failure: there is nothing to estimate for vacant land.
+ *
+ * Kept distinct from markFailed (which invites retry) and from markDone (which
+ * asserts an estimate exists). The listings_done_implies_rent CHECK enforces
+ * that distinction at the database level.
+ */
+async function markNotApplicable(listingId: number, reason: string): Promise<void> {
+  await pool.query(
+    `UPDATE listings
+        SET rent_calc_status = 'not_applicable',
+            estimated_rent = NULL, rent_low = NULL, rent_high = NULL,
+            rent_model_version = 'non_rentable_skip',
+            rent_calc_error = $2,
+            updated_at = NOW()
+      WHERE id = $1`,
+    [listingId, reason],
+  );
+}
+
 async function markFailed(listingId: number, reason: string): Promise<void> {
   await pool.query(
     `UPDATE listings
@@ -386,10 +406,14 @@ async function processListing(listingId: string, parentLog: WorkerLogger): Promi
     return;
   }
 
-  // Skip ML call for non-rentable property types — set rent to 0 directly.
+  // Skip ML for non-rentable property types. NOT markDone(…, 0, …): a rent of
+  // zero is the absence of an estimate, and writing it as 'done' is what left
+  // 37,557 listings claiming an estimate they did not have (27,221 LAND, 1,479
+  // FARM). 'not_applicable' is the honest terminal status and matches what the
+  // batch settle path (NON_RENTABLE_SETTLE_SQL) has always done.
   // Single source of truth: DB is_rentable() (property_type_rules), resolved in loadListing.
   if (payload.is_rentable === false) {
-    await markDone(payload.listing_id, 0, 'non_rentable_skip', payload);
+    await markNotApplicable(payload.listing_id, 'property_type not rentable');
     jobLog.info({ property_type: payload.property_type }, 'skipped non-rentable type');
     completionsSinceLastBust++;
     if (completionsSinceLastBust >= BUST_EVERY) {
