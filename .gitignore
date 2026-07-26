@@ -63,3 +63,10 @@ apps/worker/dist/
 
 # PgBouncer userlist contains PLAINTEXT role passwords (SCRAM backend) — never commit.
 ops/pgbouncer/userlist.txt
+
+# Local debugging debris — screenshots and Playwright MCP artifacts. These were
+# swept into a commit by `git add -A` on 2026-07-26; ignored so it cannot recur.
+.playwright-mcp/
+/*.jpeg
+/*.jpg
+/*.png
