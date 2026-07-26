@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { trackRoute, snapshot, percentiles, __resetPerfTracking } from './perf-track';
+import { trackRoute, snapshot, percentiles, __resetPerfTracking } from './perf-track.js';
 
 /**
  * The tracker's job is to make slowness visible WITHOUT becoming a load problem

@@ -1,0 +1,19 @@
+[     461ms] [INFO] Loading the script 'https://js.stripe.com/clover/stripe.js' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-eval' 'unsafe-inline'". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The policy is report-only, so the violation has been logged but no further action has been taken. @ https://one.octavo.press/_next/static/chunks/3rashtgknomad.js:0
+[     480ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ https://one.octavo.press/api/prefs:0
+[     491ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ https://one.octavo.press/api/alerts:0
+[     492ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ https://one.octavo.press/api/prefs:0
+[     510ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ https://one.octavo.press/api/alerts:0
+[     533ms] [ERROR] Failed to load resource: the server responded with a status of 501 (Not Implemented) @ https://one.octavo.press/api/saved-searches?user_id=808448f8-0575-4c80-9ee5-68838ddd98e4:0
+[     735ms] [ERROR] Framing 'https://js.stripe.com/' violates the following report-only Content Security Policy directive: "default-src 'self'". The violation has been logged, but no further action has been taken. Note that 'frame-src' was not explicitly set, so 'default-src' is used as a fallback.
+ @ https://js.stripe.com/:0
+[     847ms] [ERROR] Framing 'https://js.stripe.com/' violates the following report-only Content Security Policy directive: "default-src 'self'". The violation has been logged, but no further action has been taken. Note that 'frame-src' was not explicitly set, so 'default-src' is used as a fallback.
+ @ https://js.stripe.com/:0
+[    1668ms] [ERROR] Failed to load resource: the server responded with a status of 501 (Not Implemented) @ https://one.octavo.press/api/saved-searches?user_id=808448f8-0575-4c80-9ee5-68838ddd98e4:0
+[    1711ms] [ERROR] Framing 'https://js.stripe.com/' violates the following report-only Content Security Policy directive: "default-src 'self'". The violation has been logged, but no further action has been taken. Note that 'frame-src' was not explicitly set, so 'default-src' is used as a fallback.
+ @ https://js.stripe.com/:0
+[    1715ms] [ERROR] Framing 'https://js.stripe.com/' violates the following report-only Content Security Policy directive: "default-src 'self'". The violation has been logged, but no further action has been taken. Note that 'frame-src' was not explicitly set, so 'default-src' is used as a fallback.
+ @ https://js.stripe.com/:0
+[    3703ms] [ERROR] Failed to load resource: the server responded with a status of 501 (Not Implemented) @ https://one.octavo.press/api/saved-searches?user_id=808448f8-0575-4c80-9ee5-68838ddd98e4:0
+[    6244ms] [INFO] Loading the script 'https://js.stripe.com/v3/fingerprinted/js/trusted-types-checker-5f0c8e2badcf649fffcda863f4764381.js' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-eval' 'unsafe-inline'". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The policy is report-only, so the violation has been logged but no further action has been taken. @ https://js.stripe.com/clover/stripe.js:0
+[    7739ms] [ERROR] Failed to load resource: the server responded with a status of 501 (Not Implemented) @ https://one.octavo.press/api/saved-searches?user_id=808448f8-0575-4c80-9ee5-68838ddd98e4:0
+[   11428ms] [WARNING] The resource https://one.octavo.press/_next/static/chunks/2onuoye2b_g2z.css was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://one.octavo.press/pricing:0

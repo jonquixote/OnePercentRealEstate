@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { normalizeSql, reportSlowQuery, __resetSlowQuery, slowQueryThresholdMs } from './slow-query';
+import { normalizeSql, reportSlowQuery, __resetSlowQuery, slowQueryThresholdMs } from './slow-query.js';
 
 const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response('ok'));
 

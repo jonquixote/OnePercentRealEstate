@@ -35,6 +35,9 @@ importers:
       '@oper/map':
         specifier: workspace:*
         version: link:../../packages/map
+      '@oper/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@oper/primitives':
         specifier: workspace:*
         version: link:../../packages/primitives
@@ -204,6 +207,9 @@ importers:
       '@oper/map':
         specifier: workspace:*
         version: link:../../packages/map
+      '@oper/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@oper/primitives':
         specifier: workspace:*
         version: link:../../packages/primitives
@@ -388,6 +394,15 @@ importers:
       vitest:
         specifier: ^2
         version: 2.1.9(@types/node@20.19.41)(jsdom@29.1.1)(lightningcss@1.32.0)
+
+  packages/observability:
+    devDependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.6(@types/node@20.19.41)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(tsx@4.22.4)
 
   packages/primitives:
     dependencies:

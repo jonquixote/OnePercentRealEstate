@@ -1,0 +1,489 @@
+- generic [active] [ref=f25e1]:
+  - banner [ref=f25e2]:
+    - navigation "Global" [ref=f25e3]:
+      - link "OnePercent home" [ref=f25e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f25e8]: OnePercent
+      - generic [ref=f25e9]:
+        - button "Deal alerts" [ref=f25e11]
+        - button "Account menu" [ref=f25e16]:
+          - generic [ref=f25e17]: A
+        - button "Open menu" [ref=f25e18]
+  - generic [ref=f25e20]:
+    - main [ref=f25e21]:
+      - generic [ref=f25e22]:
+        - generic [ref=f25e24]:
+          - generic [ref=f25e26]:
+            - paragraph [ref=f25e27]: 10562 Windsor Lake Ct, Tampa, FL 33626
+            - paragraph [ref=f25e28]: $245,000
+          - generic [ref=f25e29]:
+            - button "Save this property" [ref=f25e30]
+            - link "Open source listing in new tab" [ref=f25e33] [cursor=pointer]:
+              - /url: https://www.realtor.com/realestateandhomes-detail/10562-Windsor-Lake-Ct_Tampa_FL_33626_M54769-88784
+            - button "Copy share link to clipboard" [ref=f25e38]
+        - navigation [ref=f25e45]:
+          - generic [ref=f25e47]:
+            - link "Overview" [ref=f25e48] [cursor=pointer]:
+              - /url: "#overview"
+            - link "Financials" [ref=f25e49] [cursor=pointer]:
+              - /url: "#financials"
+            - link "Comps" [ref=f25e50] [cursor=pointer]:
+              - /url: "#comps"
+            - link "Location" [ref=f25e51] [cursor=pointer]:
+              - /url: "#location"
+            - link "Analysis" [ref=f25e52] [cursor=pointer]:
+              - /url: "#analysis"
+            - link "Calculator" [ref=f25e53] [cursor=pointer]:
+              - /url: "#calculator"
+            - link "Nearby" [ref=f25e54] [cursor=pointer]:
+              - /url: "#nearby"
+            - link "Risk" [ref=f25e55] [cursor=pointer]:
+              - /url: "#risk"
+            - link "Neighborhood" [ref=f25e56] [cursor=pointer]:
+              - /url: "#neighborhood"
+            - link "Market" [ref=f25e57] [cursor=pointer]:
+              - /url: "#market"
+        - generic [ref=f25e58]:
+          - navigation "Breadcrumb" [ref=f25e59]:
+            - generic [ref=f25e60]:
+              - link "Home" [ref=f25e61] [cursor=pointer]:
+                - /url: /
+              - generic [ref=f25e62]: ·
+            - generic [ref=f25e63]:
+              - link "Tampa 33626" [ref=f25e64] [cursor=pointer]:
+                - /url: /market/33626
+              - generic [ref=f25e65]: ·
+            - generic [ref=f25e66]: 10562 Windsor Lake Ct, Tampa, FL 33626
+          - generic [ref=f25e68]:
+            - main [ref=f25e69]:
+              - generic [ref=f25e70]:
+                - generic [ref=f25e71]:
+                  - button "Open photo 1 of 3" [ref=f25e74]:
+                    - img "Main view of 10562 Windsor Lake Ct, Tampa, FL 33626" [ref=f25e75]
+                  - button "View all 3 photos" [ref=f25e76]:
+                    - generic [ref=f25e77]: View 3 photos
+                - generic [ref=f25e82]:
+                  - generic [ref=f25e83]:
+                    - heading "10562 Windsor Lake Ct, Tampa, FL 33626" [level=1] [ref=f25e84]
+                    - paragraph [ref=f25e85]:
+                      - text: 3 bd · 2 ba · 1,373 sqft · built 2001 · Tampa · CONDOS·
+                      - link "source listing ↗" [ref=f25e86] [cursor=pointer]:
+                        - /url: https://www.realtor.com/realestateandhomes-detail/10562-Windsor-Lake-Ct_Tampa_FL_33626_M54769-88784
+                  - paragraph [ref=f25e88]: $245,000
+              - generic [ref=f25e89]:
+                - heading "rent, three ways" [level=2] [ref=f25e90]
+                - generic [ref=f25e91]:
+                  - generic [ref=f25e92]:
+                    - generic [ref=f25e93]:
+                      - generic [ref=f25e94]: OnePercent model (vv1)
+                      - generic [ref=f25e95]: $2,767/mo
+                    - paragraph [ref=f25e99]: p10–p90 confidence band
+                  - generic [ref=f25e101]:
+                    - generic [ref=f25e102]: HUD Fair Market Rent · 33626 · 3BR
+                    - generic [ref=f25e103]: $3,520/mo
+                  - generic [ref=f25e105]:
+                    - generic [ref=f25e106]: Area comps median (last 90d)
+                    - generic [ref=f25e107]: $3,163/mo
+                - paragraph [ref=f25e108]: FMR from HUD SAFMR FY2026. Never a naked estimate.
+              - generic [ref=f25e109]:
+                - heading "what actually sold nearby" [level=2] [ref=f25e110]
+                - generic [ref=f25e111]:
+                  - generic [ref=f25e112]:
+                    - generic [ref=f25e113]:
+                      - generic [ref=f25e114]: Median sold price (90d)
+                      - generic [ref=f25e115]: $470,000
+                    - paragraph [ref=f25e116]: $286.32/sqft avg · 20 comps
+                  - generic [ref=f25e117]:
+                    - link "$705,000 \\u00b7 $364/sqft 3bd/2ba · 1,935sqft 2026-07-02 · 1mi" [ref=f25e118] [cursor=pointer]:
+                      - /url: /sold/34234
+                      - generic [ref=f25e119]:
+                        - text: $705,000
+                        - generic [ref=f25e120]: \u00b7 $364/sqft
+                      - generic [ref=f25e121]:
+                        - generic [ref=f25e122]: 3bd/2ba · 1,935sqft
+                        - generic [ref=f25e123]: 2026-07-02 · 1mi
+                    - link "$420,000 \\u00b7 $233/sqft 3bd/2.5ba · 1,799sqft 2026-07-10 · 1mi" [ref=f25e124] [cursor=pointer]:
+                      - /url: /sold/34064
+                      - generic [ref=f25e125]:
+                        - text: $420,000
+                        - generic [ref=f25e126]: \u00b7 $233/sqft
+                      - generic [ref=f25e127]:
+                        - generic [ref=f25e128]: 3bd/2.5ba · 1,799sqft
+                        - generic [ref=f25e129]: 2026-07-10 · 1mi
+                    - link "$610,000 \\u00b7 $294/sqft 3bd/2ba · 2,076sqft 2026-07-07 · 2mi" [ref=f25e130] [cursor=pointer]:
+                      - /url: /sold/34169
+                      - generic [ref=f25e131]:
+                        - text: $610,000
+                        - generic [ref=f25e132]: \u00b7 $294/sqft
+                      - generic [ref=f25e133]:
+                        - generic [ref=f25e134]: 3bd/2ba · 2,076sqft
+                        - generic [ref=f25e135]: 2026-07-07 · 2mi
+                    - link "$345,000 \\u00b7 $212/sqft 3bd/2.5ba · 1,626sqft 2026-07-01 · 2mi" [ref=f25e136] [cursor=pointer]:
+                      - /url: /sold/34305
+                      - generic [ref=f25e137]:
+                        - text: $345,000
+                        - generic [ref=f25e138]: \u00b7 $212/sqft
+                      - generic [ref=f25e139]:
+                        - generic [ref=f25e140]: 3bd/2.5ba · 1,626sqft
+                        - generic [ref=f25e141]: 2026-07-01 · 2mi
+                    - link "$436,000 \\u00b7 $276/sqft 3bd/2ba · 1,578sqft 2026-06-30 · 2mi" [ref=f25e142] [cursor=pointer]:
+                      - /url: /sold/34350
+                      - generic [ref=f25e143]:
+                        - text: $436,000
+                        - generic [ref=f25e144]: \u00b7 $276/sqft
+                      - generic [ref=f25e145]:
+                        - generic [ref=f25e146]: 3bd/2ba · 1,578sqft
+                        - generic [ref=f25e147]: 2026-06-30 · 2mi
+                    - link "$455,000 \\u00b7 $286/sqft 3bd/2ba · 1,592sqft 2026-07-09 · 2mi" [ref=f25e148] [cursor=pointer]:
+                      - /url: /sold/34122
+                      - generic [ref=f25e149]:
+                        - text: $455,000
+                        - generic [ref=f25e150]: \u00b7 $286/sqft
+                      - generic [ref=f25e151]:
+                        - generic [ref=f25e152]: 3bd/2ba · 1,592sqft
+                        - generic [ref=f25e153]: 2026-07-09 · 2mi
+                    - link "$515,000 \\u00b7 $328/sqft 3bd/2ba · 1,572sqft 2026-06-30 · 2mi" [ref=f25e154] [cursor=pointer]:
+                      - /url: /sold/34329
+                      - generic [ref=f25e155]:
+                        - text: $515,000
+                        - generic [ref=f25e156]: \u00b7 $328/sqft
+                      - generic [ref=f25e157]:
+                        - generic [ref=f25e158]: 3bd/2ba · 1,572sqft
+                        - generic [ref=f25e159]: 2026-06-30 · 2mi
+                    - link "$450,000 \\u00b7 $285/sqft 3bd/2.5ba · 1,579sqft 2026-07-07 · 2mi" [ref=f25e160] [cursor=pointer]:
+                      - /url: /sold/34177
+                      - generic [ref=f25e161]:
+                        - text: $450,000
+                        - generic [ref=f25e162]: \u00b7 $285/sqft
+                      - generic [ref=f25e163]:
+                        - generic [ref=f25e164]: 3bd/2.5ba · 1,579sqft
+                        - generic [ref=f25e165]: 2026-07-07 · 2mi
+                    - link "$475,000 \\u00b7 $299/sqft 3bd/2ba · 1,588sqft 2026-07-13 · 2mi" [ref=f25e166] [cursor=pointer]:
+                      - /url: /sold/34030
+                      - generic [ref=f25e167]:
+                        - text: $475,000
+                        - generic [ref=f25e168]: \u00b7 $299/sqft
+                      - generic [ref=f25e169]:
+                        - generic [ref=f25e170]: 3bd/2ba · 1,588sqft
+                        - generic [ref=f25e171]: 2026-07-13 · 2mi
+                    - link "$505,000 \\u00b7 $282/sqft 3bd/2.5ba · 1,792sqft 2026-07-02 · 2mi" [ref=f25e172] [cursor=pointer]:
+                      - /url: /sold/34229
+                      - generic [ref=f25e173]:
+                        - text: $505,000
+                        - generic [ref=f25e174]: \u00b7 $282/sqft
+                      - generic [ref=f25e175]:
+                        - generic [ref=f25e176]: 3bd/2.5ba · 1,792sqft
+                        - generic [ref=f25e177]: 2026-07-02 · 2mi
+                  - generic [ref=f25e178]:
+                    - generic [ref=f25e179]:
+                      - generic [ref=f25e180]: After-repair value
+                      - generic [ref=f25e181]: $433,278
+                    - paragraph [ref=f25e182]: P75 $316/sqft from 20 sold comps
+                - paragraph [ref=f25e184]: Loading rental comps…
+              - generic [ref=f25e185]:
+                - heading "the locale" [level=2] [ref=f25e186]
+                - generic [ref=f25e188]:
+                  - application "Interactive property map. Use the layer and basemap controls to change what is shown; listing markers can be activated to open a property." [ref=f25e189]:
+                    - region "Map" [ref=f25e191]
+                    - paragraph [ref=f25e192]: "Basemap: positron; active layers: rent-heat"
+                    - generic:
+                      - paragraph: Map
+                      - generic:
+                        - generic: Cluster
+                        - generic: Listing
+                  - button "Open the full map at this location" [ref=f25e193] [cursor=pointer]
+                  - generic: Rent $/sqft shading · click to explore →
+                - generic [ref=f25e194]:
+                  - generic [ref=f25e195]:
+                    - paragraph [ref=f25e196]: County
+                    - paragraph [ref=f25e197]: Hillsborough
+                  - generic [ref=f25e198]:
+                    - generic [ref=f25e199]:
+                      - generic [ref=f25e200]: Flood risk index
+                      - generic [ref=f25e201]: Relatively Moderate FEMA NRI
+                    - generic [ref=f25e202]:
+                      - generic [ref=f25e203]: Median household income
+                      - generic [ref=f25e204]: $127,118
+                    - generic [ref=f25e205]:
+                      - generic [ref=f25e206]: Median area rent
+                      - generic [ref=f25e207]: $2,204/mo
+                    - generic [ref=f25e208]:
+                      - generic [ref=f25e209]: Median home value
+                      - generic [ref=f25e210]: $577,100
+              - generic [ref=f25e211]:
+                - heading "deal analysis" [level=2] [ref=f25e212]
+                - generic [ref=f25e213]:
+                  - generic [ref=f25e214]:
+                    - button "Buy & Hold" [ref=f25e215]
+                    - button "BRRRR" [ref=f25e216]
+                    - button "Buy & Flip" [ref=f25e217]
+                    - button "Short-Term" [ref=f25e218]
+                  - generic [ref=f25e219]:
+                    - generic [ref=f25e220]:
+                      - generic [ref=f25e221]: C
+                      - generic [ref=f25e222]:
+                        - paragraph [ref=f25e223]: Solid but unremarkable
+                        - paragraph [ref=f25e224]: 67/100
+                    - generic [ref=f25e225]:
+                      - paragraph [ref=f25e226]: Category breakdown
+                      - generic [ref=f25e228]:
+                        - generic [ref=f25e229]: 1% Rule
+                        - generic [ref=f25e230]: 25/25
+                      - generic [ref=f25e234]:
+                        - generic [ref=f25e235]: Cap Rate
+                        - generic [ref=f25e236]: 14/20
+                      - generic [ref=f25e240]:
+                        - generic [ref=f25e241]: Cash-on-Cash
+                        - generic [ref=f25e242]: 5/20
+                      - generic [ref=f25e246]:
+                        - generic [ref=f25e247]: Cashflow
+                        - generic [ref=f25e248]: 10/15
+                      - generic [ref=f25e252]:
+                        - generic [ref=f25e253]: HOA
+                        - generic [ref=f25e254]: 0/5
+                      - generic [ref=f25e257]:
+                        - generic [ref=f25e258]: Age
+                        - generic [ref=f25e259]: 5/5
+                      - generic [ref=f25e263]:
+                        - generic [ref=f25e264]: Size
+                        - generic [ref=f25e265]: 5/5
+                      - generic [ref=f25e269]:
+                        - generic [ref=f25e270]: Days on Market
+                        - generic [ref=f25e271]: 0/5
+                    - generic [ref=f25e273]:
+                      - generic [ref=f25e274]:
+                        - paragraph [ref=f25e275]: Pros
+                        - list [ref=f25e276]:
+                          - listitem [ref=f25e277]: ✓ Clears the rule (1.1% ≥ 1.0%)
+                          - listitem [ref=f25e278]: ✓ Newer construction (built 2001)
+                          - listitem [ref=f25e279]: ✓ Healthy size (1,373 sqft)
+                      - generic [ref=f25e280]:
+                        - paragraph [ref=f25e281]: Cons
+                        - list [ref=f25e282]:
+                          - listitem [ref=f25e283]: ✗ High HOA drag (24.7% of rent)
+              - generic [ref=f25e285]:
+                - paragraph [ref=f25e286]: financial calculator
+                - generic [ref=f25e287]:
+                  - generic [ref=f25e288]:
+                    - generic [ref=f25e289]:
+                      - paragraph [ref=f25e290]: Strategy
+                      - generic [ref=f25e291]:
+                        - button "Buy & Hold" [ref=f25e292]
+                        - button "BRRRR" [ref=f25e293]
+                        - button "Buy & Flip" [ref=f25e294]
+                        - button "Short-Term" [ref=f25e295]
+                    - generic [ref=f25e296]:
+                      - generic [ref=f25e297]:
+                        - generic [ref=f25e298]: Down payment
+                        - generic [ref=f25e299]: 20.0%
+                      - slider [ref=f25e300]: "0.2"
+                    - generic [ref=f25e301]:
+                      - generic [ref=f25e302]:
+                        - generic [ref=f25e303]: Interest rate
+                        - generic [ref=f25e304]: 6.5%
+                      - slider [ref=f25e305]: "0.065"
+                    - paragraph [ref=f25e306]: Expenses estimated via the 50% rule — operating costs are modelled at half of gross rent.
+                  - generic [ref=f25e307]:
+                    - generic [ref=f25e308]:
+                      - generic [ref=f25e309]: C
+                      - generic [ref=f25e310]:
+                        - paragraph [ref=f25e311]: Solid but unremarkable
+                        - paragraph [ref=f25e312]: 67/100
+                    - generic [ref=f25e313]:
+                      - generic [ref=f25e314]:
+                        - generic [ref=f25e315]: Cap rate
+                        - generic [ref=f25e316]: 6.8%
+                      - generic [ref=f25e317]:
+                        - generic [ref=f25e318]: Cash-on-cash
+                        - generic [ref=f25e319]: 3.1%
+                      - generic [ref=f25e320]:
+                        - generic [ref=f25e321]: Monthly cashflow
+                        - generic [ref=f25e322]: +$145
+                    - generic [ref=f25e323]:
+                      - generic [ref=f25e324]:
+                        - paragraph [ref=f25e325]: Pros
+                        - list [ref=f25e326]:
+                          - listitem [ref=f25e327]: ✓ Clears the rule (1.1% ≥ 1.0%)
+                          - listitem [ref=f25e328]: ✓ Newer construction (built 2001)
+                          - listitem [ref=f25e329]: ✓ Healthy size (1,373 sqft)
+                      - generic [ref=f25e330]:
+                        - paragraph [ref=f25e331]: Cons
+                        - list [ref=f25e332]:
+                          - listitem [ref=f25e333]: ✗ High HOA drag (24.7% of rent)
+              - generic [ref=f25e334]:
+                - heading "nearby by strategy" [level=2] [ref=f25e335]
+                - generic [ref=f25e336]:
+                  - generic [ref=f25e337]:
+                    - button "1% Rule" [ref=f25e338]
+                    - button "BRRRR" [ref=f25e339]
+                    - button "Buy & Flip" [ref=f25e340]
+                    - button "Short-Term" [ref=f25e341]
+                  - generic [ref=f25e342]:
+                    - link "9832 Lake Chase Island Way, Tampa, FL 33626 $220,000 1.00%" [ref=f25e343] [cursor=pointer]:
+                      - /url: /property/958
+                      - paragraph [ref=f25e344]: 9832 Lake Chase Island Way, Tampa, FL 33626
+                      - generic [ref=f25e345]:
+                        - generic [ref=f25e346]: $220,000
+                        - generic [ref=f25e347]: 1.00%
+                    - link "10436 White Lake Ct, Tampa, FL 33626 $215,000 0.93%" [ref=f25e348] [cursor=pointer]:
+                      - /url: /property/901
+                      - paragraph [ref=f25e349]: 10436 White Lake Ct, Tampa, FL 33626
+                      - generic [ref=f25e350]:
+                        - generic [ref=f25e351]: $215,000
+                        - generic [ref=f25e352]: 0.93%
+                    - link "9875 Meadow Field Cir, Tampa, FL 33626 $308,900 0.86%" [ref=f25e353] [cursor=pointer]:
+                      - /url: /property/431
+                      - paragraph [ref=f25e354]: 9875 Meadow Field Cir, Tampa, FL 33626
+                      - generic [ref=f25e355]:
+                        - generic [ref=f25e356]: $308,900
+                        - generic [ref=f25e357]: 0.86%
+                    - link "9638 Lake Chase Island Way, Tampa, FL 33626 $235,000 1.11%" [ref=f25e358] [cursor=pointer]:
+                      - /url: /property/4219038
+                      - paragraph [ref=f25e359]: 9638 Lake Chase Island Way, Tampa, FL 33626
+                      - generic [ref=f25e360]:
+                        - generic [ref=f25e361]: $235,000
+                        - generic [ref=f25e362]: 1.11%
+                    - link "9740 Lake Chase Island Way, Tampa, FL 33626 $235,000 1.04%" [ref=f25e363] [cursor=pointer]:
+                      - /url: /property/4219008
+                      - paragraph [ref=f25e364]: 9740 Lake Chase Island Way, Tampa, FL 33626
+                      - generic [ref=f25e365]:
+                        - generic [ref=f25e366]: $235,000
+                        - generic [ref=f25e367]: 1.04%
+                    - link "9834 Lake Chase Island Way, Tampa, FL 33626 $225,000 1.08%" [ref=f25e368] [cursor=pointer]:
+                      - /url: /property/4218575
+                      - paragraph [ref=f25e369]: 9834 Lake Chase Island Way, Tampa, FL 33626
+                      - generic [ref=f25e370]:
+                        - generic [ref=f25e371]: $225,000
+                        - generic [ref=f25e372]: 1.08%
+              - heading "risk & safety" [level=2] [ref=f25e374]
+              - heading "neighborhood" [level=2] [ref=f25e381]
+              - heading "market context" [level=2] [ref=f25e388]
+            - complementary [ref=f25e393]:
+              - generic [ref=f25e394]:
+                - paragraph [ref=f25e395]: the verdict
+                - generic [ref=f25e396]:
+                  - generic [ref=f25e397]: 1.13%
+                  - generic [ref=f25e398]: vs 0.8% target
+                - generic [ref=f25e400]:
+                  - generic [ref=f25e401]:
+                    - term [ref=f25e402]: Modeled rent
+                    - definition [ref=f25e403]:
+                      - generic [ref=f25e404]: $2,767/mo
+                      - generic [ref=f25e405]: rent estimate
+                  - generic [ref=f25e406]:
+                    - term [ref=f25e407]: Property tax
+                    - definition [ref=f25e408]:
+                      - generic [ref=f25e409]: —
+                      - generic [ref=f25e410]: listing
+                  - generic [ref=f25e411]:
+                    - term [ref=f25e412]: Insurance
+                    - definition [ref=f25e413]:
+                      - generic [ref=f25e414]: $4,201/yr
+                      - generic [ref=f25e415]: state avg
+                  - generic [ref=f25e416]:
+                    - term [ref=f25e417]: HOA
+                    - definition [ref=f25e418]:
+                      - generic [ref=f25e419]: $684/mo
+                      - generic [ref=f25e420]: listing
+                - generic [ref=f25e422]:
+                  - generic [ref=f25e423]:
+                    - term [ref=f25e424]: Cap rate
+                    - definition [ref=f25e425]: 8.7%
+                  - generic [ref=f25e426]:
+                    - term [ref=f25e427]: Cash flow
+                    - definition [ref=f25e428]: +$547/mo
+                  - generic [ref=f25e429]:
+                    - term [ref=f25e430]: Cash-on-cash
+                    - definition [ref=f25e431]: 11.6%
+                - button "Save this property" [ref=f25e433]
+                - paragraph [ref=f25e436]: "financing: 20% down · 6.55% (FRED, live) · 30yr"
+                - generic [ref=f25e437]:
+                  - generic [ref=f25e438]:
+                    - paragraph [ref=f25e439]: $245,000
+                    - paragraph [ref=f25e440]: 1.13% · rent $2,767
+                  - button "Save this property" [ref=f25e442]
+              - generic [ref=f25e445]:
+                - paragraph [ref=f25e446]: Intrinsic value · income approach
+                - paragraph [ref=f25e447]: $409,923
+                - generic [ref=f25e448]: 40% below intrinsic value
+                - paragraph [ref=f25e449]: Value = net operating income ÷ market cap rate. Not investment advice.
+              - generic [ref=f25e450]:
+                - paragraph [ref=f25e451]: Ten-year owner return
+                - paragraph [ref=f25e452]: Equity multiple, per-year cash flow, and appreciation modeling are a Pro feature.
+                - link "Unlock with Pro" [ref=f25e453] [cursor=pointer]:
+                  - /url: /pricing
+    - contentinfo [ref=f25e454]:
+      - generic [ref=f25e455]:
+        - generic [ref=f25e456]:
+          - paragraph [ref=f25e457]: product
+          - list [ref=f25e458]:
+            - listitem [ref=f25e459]:
+              - link "Search" [ref=f25e460] [cursor=pointer]:
+                - /url: /search
+            - listitem [ref=f25e461]:
+              - link "Markets" [ref=f25e462] [cursor=pointer]:
+                - /url: /market
+            - listitem [ref=f25e463]:
+              - link "Shelf" [ref=f25e464] [cursor=pointer]:
+                - /url: /shelf
+            - listitem [ref=f25e465]:
+              - link "Playbook" [ref=f25e466] [cursor=pointer]:
+                - /url: /playbook
+            - listitem [ref=f25e467]:
+              - link "Pricing" [ref=f25e468] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=f25e469]:
+              - link "Terminal ↗" [ref=f25e470] [cursor=pointer]:
+                - /url: https://two.octavo.press
+        - generic [ref=f25e471]:
+          - paragraph [ref=f25e472]: markets
+          - list [ref=f25e473]:
+            - listitem [ref=f25e474]:
+              - link "Los Angeles" [ref=f25e475] [cursor=pointer]:
+                - /url: /market/90004
+            - listitem [ref=f25e476]:
+              - link "Houston" [ref=f25e477] [cursor=pointer]:
+                - /url: /market/77002
+            - listitem [ref=f25e478]:
+              - link "Atlanta" [ref=f25e479] [cursor=pointer]:
+                - /url: /market/30310
+            - listitem [ref=f25e480]:
+              - link "Tampa" [ref=f25e481] [cursor=pointer]:
+                - /url: /market/33604
+            - listitem [ref=f25e482]:
+              - link "Columbus" [ref=f25e483] [cursor=pointer]:
+                - /url: /market/43206
+            - listitem [ref=f25e484]:
+              - link "Memphis" [ref=f25e485] [cursor=pointer]:
+                - /url: /market/38106
+            - listitem [ref=f25e486]:
+              - link "Cleveland" [ref=f25e487] [cursor=pointer]:
+                - /url: /market/44102
+            - listitem [ref=f25e488]:
+              - link "San Antonio" [ref=f25e489] [cursor=pointer]:
+                - /url: /market/78201
+        - generic [ref=f25e490]:
+          - paragraph [ref=f25e491]: method
+          - list [ref=f25e492]:
+            - listitem [ref=f25e493]:
+              - link "The 1% rule" [ref=f25e494] [cursor=pointer]:
+                - /url: /playbook
+            - listitem [ref=f25e495]:
+              - link "Buy & Hold" [ref=f25e496] [cursor=pointer]:
+                - /url: /playbook/buy-hold
+            - listitem [ref=f25e497]:
+              - link "BRRRR" [ref=f25e498] [cursor=pointer]:
+                - /url: /playbook/brrrr
+            - listitem [ref=f25e499]:
+              - link "Comps" [ref=f25e500] [cursor=pointer]:
+                - /url: /playbook/comps
+            - listitem [ref=f25e501]:
+              - link "Deal calculator" [ref=f25e502] [cursor=pointer]:
+                - /url: /playbook/calculator
+            - listitem [ref=f25e503]:
+              - link "How the model works" [ref=f25e504] [cursor=pointer]:
+                - /url: /playbook/model
+      - generic [ref=f25e505]:
+        - generic [ref=f25e506]: © 2026 OnePercent · Estimates carry bands, never promises.
+        - generic [ref=f25e507]: the line
+  - alert [ref=f25e509]

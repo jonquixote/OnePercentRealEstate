@@ -1,0 +1,81 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - banner [ref=f2e3]:
+      - generic [ref=f2e4]:
+        - generic [ref=f2e5]: octavo
+        - generic [ref=f2e6]: · terminal
+      - navigation [ref=f2e7]:
+        - link "Portfolio" [ref=f2e8] [cursor=pointer]:
+          - /url: /portfolio
+      - generic [ref=f2e10]:
+        - generic [ref=f2e11]: Custom filters are a Pro feature
+        - link "See pricing →" [ref=f2e12] [cursor=pointer]:
+          - /url: https://one.octavo.press/pricing?from=terminal
+      - generic [ref=f2e13]:
+        - generic [ref=f2e14]: loading…
+        - button "Switch to light theme" [ref=f2e15]
+        - button "Keyboard shortcuts" [ref=f2e22]
+    - generic [ref=f2e27]:
+      - complementary [ref=f2e30]:
+        - generic [ref=f2e31]:
+          - generic [ref=f2e32]: Filters
+          - button "Collapse filters" [ref=f2e33]
+        - generic [ref=f2e37]:
+          - generic [ref=f2e38]:
+            - generic [ref=f2e39]: Status
+            - generic [ref=f2e41]:
+              - button "for sale" [ref=f2e42]
+              - button "pending" [ref=f2e43]
+              - button "sold" [ref=f2e44]
+          - generic [ref=f2e45]:
+            - generic [ref=f2e46]:
+              - generic [ref=f2e47]: Max Price
+              - generic [ref=f2e48]: $500k
+            - slider [ref=f2e49]: "500000"
+          - generic [ref=f2e50]:
+            - generic [ref=f2e51]:
+              - generic [ref=f2e52]: Beds
+              - generic [ref=f2e53]: Any
+            - generic [ref=f2e54]:
+              - button "Any" [ref=f2e55]
+              - button "1" [ref=f2e56]
+              - button "2" [ref=f2e57]
+              - button "3" [ref=f2e58]
+              - button "4" [ref=f2e59]
+              - button "5" [ref=f2e60]
+              - button "6" [ref=f2e61]
+          - generic [ref=f2e62]:
+            - generic [ref=f2e63]:
+              - generic [ref=f2e64]: Baths
+              - generic [ref=f2e65]: Any
+            - generic [ref=f2e66]:
+              - button "Any" [ref=f2e67]
+              - button "1" [ref=f2e68]
+              - button "2" [ref=f2e69]
+              - button "3" [ref=f2e70]
+              - button "4" [ref=f2e71]
+              - button "5" [ref=f2e72]
+          - generic [ref=f2e73]:
+            - generic [ref=f2e74]:
+              - generic [ref=f2e75]: Max $/sqft
+              - generic [ref=f2e76]: $400
+            - slider [ref=f2e77]: "400"
+          - generic [ref=f2e78]:
+            - generic [ref=f2e79]: Sort
+            - combobox [ref=f2e81]:
+              - option "1% rule (desc)" [selected]
+              - option "Cap rate (desc)"
+              - option "Price (asc)"
+              - option "$/sqft (asc)"
+        - paragraph [ref=f2e83]: v1 · local-only
+      - separator "Resize filter rail" [ref=f2e84]
+      - generic [ref=f2e87]:
+        - status [ref=f2e88]:
+          - text: Terminal is a Pro feature — full access from $19/mo.
+          - link "See pricing →" [ref=f2e89] [cursor=pointer]:
+            - /url: https://one.octavo.press/pricing?from=terminal
+        - generic "Loading listings" [ref=f2e90]
+      - separator "Resize inspector" [ref=f2e121]
+      - complementary [ref=f2e124]:
+        - paragraph [ref=f2e125]: Select a row to inspect
+  - alert [ref=f2e126]

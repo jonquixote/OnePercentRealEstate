@@ -1,0 +1,2 @@
+[     759ms] [ERROR] Failed to load resource: the server responded with a status of 501 (Not Implemented) @ https://two.octavo.press/api/screens:0
+[     767ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ https://two.octavo.press/api/layouts:0
