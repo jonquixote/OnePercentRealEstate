@@ -54,8 +54,14 @@ const HIST_STEP = (HIST_HI - HIST_LO) / HIST_BINS;
  */
 const STATS_SQL = `
   WITH rules AS (
+    -- Resolve BOTH per-type functions once per distinct property_type, not per
+    -- row. public.is_rentable() is plpgsql with procost 100, and the base CTE scans
+    -- ~500k rows using it twice — about a million calls per execution. There
+    -- are only a handful of distinct property types, so the join is free by
+    -- comparison. Same trick already used for resolve_rule.
     SELECT pt,
-           (SELECT target_ratio FROM resolve_rule(pt, 'standard', $1)) AS tr
+           (SELECT target_ratio FROM resolve_rule(pt, 'standard', $1)) AS tr,
+           public.is_rentable(pt) AS rentable
     FROM (
       SELECT DISTINCT property_type AS pt
       FROM listings WHERE listing_type = 'for_sale' AND sale_type = 'standard'
@@ -69,9 +75,13 @@ const STATS_SQL = `
       l.property_type,
       l.rent_calc_status,
       r.tr AS target_ratio,
+      -- COALESCE guards the NULL property_type case: r.pt = l.property_type
+      -- never matches NULL, and is_rentable(NULL) returned FALSE, so the join
+      -- must reproduce that rather than yielding NULL.
+      COALESCE(r.rentable, false) AS rentable,
       CASE WHEN l.price > 0 AND l.estimated_rent IS NOT NULL AND l.estimated_rent > 0
                 AND l.rent_calc_status = 'done'
-                AND public.is_rentable(l.property_type)
+                AND COALESCE(r.rentable, false)
            THEN l.estimated_rent / l.price END AS ratio
     FROM listings l
     LEFT JOIN rules r ON r.pt = l.property_type
@@ -89,7 +99,7 @@ const STATS_SQL = `
       * 100
     )::numeric(8,3) AS median_ratio_pct,
     count(DISTINCT state) FILTER (WHERE state IS NOT NULL)::int AS markets,
-    count(*) FILTER (WHERE rent_calc_status = 'done' AND public.is_rentable(property_type))::int AS rentable,
+    count(*) FILTER (WHERE rent_calc_status = 'done' AND rentable)::int AS rentable,
     count(*) FILTER (WHERE rent_calc_status = 'pending')::int AS rent_calc_pending,
     (COALESCE((SELECT target_ratio FROM resolve_rule('DEFAULT', 'standard', $1)), 0.01) * 100)::numeric(6,2) AS threshold_pct,
     (
