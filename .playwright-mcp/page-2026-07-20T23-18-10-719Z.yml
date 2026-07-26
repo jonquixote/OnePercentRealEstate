@@ -1,0 +1,99 @@
+- generic [active] [ref=f15e1]:
+  - banner [ref=f15e2]:
+    - navigation "Global" [ref=f15e3]:
+      - link "OnePercent home" [ref=f15e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f15e8]: OnePercent
+      - generic [ref=f15e9]:
+        - link "Search" [ref=f15e10] [cursor=pointer]:
+          - /url: /search
+        - link "Markets" [ref=f15e11] [cursor=pointer]:
+          - /url: /market
+        - link "Shelf" [ref=f15e12] [cursor=pointer]:
+          - /url: /shelf
+        - link "Playbook" [ref=f15e13] [cursor=pointer]:
+          - /url: /playbook
+      - generic [ref=f15e16]:
+        - combobox "City or ZIP" [ref=f15e20]
+        - button "Search" [ref=f15e21]
+      - generic [ref=f15e22]:
+        - link "Pricing" [ref=f15e23] [cursor=pointer]:
+          - /url: /pricing
+        - button "Deal alerts" [ref=f15e25]
+  - generic [ref=f15e29]:
+    - main [ref=f15e30]
+    - contentinfo [ref=f15e31]:
+      - generic [ref=f15e32]:
+        - generic [ref=f15e33]:
+          - paragraph [ref=f15e34]: product
+          - list [ref=f15e35]:
+            - listitem [ref=f15e36]:
+              - link "Search" [ref=f15e37] [cursor=pointer]:
+                - /url: /search
+            - listitem [ref=f15e38]:
+              - link "Markets" [ref=f15e39] [cursor=pointer]:
+                - /url: /market
+            - listitem [ref=f15e40]:
+              - link "Shelf" [ref=f15e41] [cursor=pointer]:
+                - /url: /shelf
+            - listitem [ref=f15e42]:
+              - link "Playbook" [ref=f15e43] [cursor=pointer]:
+                - /url: /playbook
+            - listitem [ref=f15e44]:
+              - link "Pricing" [ref=f15e45] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=f15e46]:
+              - link "Terminal ↗" [ref=f15e47] [cursor=pointer]:
+                - /url: https://two.octavo.press
+        - generic [ref=f15e48]:
+          - paragraph [ref=f15e49]: markets
+          - list [ref=f15e50]:
+            - listitem [ref=f15e51]:
+              - link "Los Angeles" [ref=f15e52] [cursor=pointer]:
+                - /url: /market/90004
+            - listitem [ref=f15e53]:
+              - link "Houston" [ref=f15e54] [cursor=pointer]:
+                - /url: /market/77002
+            - listitem [ref=f15e55]:
+              - link "Atlanta" [ref=f15e56] [cursor=pointer]:
+                - /url: /market/30310
+            - listitem [ref=f15e57]:
+              - link "Tampa" [ref=f15e58] [cursor=pointer]:
+                - /url: /market/33604
+            - listitem [ref=f15e59]:
+              - link "Columbus" [ref=f15e60] [cursor=pointer]:
+                - /url: /market/43206
+            - listitem [ref=f15e61]:
+              - link "Memphis" [ref=f15e62] [cursor=pointer]:
+                - /url: /market/38106
+            - listitem [ref=f15e63]:
+              - link "Cleveland" [ref=f15e64] [cursor=pointer]:
+                - /url: /market/44102
+            - listitem [ref=f15e65]:
+              - link "San Antonio" [ref=f15e66] [cursor=pointer]:
+                - /url: /market/78201
+        - generic [ref=f15e67]:
+          - paragraph [ref=f15e68]: method
+          - list [ref=f15e69]:
+            - listitem [ref=f15e70]:
+              - link "The 1% rule" [ref=f15e71] [cursor=pointer]:
+                - /url: /playbook
+            - listitem [ref=f15e72]:
+              - link "Buy & Hold" [ref=f15e73] [cursor=pointer]:
+                - /url: /playbook/buy-hold
+            - listitem [ref=f15e74]:
+              - link "BRRRR" [ref=f15e75] [cursor=pointer]:
+                - /url: /playbook/brrrr
+            - listitem [ref=f15e76]:
+              - link "Comps" [ref=f15e77] [cursor=pointer]:
+                - /url: /playbook/comps
+            - listitem [ref=f15e78]:
+              - link "Deal calculator" [ref=f15e79] [cursor=pointer]:
+                - /url: /playbook/calculator
+            - listitem [ref=f15e80]:
+              - link "How the model works" [ref=f15e81] [cursor=pointer]:
+                - /url: /playbook/model
+      - generic [ref=f15e82]:
+        - generic [ref=f15e83]: © 2026 OnePercent · Estimates carry bands, never promises.
+        - generic [ref=f15e84]: the line
+  - alert [ref=f15e86]

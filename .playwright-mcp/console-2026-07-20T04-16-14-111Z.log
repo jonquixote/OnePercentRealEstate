@@ -1,0 +1,20 @@
+[     254ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2:0
+[     255ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2:0
+[     279ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/3nn9-7vvgkjxx.css:0
+[     280ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/2onuoye2b_g2z.css:0
+[     481ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/0ijgpv0m0wv-1.js:0
+[     481ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/3h7oc05_h8-y6.js:0
+[     481ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/0p_puh0rq46au.js:0
+[     481ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/turbopack-2ct0qx4dqtodu.js:0
+[     482ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/2su78wch_7o65.js:0
+[     482ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/3na38jxflp91v.js:0
+[     482ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/2uxcx1vol_epa.js:0
+[     482ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/3urjazsf5ec_j.js:0
+[     482ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/166ajerboofab.js:0
+[     483ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/2481us-n0-nf8.js:0
+[     483ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/1yf_d7d8q13y3.js:0
+[     483ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/0qcxgq3yijst8.js:0
+[     483ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/_next/static/chunks/2fsz--azna_2d.js:0
+[     518ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/favicon.ico:0
+[    3519ms] [WARNING] The resource https://two.octavo.press/_next/static/media/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2 was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://two.octavo.press/:0
+[    3519ms] [WARNING] The resource https://two.octavo.press/_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2 was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://two.octavo.press/:0

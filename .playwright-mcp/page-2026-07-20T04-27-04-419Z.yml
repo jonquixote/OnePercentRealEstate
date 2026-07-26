@@ -1,0 +1,163 @@
+- generic [active] [ref=f7e1]:
+  - banner [ref=f7e2]:
+    - navigation "Global" [ref=f7e3]:
+      - link "OnePercent home" [ref=f7e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f7e8]: OnePercent
+      - generic [ref=f7e9]:
+        - link "Search" [ref=f7e10] [cursor=pointer]:
+          - /url: /search
+        - link "Markets" [ref=f7e11] [cursor=pointer]:
+          - /url: /market
+        - link "Shelf" [ref=f7e12] [cursor=pointer]:
+          - /url: /shelf
+        - link "Playbook" [ref=f7e13] [cursor=pointer]:
+          - /url: /playbook
+      - generic [ref=f7e16]:
+        - combobox "City or ZIP" [ref=f7e20]
+        - button "Search" [ref=f7e21]
+      - generic [ref=f7e22]:
+        - link "Pricing" [ref=f7e23] [cursor=pointer]:
+          - /url: /pricing
+        - button "Deal alerts" [ref=f7e25]
+        - button "Account menu" [ref=f7e112]:
+          - generic [ref=f7e113]: A
+  - generic [ref=f7e29]:
+    - main [ref=f7e30]:
+      - generic [ref=f7e147]:
+        - generic [ref=f7e150]:
+          - button "Filters" [ref=f7e151]
+          - generic [ref=f7e153]:
+            - generic [ref=f7e154]: Loading…
+            - combobox [ref=f7e155]:
+              - option "Rule · best" [selected]
+              - option "Rule · worst"
+              - option "Biggest price cut"
+              - option "Newest listed"
+              - option "Longest on market"
+              - option "Price · high to low"
+              - option "Price · low to high"
+            - button "Include sold" [ref=f7e156]
+            - button "Table" [ref=f7e157]
+            - button "List" [ref=f7e158]
+            - button "Copy link" [ref=f7e160]
+            - button "Watch this search" [ref=f7e162]:
+              - generic [ref=f7e163]: ⌂
+              - text: Watch this search
+        - generic [ref=f7e164]:
+          - generic [ref=f7e165]:
+            - generic [ref=f7e166]: my areas
+            - button "Houston 77002" [ref=f7e167]
+            - button "Cleveland 44102" [ref=f7e168]
+          - generic [ref=f7e208]:
+            - application "Interactive property map. Use the layer and basemap controls to change what is shown; listing markers can be activated to open a property." [ref=f7e209]:
+              - generic [ref=f7e210]:
+                - region "Map" [ref=f7e211]
+                - generic:
+                  - generic [ref=f7e212]:
+                    - button "Zoom in" [ref=f7e213] [cursor=pointer]
+                    - button "Zoom out" [ref=f7e215] [cursor=pointer]
+                  - group [ref=f7e217]:
+                    - generic "Toggle attribution" [ref=f7e218] [cursor=pointer]
+                    - generic [ref=f7e219]:
+                      - link "OpenFreeMap" [ref=f7e220] [cursor=pointer]:
+                        - /url: https://openfreemap.org
+                      - link "© OpenMapTiles" [ref=f7e221] [cursor=pointer]:
+                        - /url: https://www.openmaptiles.org/
+                      - text: Data from
+                      - link "OpenStreetMap" [ref=f7e222] [cursor=pointer]:
+                        - /url: https://www.openstreetmap.org/copyright
+              - paragraph [ref=f7e223]: "Basemap: positron"
+              - button "▤ Layers" [ref=f7e226]
+              - generic:
+                - paragraph: Map
+                - generic:
+                  - generic: Cluster
+                  - generic: Listing
+            - generic [ref=f7e227]:
+              - generic [ref=f7e228] [cursor=pointer]:
+                - checkbox "Search as I move" [checked] [ref=f7e229]
+                - text: Search as I move
+              - button "✏ Draw area" [ref=f7e231]
+        - 'dialog "Tip 1 of 3: The one number that matters" [ref=f7e232]':
+          - paragraph [ref=f7e233]: tip 1 of 3
+          - paragraph [ref=f7e234]: The one number that matters
+          - paragraph [ref=f7e235]: Each card shows rent ÷ price. Green means it clears the 1% line — the deal works.
+          - generic [ref=f7e236]:
+            - button "Dismiss all" [ref=f7e237]
+            - button "Next" [ref=f7e238]
+    - contentinfo [ref=f7e32]:
+      - generic [ref=f7e33]:
+        - generic [ref=f7e34]:
+          - paragraph [ref=f7e35]: product
+          - list [ref=f7e36]:
+            - listitem [ref=f7e37]:
+              - link "Search" [ref=f7e38] [cursor=pointer]:
+                - /url: /search
+            - listitem [ref=f7e39]:
+              - link "Markets" [ref=f7e40] [cursor=pointer]:
+                - /url: /market
+            - listitem [ref=f7e41]:
+              - link "Shelf" [ref=f7e42] [cursor=pointer]:
+                - /url: /shelf
+            - listitem [ref=f7e43]:
+              - link "Playbook" [ref=f7e44] [cursor=pointer]:
+                - /url: /playbook
+            - listitem [ref=f7e45]:
+              - link "Pricing" [ref=f7e46] [cursor=pointer]:
+                - /url: /pricing
+            - listitem [ref=f7e47]:
+              - link "Terminal ↗" [ref=f7e48] [cursor=pointer]:
+                - /url: https://two.octavo.press
+        - generic [ref=f7e49]:
+          - paragraph [ref=f7e50]: markets
+          - list [ref=f7e51]:
+            - listitem [ref=f7e52]:
+              - link "Los Angeles" [ref=f7e53] [cursor=pointer]:
+                - /url: /market/90004
+            - listitem [ref=f7e54]:
+              - link "Houston" [ref=f7e55] [cursor=pointer]:
+                - /url: /market/77002
+            - listitem [ref=f7e56]:
+              - link "Atlanta" [ref=f7e57] [cursor=pointer]:
+                - /url: /market/30310
+            - listitem [ref=f7e58]:
+              - link "Tampa" [ref=f7e59] [cursor=pointer]:
+                - /url: /market/33604
+            - listitem [ref=f7e60]:
+              - link "Columbus" [ref=f7e61] [cursor=pointer]:
+                - /url: /market/43206
+            - listitem [ref=f7e62]:
+              - link "Memphis" [ref=f7e63] [cursor=pointer]:
+                - /url: /market/38106
+            - listitem [ref=f7e64]:
+              - link "Cleveland" [ref=f7e65] [cursor=pointer]:
+                - /url: /market/44102
+            - listitem [ref=f7e66]:
+              - link "San Antonio" [ref=f7e67] [cursor=pointer]:
+                - /url: /market/78201
+        - generic [ref=f7e68]:
+          - paragraph [ref=f7e69]: method
+          - list [ref=f7e70]:
+            - listitem [ref=f7e71]:
+              - link "The 1% rule" [ref=f7e72] [cursor=pointer]:
+                - /url: /playbook
+            - listitem [ref=f7e73]:
+              - link "Buy & Hold" [ref=f7e74] [cursor=pointer]:
+                - /url: /playbook/buy-hold
+            - listitem [ref=f7e75]:
+              - link "BRRRR" [ref=f7e76] [cursor=pointer]:
+                - /url: /playbook/brrrr
+            - listitem [ref=f7e77]:
+              - link "Comps" [ref=f7e78] [cursor=pointer]:
+                - /url: /playbook/comps
+            - listitem [ref=f7e79]:
+              - link "Deal calculator" [ref=f7e80] [cursor=pointer]:
+                - /url: /playbook/calculator
+            - listitem [ref=f7e81]:
+              - link "How the model works" [ref=f7e82] [cursor=pointer]:
+                - /url: /playbook/model
+      - generic [ref=f7e83]:
+        - generic [ref=f7e84]: © 2026 OnePercent · Estimates carry bands, never promises.
+        - generic [ref=f7e85]: the line
+  - alert [ref=f7e87]

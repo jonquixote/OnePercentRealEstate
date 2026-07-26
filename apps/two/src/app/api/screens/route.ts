@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
+import { withSpan } from '@/lib/tracing';
 
 /**
  * Pro-terminal screens (W1) CRUD.
@@ -69,6 +70,10 @@ function parseSort(input: unknown): { col: string; dir: 'asc' | 'desc' } | null 
 }
 
 export async function GET(request: NextRequest) {
+  return withSpan('two.screens', () => handleGet(request));
+}
+
+async function handleGet(request: NextRequest) {
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     const gate = devGateBlocked(request);
@@ -97,6 +102,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  return withSpan('two.screens.post', () => handlePost(request));
+}
+
+async function handlePost(request: NextRequest) {
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     const gate = devGateBlocked(request);

@@ -1,0 +1,68 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: octavo· terminal
+    - navigation [ref=e5]:
+      - link "Portfolio" [ref=e6] [cursor=pointer]:
+        - /url: /portfolio
+    - generic [ref=e8]:
+      - text: Custom filters are a Pro feature
+      - link "See pricing →" [ref=e9] [cursor=pointer]:
+        - /url: /pricing
+    - generic [ref=e10]:
+      - button "Toggle theme" [ref=e11]
+      - button "Keyboard shortcuts" [ref=e18]
+  - generic [ref=e23]:
+    - complementary [ref=e26]:
+      - generic [ref=e27]:
+        - text: Filters
+        - button "Collapse filters" [ref=e28]
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - generic [ref=e34]: Status
+          - generic [ref=e35]:
+            - button "for sale" [ref=e36]
+            - button "pending" [ref=e37]
+            - button "sold" [ref=e38]
+        - generic [ref=e39]:
+          - generic [ref=e40]: Max Price$500k
+          - slider [ref=e41]: "500000"
+        - generic [ref=e42]:
+          - generic [ref=e43]: BedsAny
+          - generic [ref=e44]:
+            - button "Any" [ref=e45]
+            - button "1" [ref=e46]
+            - button "2" [ref=e47]
+            - button "3" [ref=e48]
+            - button "4" [ref=e49]
+            - button "5" [ref=e50]
+            - button "6" [ref=e51]
+        - generic [ref=e52]:
+          - generic [ref=e53]: BathsAny
+          - generic [ref=e54]:
+            - button "Any" [ref=e55]
+            - button "1" [ref=e56]
+            - button "2" [ref=e57]
+            - button "3" [ref=e58]
+            - button "4" [ref=e59]
+            - button "5" [ref=e60]
+        - generic [ref=e61]:
+          - generic [ref=e62]: Max $/sqft$400
+          - slider [ref=e63]: "400"
+        - generic [ref=e64]:
+          - generic [ref=e65]: Sort
+          - combobox [ref=e66]:
+            - option "1% rule (desc)" [selected]
+            - option "Cap rate (desc)"
+            - option "Price (asc)"
+            - option "$/sqft (asc)"
+      - paragraph [ref=e68]: v1 · local-only
+    - separator "Resize filter rail"
+    - generic [ref=e71]:
+      - status [ref=e72]:
+        - text: Terminal is a Pro feature — full access from $19/mo.
+        - link "See pricing →" [ref=e73] [cursor=pointer]:
+          - /url: /pricing
+      - generic "Loading listings" [ref=e74]
+    - separator "Resize inspector"
+    - complementary [ref=e82]:
+      - paragraph [ref=e83]: Select a row to inspect

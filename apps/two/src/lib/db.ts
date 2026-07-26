@@ -1,4 +1,5 @@
 import { Pool, QueryResult } from 'pg';
+import { reportSlowQuery, slowQueryThresholdMs } from '@oper/observability/slow-query';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -20,6 +21,11 @@ pool.query = async function wrappedQuery(
     if (duration > 200) {
       const queryText = typeof text === 'string' ? text : text.text;
       console.warn(`[SLOW QUERY] ${duration}ms: ${queryText?.substring(0, 100)}...`);
+      // Same push apps/one gets. Dedup is keyed on the query's SHAPE, so the
+      // two apps sharing a threshold and a Telegram channel will not
+      // double-alert on identical statements, but genuinely different queries
+      // still alert separately — which is the point of instrumenting both.
+      if (duration >= slowQueryThresholdMs()) reportSlowQuery(queryText ?? '', duration);
     }
     return result;
   } catch (error) {

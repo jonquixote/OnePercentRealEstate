@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import pool from "@/lib/db";
+import { withSpan } from '@/lib/tracing';
 
 export const dynamic = "force-dynamic";
 
@@ -145,6 +146,10 @@ async function rentPsfSeries(zip: string): Promise<Point[]> {
 }
 
 export async function GET(req: NextRequest) {
+  return withSpan('two.market-series', () => handleGet(req));
+}
+
+async function handleGet(req: NextRequest) {
   const url = new URL(req.url);
   const parsed = QuerySchema.safeParse({
     zip: url.searchParams.get("zip"),

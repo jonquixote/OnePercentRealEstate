@@ -1,0 +1,3 @@
+[     970ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://two.octavo.press/pricing?_rsc=5CB68i4pnAekjehf:0
+[    1252ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ https://two.octavo.press/api/layouts:0
+[    1259ms] [ERROR] Failed to load resource: the server responded with a status of 501 (Not Implemented) @ https://two.octavo.press/api/screens:0
