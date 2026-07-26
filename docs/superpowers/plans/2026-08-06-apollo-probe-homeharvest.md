@@ -226,6 +226,56 @@ SELECT county, state, count(DISTINCT zip_code) AS zips, count(*) AS listings
 
 ---
 
+## Task 4b: Containment — does a broader shape MISS anything?
+
+**Files:**
+- Create: `ops/probe/apollo/results/rung2b-containment.jsonl`
+
+**Interfaces:**
+- Produces: the set-difference between a ZIP query and its containing county query.
+
+**Why this task exists and why counts cannot answer it.** Rung 2 showed every
+broader query truncating at the requested limit. A capped result set is decided
+by the API's sort order, not by relevance — so a county query can return a
+plausible-looking thousand rows while silently omitting listings that a ZIP
+query would have found. Two result sets of similar size can be different sets.
+
+The failure this guards against is asymmetric: adopting a broader crawl unit
+that quietly drops inventory would lose deals we can never know we lost, because
+the listings would never enter the database to be counted. A small fish seen
+from far away may be a whale.
+
+- [ ] **Step 1: Choose a county small enough that neither query truncates.**
+      Truncation on either side makes the comparison meaningless. Verify with
+      `truncated=False` on both probes before trusting any result.
+
+- [ ] **Step 2: Query the ZIP alone.** This is the ground-truth set — a ZIP query
+      is the narrowest shape and the one production already trusts.
+
+- [ ] **Step 3: Query the containing county**, same `listing_type`, no
+      `past_days`, `limit` well above the expected count.
+
+- [ ] **Step 4: Compare by stable identifier, not by count.**
+      Use `property_id` (falling back to `property_url`). Report three numbers:
+
+      - `in_zip_not_in_county` — **the number that decides everything.** Any
+        non-zero value means the broader shape loses listings.
+      - `in_county_not_in_zip` — expected to be large; the county covers more ZIPs.
+      - `in_both`
+
+- [ ] **Step 5: Interpret honestly.**
+      `in_zip_not_in_county == 0` means county queries are a true superset for
+      that county, at that size — evidence, not proof, and only below the cap.
+      Any non-zero value means a county-shaped crawl **must** be backstopped by
+      ZIP-level sweeps, and the plan's recommendation changes accordingly.
+
+- [ ] **Step 6: Repeat for a second, larger county** if budget allows, to test
+      whether containment holds as the result set approaches the cap.
+
+- [ ] **Step 7: Commit** — `probe(apollo): rung 2b — containment of ZIP results within county results`
+
+---
+
 ## Task 5: Rung 3 — state (2 requests, highest risk)
 
 **Only attempted if rungs 1 and 2 completed entirely unblocked.**
