@@ -148,13 +148,37 @@ def classify_block(exc, row_count: int, elapsed_s: float) -> bool:
         return any(m in msg for m in _BLOCK_MARKERS)
     return False
 
+def _env_past_days() -> Optional[int]:
+    """SCRAPE_PAST_DAYS: unset -> 30 (current behaviour); empty -> None (no filter)."""
+    raw = os.getenv("SCRAPE_PAST_DAYS", "30").strip()
+    if raw == "":
+        return None
+    try:
+        v = int(raw)
+    except ValueError:
+        return 30
+    return v if v > 0 else None
+
+
 class ScrapeRequest(BaseModel):
     location: str
     # Accepts a single listing type ("for_sale") or a list (["for_sale", "for_rent"]).
     # A list issues ONE combined homeharvest query (status: [...]) and the results
     # are demuxed row-by-row into the correct table via each row's `status` field.
     listing_type: Union[str, List[str]] = "for_sale"
-    past_days: int = 30
+    # Configurable so the rollout is an env change and the revert is instant.
+    #
+    # past_days filters by LIST DATE, not by activity: with 30, everything listed
+    # 31+ days ago and still for sale is invisible to us. Apollo measured the
+    # cost — ZIP 33020 returns 567 listings unfiltered against 89 with
+    # past_days=30, so production has been seeing ~16% of available inventory.
+    # Long days-on-market is exactly where price cuts and motivated sellers are,
+    # so the crawl was blind to the segment richest in deals.
+    #
+    # Empty SCRAPE_PAST_DAYS means None -> no filter. Widen in stages and watch
+    # the rent queue: a ~6x ingest step will back it up before anything else
+    # breaks. See docs/superpowers/plans/2026-08-07-incremental-crawl.md.
+    past_days: Optional[int] = _env_past_days()
     radius: Optional[float] = None
     mls_only: bool = False
     foreclosure: bool = False
