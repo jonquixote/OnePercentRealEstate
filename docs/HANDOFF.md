@@ -149,6 +149,7 @@ search (opt-in to see it).
 | `oper-perf-budget` | 10 min | Per-route **p95 vs declared budget** (`docs/perf/perf-budgets.md`) |
 | `oper-photo-coverage` | 30 min | Share of image-bearing active listings that expose a photo |
 | `oper-rent-coverage` | 30 min | Banded share of estimated active listings **+ band integrity** |
+| `oper-image-availability` | hourly | Samples the listing-photo CDN — every photo comes from rdcpix |
 
 Alerts go to **Telegram** via `ops/monitoring/notify-telegram.sh` (30-min dedup,
 auto-RESOLVED). Credentials already live in `/etc/oper.env`.
@@ -213,6 +214,25 @@ that has never occurred.
 > **Listing ids are roughly chronological.** A plain `ORDER BY id` backfill
 > fills ~900k sold and stale rows nobody can see before reaching anything
 > user-visible. Fill active inventory first.
+
+### Both apps are watched now
+
+Until 2026-07-26 every safeguard stopped at the `apps/one` boundary: `apps/two`
+had 2 test files to `apps/one`'s 49, zero route instrumentation, and logged
+`[SLOW QUERY]` with nothing reading it. It was not broken — it answered in ~7 ms
+— it was *unwatched*, which is the state `apps/one` was in while its hero
+aggregate sat at 18.5 s.
+
+`perf-track` and `slow-query` now live in `@oper/observability` and are imported
+by both, rather than copied. That is the point: copies drift, and the next
+safeguard added to `apps/one` would silently skip the terminal again.
+`perf-budget.sh` reads both `:3001` and `:3002`, and terminal routes are
+prefixed `two.` so a shared snapshot cannot confuse them.
+
+> **`git add -A` in this repo sweeps up local debris.** On 2026-07-26 it
+> committed 41 Playwright MCP artifacts and screenshots from the working tree
+> into a refactor commit. They are now in `.gitignore`, but prefer naming paths
+> explicitly when staging.
 
 > **Liveness ≠ productivity.** The crawl once produced zero listings for ~10
 > hours while every monitor stayed green, because `oper-worker` was "active" the
