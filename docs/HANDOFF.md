@@ -234,6 +234,24 @@ prefixed `two.` so a shared snapshot cannot confuse them.
 > into a refactor commit. They are now in `.gitignore`, but prefer naming paths
 > explicitly when staging.
 
+> **`CREATE TABLE ... (LIKE x INCLUDING DEFAULTS)` does NOT copy generated
+> columns' generated-ness.** `listings.rent_price_ratio` is `GENERATED ALWAYS`;
+> `listings_archive.rent_price_ratio` is a plain column. So
+> `INSERT INTO listings SELECT * FROM listings_archive` fails with *"cannot
+> insert a non-DEFAULT value into column rent_price_ratio"* — and on 2026-07-26
+> that took the crawl down for **80 minutes**, failing every scrape insert with
+> a 500 while the unit stayed `active`. Enumerate columns with
+> `is_generated = 'NEVER'`; never `SELECT *` between these two tables.
+
+> **A geographic query with no geographic predicate.** The rental comps query
+> selected every matching rental *nationwide* and filtered by distance in
+> Python — 5,000 calls x 513 ms = 2,565 s, the largest single consumer of
+> database time on the box. Adding a bounding box (a strict superset of the
+> circle, so results are unchanged) took it from a 406,733-row Seq Scan at
+> 718 ms to a 165-row Index Scan at **3.4 ms**. The index it needed already
+> existed and nothing used it. **When a query filters in application code, check
+> whether the database could have done it.**
+
 > **Liveness ≠ productivity.** The crawl once produced zero listings for ~10
 > hours while every monitor stayed green, because `oper-worker` was "active" the
 > whole time — failing 100% of its scrapes. That is why the crawl-health probes
