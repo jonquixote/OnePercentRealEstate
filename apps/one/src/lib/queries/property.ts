@@ -20,6 +20,10 @@ SELECT
   images,
   media_blur,
   listing_status as status,
+  -- Drives the freshness disclosure. 'active' means 'not yet reaped', not
+  -- 'verified' — 22.8% of active listings had not been confirmed in over a week
+  -- when this was measured. See @/lib/freshness.
+  last_seen_at,
   created_at,
   hoa_fee,
   tax_annual_amount,

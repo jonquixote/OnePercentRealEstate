@@ -32,6 +32,7 @@ import { cached, CACHE_TTL } from '@/lib/cache';
 import { resetRequestStats, getRequestStats } from '@/lib/query-trace';
 import { LazySection } from '@/components/property/LazySection';
 import { withSpan } from '@/lib/tracing';
+import { freshnessOf } from '@/lib/freshness';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -218,7 +219,14 @@ async function renderPropertyPage({ params }: { params: Promise<{ id: string }> 
         bandHigh = null;
     }
 
+    // How recently the crawler actually confirmed this listing exists. Shown
+    // because "active" only means "not yet reaped": on 2026-07-26, 101,864
+    // active listings (22.8%) had not been seen in over a week, and the
+    // crawler's own rechecks find nothing in 63 such ZIPs a day.
+    const freshness = freshnessOf(property.last_seen_at as string | null | undefined);
+
     const provParts: string[] = [];
+    provParts.push(freshness.label);
     if (cutPct != null && firstPrice != null) provParts.push(`−${(cutPct * 100).toFixed(1)}% since list`);
     if (dom != null) provParts.push(`${dom} days on market`);
     if (motivated != null && motivated > 0) provParts.push(`seller motivation ${motivated}`);
