@@ -110,6 +110,50 @@ continuing.
 
 ---
 
+## Task 1b: Validate the county list before trusting any county query
+
+**Added 2026-07-26 after Apollo II Task 2. This is a prerequisite for Task 2, not
+an optimisation.**
+
+**Files:**
+- Create: `infrastructure/migrations/2026_08_07_county_registry.sql`
+- Create: `ops/db/validate-county-list.sh`
+
+Apollo II found county queries failing in two ways
+(`docs/perf/2026-08-apollo2-containment.md`):
+
+- **~1% marginal silent loss** even when the county resolves correctly.
+- **Total silent misresolution** when the name form is wrong. `East Baton Rouge
+  Parish, LA` — the geographically correct name — returns 273 rows across 8 ZIPs
+  with **zero overlap** with its own ZIP 70791. `East Baton Rouge County, LA` —
+  geographically wrong, since Louisiana has parishes — returns the true 3,329
+  across 26. No error, no empty result: **8% of the county, silently.**
+
+**1 in 5 sampled counties misresolved.** Generating the list as
+`county || ' County, ' || state` would silently under-crawl every Louisiana
+parish, Alaskan borough and Virginian independent city, and the symptom would be
+indistinguishable from those areas simply having less inventory.
+
+- [ ] **Step 1: Build a county registry table** — `(fips_code, county, state,
+      query_form, validated_at, resolves boolean, sample_zip)`.
+
+- [ ] **Step 2: For each county, containment-verify once.** Query the county,
+      query its densest known ZIP, and confirm the ZIP's listings appear in the
+      county result. Record `resolves = true/false` and the `query_form` that
+      worked.
+
+- [ ] **Step 3: Try name variants for failures** — `"X County, ST"`,
+      `"X Parish, ST"`, `"X Borough, ST"`, `"X, ST"` — and record which resolves.
+      Expect `County` to win even where it is geographically wrong.
+
+- [ ] **Step 4: Counties that resolve under no variant fall back to ZIP-shaped
+      crawling.** Record them; do not silently skip them.
+
+- [ ] **Step 5: Re-validate on a slow schedule**, since resolution is the API's
+      behaviour and can change. Commit — `feat(crawl): validated county registry`
+
+---
+
 ## Task 2: Incremental county sweeps
 
 **Files:**
