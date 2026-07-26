@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
+import { withSpan } from '@/lib/tracing';
 
 /**
  * Pro-terminal screen alerts (Task AL1) — the "Alert me" toggle.
@@ -50,6 +51,10 @@ function readUserId(request: NextRequest, fallback?: string): string | null {
 }
 
 export async function GET(request: NextRequest) {
+  return withSpan('two.screen-alerts', () => handleGet(request));
+}
+
+async function handleGet(request: NextRequest) {
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     const gate = devGateBlocked(request);
@@ -77,6 +82,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  return withSpan('two.screen-alerts.post', () => handlePost(request));
+}
+
+async function handlePost(request: NextRequest) {
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     const gate = devGateBlocked(request);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { ALL_COLUMN_IDS } from '@/lib/columns';
+import { withSpan } from '@/lib/tracing';
 
 /**
  * Pro-terminal saved layouts (W4) — CRUD scoped to the session user.
@@ -60,6 +61,10 @@ function validateLayout(input: unknown): string | null {
 }
 
 export async function GET() {
+  return withSpan('two.layouts', () => handleGet());
+}
+
+async function handleGet() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'login required' }, { status: 401 });
   try {
