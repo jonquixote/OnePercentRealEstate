@@ -403,6 +403,37 @@ def scrape_listings(req: ScrapeRequest):
                 # (backfill_census_tract.sql) instead of at-scrape ST_Contains,
                 # which was measured as too slow per spec §B3 fallback plan.
                 else:
+                    # RESURRECTION, before the upsert.
+                    #
+                    # A listing that was archived as cold can come back on the
+                    # market. If it is only in listings_archive, the upsert's
+                    # ON CONFLICT (address, listing_type, sale_type) sees no
+                    # conflict and INSERTs a second row — and when that row is
+                    # later archived, the archive holds duplicates for a key the
+                    # live table treats as unique. That is the same constraint
+                    # docs/perf/2026-07-hot-cold-decision.md refused to weaken
+                    # for partitioning, defeated through the back door.
+                    #
+                    # DELETE ... RETURNING then INSERT is atomic inside this
+                    # transaction, so the row is never in both tables and never
+                    # in neither. The id is preserved: a changed id would break
+                    # every saved property, alert, and shared URL.
+                    # Matched on (address, listing_type) rather than the full
+                    # conflict key: sale_type is decided by classify_sale_type()
+                    # inside the upsert's SQL and is not known here. Restoring
+                    # every archived row for this address is the safe direction —
+                    # moving a row back to the live table is reversible; leaving
+                    # one behind creates the duplicate this exists to prevent.
+                    cursor.execute("""
+                        WITH resurrected AS (
+                          DELETE FROM listings_archive
+                           WHERE address = %s AND listing_type = %s
+                          RETURNING *
+                        )
+                        INSERT INTO listings SELECT * FROM resurrected
+                        ON CONFLICT (address, listing_type, sale_type) DO NOTHING
+                    """, (address, row_type))
+
                     cursor.execute("""
                         INSERT INTO listings (
                             address, city, state, zip_code, price, bedrooms, bathrooms,
