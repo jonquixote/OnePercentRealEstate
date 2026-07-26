@@ -181,6 +181,43 @@ class ScrapeRequest(BaseModel):
 def health_check():
     return {"status": "ok"}
 
+_RESURRECT_SQL_CACHE: str | None = None
+
+
+def _resurrect_sql(cursor) -> str:
+    """Move any archived rows for this address back into `listings`.
+
+    Columns are enumerated explicitly and GENERATED columns excluded. `SELECT *`
+    looks equivalent and is not: `listings.rent_price_ratio` is GENERATED ALWAYS,
+    while `listings_archive` (created with LIKE ... INCLUDING DEFAULTS, which does
+    NOT copy generated-ness) holds it as a plain column. Inserting it raises
+    "cannot insert a non-DEFAULT value into column rent_price_ratio" — which took
+    the crawl down for 80 minutes on 2026-07-26, failing every insert with a 500.
+
+    Computed once per process from the live schema, so a future column addition
+    is picked up without editing this list by hand.
+    """
+    global _RESURRECT_SQL_CACHE
+    if _RESURRECT_SQL_CACHE is None:
+        cursor.execute("""
+            SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position)
+              FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'listings'
+               AND is_generated = 'NEVER'
+        """)
+        cols = cursor.fetchone()[0]
+        _RESURRECT_SQL_CACHE = f"""
+            WITH resurrected AS (
+              DELETE FROM listings_archive
+               WHERE address = %s AND listing_type = %s
+              RETURNING {cols}
+            )
+            INSERT INTO listings ({cols}) SELECT {cols} FROM resurrected
+            ON CONFLICT (address, listing_type, sale_type) DO NOTHING
+        """
+    return _RESURRECT_SQL_CACHE
+
+
 @app.post("/scrape")
 def scrape_listings(req: ScrapeRequest):
     try:
@@ -424,15 +461,7 @@ def scrape_listings(req: ScrapeRequest):
                     # every archived row for this address is the safe direction —
                     # moving a row back to the live table is reversible; leaving
                     # one behind creates the duplicate this exists to prevent.
-                    cursor.execute("""
-                        WITH resurrected AS (
-                          DELETE FROM listings_archive
-                           WHERE address = %s AND listing_type = %s
-                          RETURNING *
-                        )
-                        INSERT INTO listings SELECT * FROM resurrected
-                        ON CONFLICT (address, listing_type, sale_type) DO NOTHING
-                    """, (address, row_type))
+                    cursor.execute(_resurrect_sql(cursor), (address, row_type))
 
                     cursor.execute("""
                         INSERT INTO listings (
