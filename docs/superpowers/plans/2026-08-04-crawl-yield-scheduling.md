@@ -1,5 +1,28 @@
 # Crawl Yield Scheduling Implementation Plan
 
+> ## ⛔ SUPERSEDED — DO NOT EXECUTE
+>
+> Superseded by `2026-08-07-incremental-crawl.md`. Retained for the reasoning,
+> not the instructions. Two independent measurements invalidated it:
+>
+> **1. Its metric is backwards.** It schedules by listing yield. Deal rate falls
+> monotonically as listing volume rises — **37.5%** in the lowest-volume decile
+> against **7.1%** in the highest, a 5.3× spread. Scheduling by yield would steer
+> the crawler toward the deal-poorest markets, which is the opposite of the
+> product's purpose.
+>
+> **2. Its premise dissolved.** The plan exists because 64% of ZIP scrapes return
+> nothing. Apollo found the cause: production sends `past_days=30`, so a ZIP with
+> no *newly listed* property in 30 days returns nothing even when it holds
+> hundreds of active listings — and we see only **16%** of available inventory as
+> a result. It also found that a county's entire daily change set costs **2 HTTP
+> requests and 3.7 s** via `updated_in_past_hours`, against 27 requests to refetch
+> that county. When a county's changes cost two requests, "which ZIP next"
+> largely stops being a question worth optimising.
+>
+> Evidence: `docs/perf/2026-08-apollo-findings.md`.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop spending two thirds of the crawl budget on ZIPs that return nothing, so inventory freshness improves without adding a single scraper node.

@@ -1,5 +1,24 @@
 # Make "Active" Mean Something Implementation Plan
 
+> ## ⚠️ PARTIALLY EXECUTED — Task 2 assumption invalidated
+>
+> **Shipped:** Task 1 (audit), Task 3 (the freshness disclosure — property pages
+> now state how recently a listing was confirmed), Task 4 (the
+> `oper-inventory-freshness` probe, live and alerting at a 75% floor).
+>
+> **Task 2 must not be executed as written.** It treats throughput as
+> capacity-bound and reaches for the idle scraper nodes. Apollo showed the
+> binding constraint is a *parameter*, not a node count: production sends
+> `past_days=30` and therefore sees **16%** of available inventory
+> (567 rows vs 89 for the same ZIP). Adding nodes multiplies work that is
+> two-thirds empty for that reason.
+>
+> Do `2026-08-07-incremental-crawl.md` Task 1 first, then re-measure. The
+> freshness numbers this plan is judged by will move on their own.
+>
+> Evidence: `docs/perf/2026-08-apollo-findings.md`.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop presenting 101,864 listings as "active" when nothing has confirmed they exist in over a week — either by crawling fast enough to verify them, or by saying plainly how fresh each one is.
