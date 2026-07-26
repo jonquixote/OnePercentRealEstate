@@ -103,7 +103,23 @@ Record: how many 200, how many non-200, and whether any require a `Referer`.
 
 ---
 
-## Task 2: Ask for the size we actually display
+## Task 2: CANCELLED — see `docs/perf/2026-07-image-weight-audit.md`
+
+Task 1 falsified this plan's premise, exactly as its Step 1 was written to do.
+The `w=` parameter is decorative (byte-identical output at every width), and
+more importantly the product **already serves correctly-sized images**: `<Media>`
+wraps `next/image`, `next.config.ts` allowlists `*.rdcpix.com`, and Next resizes
+server-side — measured at 14,982 b for the 384 px variant against 119,136 b for
+the stored original. The browser never receives the full-size image.
+
+`sizedPhoto()` would have rewritten URLs that never reach a browser. Cancelled,
+not deferred. Task 3's page-weight budget goes with it.
+
+The durability half (Task 4) is unaffected and still worth doing.
+
+<details><summary>Original Task 2 text, kept for the record</summary>
+
+### Ask for the size we actually display
 
 **Files:**
 - Create: `apps/one/src/lib/image-size.ts`
@@ -207,7 +223,13 @@ Expected: `200`, and materially fewer bytes than the unsized fetch in Task 1 Ste
 
 ---
 
-## Task 3: A page-weight budget, so this cannot regress
+</details>
+
+## Task 3: CANCELLED with Task 2 — no weight problem to budget
+
+<details><summary>Original Task 3 text</summary>
+
+### A page-weight budget
 
 **Files:**
 - Modify: `docs/perf/perf-budgets.md`
@@ -227,6 +249,8 @@ Expected: `200`, and materially fewer bytes than the unsized fetch in Task 1 Ste
 - [ ] **Step 5: Commit** — `feat(images): page-weight budget with an alert`
 
 ---
+
+</details>
 
 ## Task 4: Decide the durability question with evidence
 

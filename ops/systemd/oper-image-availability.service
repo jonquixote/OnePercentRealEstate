@@ -1,0 +1,12 @@
+[Unit]
+Description=OnePercent — alert when the listing-photo CDN stops serving
+After=oper-postgres.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/opt/onepercent/ops/monitoring/image-availability.sh
+MemoryHigh=64M
+MemoryMax=96M

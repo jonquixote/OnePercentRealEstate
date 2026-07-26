@@ -1,0 +1,11 @@
+[Unit]
+Description=Sample listing-photo CDN availability hourly
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=oper-image-availability.service
+
+[Install]
+WantedBy=timers.target
