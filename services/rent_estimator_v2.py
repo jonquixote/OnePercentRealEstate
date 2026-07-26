@@ -260,6 +260,21 @@ def get_scraped_comps(
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         # Query nearby rentals
+        # BOUNDING BOX FIRST, in SQL. Without it this query selected every
+        # matching rental NATIONWIDE and threw away all but those within
+        # radius_miles in Python below — 5,000 calls x 513 ms = 2,565 s, the
+        # single largest consumer of database time on the box (33-37% of a
+        # window, tripping db-load-budget).
+        #
+        # The box is a strict SUPERSET of the circle, and the haversine filter
+        # below still decides membership exactly, so results are unchanged. It
+        # matches idx_rental_geo (latitude, longitude) WHERE both are NOT NULL.
+        lat_delta = radius_miles / 69.0
+        # A degree of longitude shrinks with latitude; clamp so the divisor
+        # cannot approach zero near the poles and blow the box up to the world.
+        cos_lat = max(0.05, math.cos(math.radians(lat)))
+        lon_delta = radius_miles / (69.0 * cos_lat)
+
         cur.execute("""
             SELECT 
                 address, price, bedrooms, bathrooms, sqft,
@@ -268,11 +283,15 @@ def get_scraped_comps(
             WHERE 
                 latitude IS NOT NULL 
                 AND longitude IS NOT NULL
+                AND latitude BETWEEN %s AND %s
+                AND longitude BETWEEN %s AND %s
                 AND price > 0
                 AND price < 10000
                 AND bedrooms BETWEEN %s AND %s
                 AND created_at > NOW() - INTERVAL '%s days'
-        """, (max(0, bedrooms - 1), bedrooms + 1, lookback_days))
+        """, (lat - lat_delta, lat + lat_delta,
+              lon - lon_delta, lon + lon_delta,
+              max(0, bedrooms - 1), bedrooms + 1, lookback_days))
         
         candidates = cur.fetchall()
         
