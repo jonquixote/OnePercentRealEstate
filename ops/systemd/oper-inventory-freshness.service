@@ -1,0 +1,12 @@
+[Unit]
+Description=OnePercent — alert when active inventory stops being confirmed
+After=oper-postgres.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/onepercent
+EnvironmentFile=/etc/oper.env
+ExecStart=/opt/onepercent/ops/monitoring/inventory-freshness.sh
+MemoryHigh=64M
+MemoryMax=96M
