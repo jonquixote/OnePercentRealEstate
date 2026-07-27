@@ -1,0 +1,11 @@
+[Unit]
+Description=Check per-stream production every 6 hours
+
+[Timer]
+OnBootSec=35min
+OnUnitActiveSec=6h
+Persistent=true
+Unit=oper-stream-coverage.service
+
+[Install]
+WantedBy=timers.target

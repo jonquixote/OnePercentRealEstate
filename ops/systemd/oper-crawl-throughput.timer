@@ -1,0 +1,11 @@
+[Unit]
+Description=Check crawl confirmation throughput hourly
+
+[Timer]
+OnBootSec=28min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=oper-crawl-throughput.service
+
+[Install]
+WantedBy=timers.target

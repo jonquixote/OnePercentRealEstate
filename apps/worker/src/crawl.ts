@@ -253,23 +253,45 @@ async function processClaimedJob(job: CrawlJob, scraperUrl: string, parentLog: W
     const totalCount = (saleResult?.count ?? 0) + (rentResult?.count ?? 0) + (foreclosureResult?.count ?? 0) + (soldResult?.count ?? 0) + (pendingResult?.count ?? 0);
     const totalInserted = (saleResult?.inserted ?? 0) + (rentResult?.inserted ?? 0) + (foreclosureResult?.inserted ?? 0) + (soldResult?.inserted ?? 0) + (pendingResult?.inserted ?? 0);
     const totalSkipped = (saleResult?.skipped ?? 0) + (rentResult?.skipped ?? 0) + (foreclosureResult?.skipped ?? 0) + (soldResult?.skipped ?? 0) + (pendingResult?.skipped ?? 0);
+    const totalUpdated = (saleResult?.updated ?? 0) + (rentResult?.updated ?? 0) + (foreclosureResult?.updated ?? 0) + (soldResult?.updated ?? 0) + (pendingResult?.updated ?? 0);
+    // Confirmations, the unit the freshness SLO is denominated in. `skipped`
+    // is excluded on purpose: those rows were already fresh today and the
+    // upsert deliberately did not advance last_seen_at for them.
+    const totalConfirmed = totalInserted + totalUpdated;
+    const durationMs = Date.now() - start;
 
     await pool.query(
       `UPDATE crawl_jobs
           SET status = 'completed',
               finished_at = NOW(),
               listings_found = $2,
-              error_message = $3
+              error_message = $3,
+              rows_returned = $4,
+              rows_confirmed = $5,
+              duration_ms = $6,
+              shape = $7,
+              past_days = $8
         WHERE id = $1`,
       // Keep partial-failure context on otherwise-successful jobs so a creeping
       // block (some passes failing) is visible; NULL when everything succeeded.
-      [job.id, totalInserted, passErrors.length ? passErrors.join(' | ').slice(0, 1000) : null],
+      [
+        job.id,
+        totalInserted,
+        passErrors.length ? passErrors.join(' | ').slice(0, 1000) : null,
+        totalCount,
+        totalConfirmed,
+        durationMs,
+        job.region_type,
+        pastDaysForRecord(),
+      ],
     );
     log.info(
       {
-        duration_ms: Date.now() - start,
+        duration_ms: durationMs,
         count: totalCount,
         inserted: totalInserted,
+        updated: totalUpdated,
+        confirmed: totalConfirmed,
         skipped: totalSkipped,
         partial_failures: passErrors.length,
       },
@@ -309,9 +331,24 @@ async function processClaimedJob(job: CrawlJob, scraperUrl: string, parentLog: W
 // scraper's `location` param accepts the same strings n8n was sending.
 // ---------------------------------------------------------------------------
 
+/** What past_days the crawl is running with, recorded alongside throughput so a
+ *  number can be attributed to its parameters later. Read from the environment
+ *  rather than WorkerEnv because the scraper service owns this setting; unset
+ *  means the historical default of 30, empty means no filter. */
+function pastDaysForRecord(): number | null {
+  const raw = (process.env.SCRAPE_PAST_DAYS ?? '30').trim();
+  if (raw === '') return null;
+  const v = Number(raw);
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
 interface ScrapeResult {
   count: number;
   inserted: number;
+  /** Rows whose last_seen_at the upsert advanced. With `inserted`, this is the
+   *  confirmation count the freshness SLO is denominated in — and it was being
+   *  discarded, so throughput could only be reconstructed by hand. */
+  updated: number;
   skipped: number;
 }
 
@@ -348,6 +385,7 @@ async function scrape(
     return {
       count: Number(json.count) || 0,
       inserted: Number(json.inserted) || 0,
+      updated: Number(json.updated) || 0,
       skipped: Number(json.skipped) || 0,
     };
   } catch (err) {
