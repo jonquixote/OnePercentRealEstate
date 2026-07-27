@@ -2,8 +2,12 @@
 Description=Check rent band coverage and integrity every 30 minutes
 
 [Timer]
+# Hourly, not every 30 min. Coverage moves on the CRAWL's cadence (hours), so a
+# 30-minute probe re-measured a number that had not moved, at 2-4s of database
+# time each run. Detection latency of an hour is proportionate to a metric that
+# changes over hours.
 OnBootSec=18min
-OnUnitActiveSec=30min
+OnUnitActiveSec=1h
 Persistent=true
 Unit=oper-rent-coverage.service
 
