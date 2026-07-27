@@ -2,13 +2,23 @@
 Description=Refresh homepage stats every 30 minutes
 
 [Timer]
+# Hourly, not every 30 min. The hero aggregate costs ~20s per strategy x 4
+# strategies = ~160s/hour at 30-minute cadence, and it is the largest single
+# consumer of database time on a box whose only other significant work is the
+# crawl. Measured drift of the headline number between readings: 585,575 ->
+# 585,313, about 0.04%. Refreshing a figure that moves 0.04% twice an hour is
+# not earning that cost.
+#
+# Served through cachedSWR, so a longer interval makes NO user wait — it only
+# makes the cached value up to an hour old instead of 30 minutes. For a
+# "585,313 listings" headline that is invisible.
 OnBootSec=2min
 # 30 min, NOT 5: the aggregate costs ~30s per strategy x 4 strategies. At a
 # 5-minute cadence that is a 40% duty cycle on the database — MORE total work
 # than the on-demand path it replaced (18.5s per cold miss behind a 120s TTL).
 # The point was to take the cost OUT of user requests, not to multiply it.
 # Users are unaffected by the slower cadence: cachedSWR always serves instantly.
-OnUnitActiveSec=30min
+OnUnitActiveSec=1h
 Persistent=true
 Unit=oper-stats-refresh.service
 

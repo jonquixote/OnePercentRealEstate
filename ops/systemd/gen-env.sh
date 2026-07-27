@@ -113,7 +113,13 @@ CRAWL_BLOCK_COOLOFF_MS=${CRAWL_BLOCK_COOLOFF_MS:-1800000}
 RENT_BACKFILL_BATCH=${RENT_BACKFILL_BATCH:-200}
 RENT_WORKER_CONCURRENCY=${RENT_WORKER_CONCURRENCY:-6}
 RENT_DRAIN_INTERVAL_MS=${RENT_DRAIN_INTERVAL_MS:-30000}
-CLUSTER_REFRESH_INTERVAL_MS=${CLUSTER_REFRESH_INTERVAL_MS:-600000}
+# The two MV refreshes (mv_cluster_tiles ~43s, mv_market_grid ~35s) cost
+# ~156s/hour at 30-minute cadence — measured 2026-07-27, second only to the
+# stats refresh on a box whose other work is the crawl. They back the map's
+# CLUSTER overview (aggregate pin density); listings do not move fast enough for
+# 30 vs 60 minutes to be visible, and the crawl's own confirmation window is
+# measured in days. Overridden from .env in production.
+CLUSTER_REFRESH_INTERVAL_MS=${CLUSTER_REFRESH_INTERVAL_MS:-3600000}
 MEDIA_HEALTH_CONCURRENCY=${MEDIA_HEALTH_CONCURRENCY:-8}
 MEDIA_HEALTH_INTERVAL_MS=${MEDIA_HEALTH_INTERVAL_MS:-300000}
 WATCHLIST_TICK_MS=${WATCHLIST_TICK_MS:-900000}
