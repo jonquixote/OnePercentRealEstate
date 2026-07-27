@@ -150,6 +150,8 @@ search (opt-in to see it).
 | `oper-photo-coverage` | 30 min | Share of image-bearing active listings that expose a photo |
 | `oper-rent-coverage` | 30 min | Banded share of estimated active listings **+ band integrity** |
 | `oper-image-availability` | hourly | Samples the listing-photo CDN — every photo comes from rdcpix |
+| `oper-crawl-throughput` | hourly | **Confirmations/hour vs what the SLO arithmetically needs** (6h average) |
+| `oper-stream-coverage` | 6 h | Daily production of all three crawl streams; alerts on collapse |
 
 Alerts go to **Telegram** via `ops/monitoring/notify-telegram.sh` (30-min dedup,
 auto-RESOLVED). Credentials already live in `/etc/oper.env`.
@@ -251,6 +253,26 @@ prefixed `two.` so a shared snapshot cannot confuse them.
 > 718 ms to a 165-row Index Scan at **3.4 ms**. The index it needed already
 > existed and nothing used it. **When a query filters in application code, check
 > whether the database could have done it.**
+
+> **A listing is CONFIRMED when a scrape advances `last_seen_at`** — on insert,
+> or on update when the row changed or has not refreshed for a day (the upsert
+> bounds that to once/day to cap write amplification, so `skipped` means "already
+> fresh today"). **Confirmations = inserted + updated.** `crawl_jobs.listings_found`
+> stores only `inserted`, the small minority; `rows_confirmed` is the real
+> number. The freshness SLO is denominated in confirmations, so any throughput
+> claim must be too.
+
+> **Compare like with like.** Apollo I concluded county sweeps were ~100× faster
+> than ZIP recheck by putting a *raw scrape rate* (4,462 rows/min) beside an
+> *end-to-end production job rate* (~45/min, which includes five passes, jitter,
+> cool-offs and DB writes). Measured on one axis, every shape lands at
+> 4,000–4,800 rows/min and the shapes are within ~5%. The crawl's bottleneck is
+> passes-per-ZIP, pacing and serial execution — not query shape.
+
+> **Concurrency is safe to at least 8 and plateaus at 5** (28.6 → 64.4 req/min,
+> 2.25×; level 8 buys nothing). Never blocked. The limit is **per-IP**: prod
+> recorded 0 blocked jobs while a second IP pushed 64 req/min, so multi-node
+> plans remain viable. Production still runs `WORKER_CONCURRENCY=1`.
 
 > **NEVER `scp` a file onto `/opt/onepercent`.** It creates a local
 > modification that makes every later `git pull --ff-only` abort, and the deploy

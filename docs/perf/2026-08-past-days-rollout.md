@@ -73,3 +73,26 @@ observed yet.
 **Recommendation:** let 90 soak for a full cycle, then re-read this table before
 setting `SCRAPE_PAST_DAYS=` (empty). The revert is one env value and a scraper
 restart.
+
+
+---
+
+## Step 4 answered by Apollo III (2026-07-27)
+
+The open question was whether unlimited costs more per confirmed listing.
+Measured — **it costs less**:
+
+| `past_days` | rows | est. req | rows per request |
+|---|---|---|---|
+| 30 | 96 | 1 | 96 |
+| 90 (current) | 271 | 2 | 136 |
+| unlimited | 586 | 3 | **195** |
+
+Rows per request *improves* with a wider window: a denser result set fills the
+library's 200-row pages that a narrow window wastes. **Unlimited is ~2× more
+request-efficient than 30 days and returns ~6× the inventory.**
+
+So the crawl-capacity objection is withdrawn. The remaining risk is entirely
+**downstream ingest volume** — the rent-estimator queue and disk — which is what
+Step 4's staging was always really about. Full findings:
+`docs/perf/2026-08-apollo3-findings.md`.
