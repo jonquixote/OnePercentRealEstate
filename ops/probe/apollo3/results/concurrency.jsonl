@@ -1,0 +1,5 @@
+{"level": 1, "sent": 20, "ok": 20, "wall_s": 41.9, "req_per_min": 28.6, "blocked": false, "errors": []}
+{"level": 2, "sent": 20, "ok": 20, "wall_s": 26.7, "req_per_min": 44.9, "blocked": false, "errors": []}
+{"level": 3, "sent": 20, "ok": 20, "wall_s": 21.1, "req_per_min": 56.8, "blocked": false, "errors": []}
+{"level": 5, "sent": 20, "ok": 20, "wall_s": 18.6, "req_per_min": 64.4, "blocked": false, "errors": []}
+{"level": 8, "sent": 20, "ok": 20, "wall_s": 19.0, "req_per_min": 63.2, "blocked": false, "errors": []}

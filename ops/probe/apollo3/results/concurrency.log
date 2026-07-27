@@ -1,0 +1,19 @@
+
+=== concurrency 1 (20 scrapes)
+  ok=20/20 wall=41.9s rate=28.6/min blocked=False
+
+=== concurrency 2 (20 scrapes)
+  ok=20/20 wall=26.7s rate=44.9/min blocked=False
+
+=== concurrency 3 (20 scrapes)
+  ok=20/20 wall=21.1s rate=56.8/min blocked=False
+
+=== concurrency 5 (20 scrapes)
+  ok=20/20 wall=18.6s rate=64.4/min blocked=False
+
+=== concurrency 8 (20 scrapes)
+/private/tmp/apollo/lib/python3.14/site-packages/homeharvest/__init__.py:215: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  return pd.concat(properties_dfs, ignore_index=True, axis=0)[ordered_properties].replace(
+  ok=20/20 wall=19.0s rate=63.2/min blocked=False
+
+=== RESULT: NEVER BLOCKED up to concurrency 8

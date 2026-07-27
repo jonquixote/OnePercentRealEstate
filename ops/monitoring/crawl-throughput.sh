@@ -29,7 +29,12 @@ DB="${DATABASE_URL_DIRECT:-${DATABASE_URL:-}}"
 # and the achievement can never be computed against different targets.
 STALE_AFTER_DAYS="${STALE_AFTER_DAYS:-10}"
 WINDOW_DAYS="${FRESHNESS_WINDOW_DAYS:-$STALE_AFTER_DAYS}"
-# Alert only on a sustained shortfall against the window we actually promise.
+# Alert only on a SUSTAINED shortfall. Hourly confirmation counts are noisy —
+# measured 1,196 and 1,979 within the same session — so a one-hour sample against
+# a 70% floor would flap and train everyone to ignore it. Average over 6 hours,
+# which is long enough to smooth per-ZIP size variance and short enough to catch
+# a crawl that has genuinely stalled.
+AVG_HOURS="${THROUGHPUT_AVG_HOURS:-6}"
 MIN_PCT_OF_REQUIRED="${THROUGHPUT_MIN_PCT:-70}"
 
 read -r confirmed_1h active required pct <<<"$(psql "$DB" -tA -F' ' -c "
@@ -37,8 +42,8 @@ read -r confirmed_1h active required pct <<<"$(psql "$DB" -tA -F' ' -c "
     SELECT count(*)::numeric AS active
       FROM listings WHERE listing_status='active' AND listing_type='for_sale'
   ), c AS (
-    SELECT count(*)::numeric AS confirmed
-      FROM listings WHERE last_seen_at > now() - interval '1 hour'
+    SELECT count(*)::numeric / ${AVG_HOURS} AS confirmed
+      FROM listings WHERE last_seen_at > now() - interval '${AVG_HOURS} hours'
   )
   SELECT c.confirmed::bigint,
          a.active::bigint,
@@ -50,11 +55,11 @@ read -r confirmed_1h active required pct <<<"$(psql "$DB" -tA -F' ' -c "
 
 if awk "BEGIN{exit !($pct < $MIN_PCT_OF_REQUIRED)}"; then
   "$NOTIFY" --key "crawl-throughput" \
-    "🔴 ${BOX}: crawl-throughput — ${confirmed_1h} confirmations in the last hour, ${pct}% of the ${required}/hr needed to sweep ${active} active listings within ${WINDOW_DAYS}d (floor ${MIN_PCT_OF_REQUIRED}%)
+    "🔴 ${BOX}: crawl-throughput — ${confirmed_1h} confirmations/hr averaged over ${AVG_HOURS}h, ${pct}% of the ${required}/hr needed to sweep ${active} active listings within ${WINDOW_DAYS}d (floor ${MIN_PCT_OF_REQUIRED}%)
 Confirmations = inserted + updated. 'Skipped' rows were already fresh today." || true
 else
   if [[ -f "/var/lib/oper-alerts/crawl-throughput" ]]; then
     "$NOTIFY" --resolved --key "crawl-throughput" "✅ ${BOX}: crawl-throughput — RESOLVED (${pct}% of required)" || true
   fi
 fi
-echo "[crawl-throughput] ${confirmed_1h} confirmations/hr = ${pct}% of the ${required}/hr needed for a ${WINDOW_DAYS}d sweep of ${active} active listings"
+echo "[crawl-throughput] ${confirmed_1h} confirmations/hr (${AVG_HOURS}h avg) = ${pct}% of the ${required}/hr needed for a ${WINDOW_DAYS}d sweep of ${active} active listings"
