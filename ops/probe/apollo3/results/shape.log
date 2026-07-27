@@ -1,0 +1,10 @@
+=== Task 2: shape throughput (rows touched per unit capacity)
+  ZIP 44120 (past_days=90, as prod)      rows=  182    2.3s req~  1 rows/min=    4824 rows/req=  182
+  ZIP 44120 (unlimited)                  rows=  252    3.3s req~  2 rows/min=    4571 rows/req=  126
+  county FULL (unlimited)                rows= 5484   68.4s req~ 28 rows/min=    4811 rows/req=  196
+  county updated_in_past_hours=24        rows=  148    2.3s req~  1 rows/min=    3810 rows/req=  148
+
+=== Task 3: past_days cost per confirmed listing
+  ZIP 33020 past_days=30                 rows=   96    1.5s req~  1 rows/min=    3807 rows/req=   96
+  ZIP 33020 past_days=90                 rows=  271    3.3s req~  2 rows/min=    4953 rows/req=  136
+  ZIP 33020 past_days=unlimited          rows=  586    6.0s req~  3 rows/min=    5833 rows/req=  195

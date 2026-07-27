@@ -1,0 +1,58 @@
+[
+  {
+    "label": "ZIP 44120 (past_days=90, as prod)",
+    "rows": 182,
+    "wall_s": 2.3,
+    "req": 1,
+    "rows_per_min": 4824,
+    "rows_per_req": 182
+  },
+  {
+    "label": "ZIP 44120 (unlimited)",
+    "rows": 252,
+    "wall_s": 3.3,
+    "req": 2,
+    "rows_per_min": 4571,
+    "rows_per_req": 126
+  },
+  {
+    "label": "county FULL (unlimited)",
+    "rows": 5484,
+    "wall_s": 68.4,
+    "req": 28,
+    "rows_per_min": 4811,
+    "rows_per_req": 196
+  },
+  {
+    "label": "county updated_in_past_hours=24",
+    "rows": 148,
+    "wall_s": 2.3,
+    "req": 1,
+    "rows_per_min": 3810,
+    "rows_per_req": 148
+  },
+  {
+    "label": "ZIP 33020 past_days=30",
+    "rows": 96,
+    "wall_s": 1.5,
+    "req": 1,
+    "rows_per_min": 3807,
+    "rows_per_req": 96
+  },
+  {
+    "label": "ZIP 33020 past_days=90",
+    "rows": 271,
+    "wall_s": 3.3,
+    "req": 2,
+    "rows_per_min": 4953,
+    "rows_per_req": 136
+  },
+  {
+    "label": "ZIP 33020 past_days=unlimited",
+    "rows": 586,
+    "wall_s": 6.0,
+    "req": 3,
+    "rows_per_min": 5833,
+    "rows_per_req": 195
+  }
+]

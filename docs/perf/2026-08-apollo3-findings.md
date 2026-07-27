@@ -66,15 +66,58 @@ full pipeline, which also involves the upsert, the once-per-day `last_seen_at`
 bound, and five passes per ZIP. The capacity plan must raise concurrency in
 steps and measure confirmations after each, against the meter that now exists.
 
-## Tasks 2 and 3 — not yet run
+## Task 2 — shape barely matters, and this corrects Apollo I
 
-- **Task 2 (confirmations/hour by shape)** — ZIP vs county full vs county
-  incremental, at safe concurrency.
-- **Task 3 (`past_days` cost per confirmed listing)** — whether unlimited helps
-  or hurts the sweep rate; the two effects oppose each other and the rollout
-  decision is still waiting on the arithmetic.
+| shape | rows | wall | est. req | **rows/min** | rows/req |
+|---|---|---|---|---|---|
+| ZIP 44120, `past_days=90` (as prod) | 182 | 2.3 s | 1 | **4,824** | 182 |
+| ZIP 44120, unlimited | 252 | 3.3 s | 2 | **4,571** | 126 |
+| Cuyahoga County, full | 5,484 | 68.4 s | 28 | **4,811** | 196 |
+| Cuyahoga County, `updated_in_past_hours=24` | 148 | 2.3 s | 1 | **3,810** | 148 |
 
-Neither carries block risk at concurrency ≤5, now that the safe level is known.
+**Every shape delivers roughly 4,000–4,800 rows/minute.** The county sweep is
+*not* dramatically faster per unit of time; it simply returns more rows in one
+call.
+
+### Correcting Apollo I
+
+Apollo I concluded a county sweep was ~100× more efficient than ZIP recheck,
+from "county full = 4,462 listings/minute vs ZIP recheck ~45 listings/minute".
+
+**That comparison was invalid.** The 4,462 was a *raw scrape rate*; the 45 came
+from production job durations (7.6 minutes for 345 listings), which include all
+five passes, inter-pass jitter, block cool-offs and database writes. Raw scrape
+throughput against end-to-end production throughput — apples to oranges.
+
+Measured on the same axis, ZIP and county are within ~5% of each other. **The
+crawl's bottleneck is not the query shape.** It is passes per ZIP, pacing, and
+serial execution — and Task 1 showed the last of those is worth 2.25×.
+
+This does not retire county sweeps: they still enumerate ZIPs we have never
+seen, which ZIP-shaped scheduling structurally cannot. But they should be
+adopted for **discovery**, not for a throughput gain that does not exist.
+
+## Task 3 — wider `past_days` is MORE request-efficient, not less
+
+| `past_days` | rows | est. req | **rows per request** |
+|---|---|---|---|
+| 30 | 96 | 1 | **96** |
+| 90 (current prod) | 271 | 2 | **136** |
+| unlimited | 586 | 3 | **195** |
+
+The plan expected two opposing effects — more inventory (good) against more
+requests per ZIP (bad). **The second effect does not materialise.** Rows per
+request *improves* monotonically with a wider window, because a denser result
+set fills the library's 200-row pages more completely; a narrow window wastes
+most of a page.
+
+**Unlimited is roughly 2× more request-efficient than `past_days=30`** while also
+returning ~6× the inventory.
+
+This answers the rollout question left open in
+`docs/perf/2026-08-past-days-rollout.md`: **going unlimited costs less per
+confirmed listing, not more.** The remaining risk is downstream ingest volume —
+the rent queue and disk — not crawl capacity.
 
 ## Method note
 
