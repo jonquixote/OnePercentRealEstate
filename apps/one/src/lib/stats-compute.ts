@@ -36,6 +36,17 @@ export interface StatsPayload {
 
 export const STRATEGY_WHITELIST = new Set(['buy_hold', 'brrrr', 'flip', 'str']);
 
+/** Ordered form of the whitelist. Used to generate the multi-strategy SQL below,
+ *  so the two can never disagree about which strategies exist. */
+export const STRATEGIES = [...STRATEGY_WHITELIST] as const;
+
+// Every value is interpolated into SQL, so refuse anything that is not a plain
+// identifier. The list is hardcoded above, but this stops a future edit from
+// quietly introducing an injection point.
+for (const st of STRATEGIES) {
+  if (!/^[a-z_][a-z0-9_]*$/.test(st)) throw new Error(`unsafe strategy name: ${st}`);
+}
+
 // Fixed display window for the ratio distribution: 0.2%..1.7% in 15 bins of 0.1%.
 const HIST_LO = 0.2;
 const HIST_HI = 1.7;
@@ -52,6 +63,17 @@ const HIST_STEP = (HIST_HI - HIST_LO) / HIST_BINS;
  * resolve_rule is called ~13× (once per distinct property type) and joined,
  * NOT once per row.
  */
+// ONE scan for ALL strategies.
+//
+// The strategy parameter was only ever used in the resolve_rule() lookup — the
+// 585k-row scan, the ratio maths and the histogram are identical across all
+// four. So the refresh scanned the same rows four times to vary a handful of
+// per-property-type ratios, costing ~73s per cycle and tripping db-load-budget
+// at 46.9% of a window even after the per-row is_rentable fix and the move to
+// hourly.
+//
+// Now the rules CTE resolves a target_ratio column per strategy (4 x ~6 types =
+// a couple of dozen lookups) and the scan happens once.
 const STATS_SQL = `
   WITH rules AS (
     -- Resolve BOTH per-type functions once per distinct property_type, not per
@@ -60,7 +82,7 @@ const STATS_SQL = `
     -- are only a handful of distinct property types, so the join is free by
     -- comparison. Same trick already used for resolve_rule.
     SELECT pt,
-           (SELECT target_ratio FROM resolve_rule(pt, 'standard', $1)) AS tr,
+${STRATEGIES.map((st) => `           (SELECT target_ratio FROM resolve_rule(pt, 'standard', '${st}')) AS tr_${st},`).join('\n')}
            public.is_rentable(pt) AS rentable
     FROM (
       SELECT DISTINCT property_type AS pt
@@ -74,7 +96,7 @@ const STATS_SQL = `
       l.state,
       l.property_type,
       l.rent_calc_status,
-      r.tr AS target_ratio,
+${STRATEGIES.map((st) => `      r.tr_${st} AS target_${st},`).join('\n')}
       -- COALESCE guards the NULL property_type case: r.pt = l.property_type
       -- never matches NULL, and is_rentable(NULL) returned FALSE, so the join
       -- must reproduce that rather than yielding NULL.
@@ -92,7 +114,7 @@ const STATS_SQL = `
   )
   SELECT
     count(*)::int AS total,
-    count(*) FILTER (WHERE ratio >= COALESCE(target_ratio, 0.01))::int AS one_pct,
+${STRATEGIES.map((st) => `    count(*) FILTER (WHERE ratio >= COALESCE(target_${st}, 0.01))::int AS one_pct_${st},`).join('\n')}
     (
       percentile_cont(0.5) WITHIN GROUP (ORDER BY ratio)
       FILTER (WHERE ratio IS NOT NULL)
@@ -101,7 +123,7 @@ const STATS_SQL = `
     count(DISTINCT state) FILTER (WHERE state IS NOT NULL)::int AS markets,
     count(*) FILTER (WHERE rent_calc_status = 'done' AND rentable)::int AS rentable,
     count(*) FILTER (WHERE rent_calc_status = 'pending')::int AS rent_calc_pending,
-    (COALESCE((SELECT target_ratio FROM resolve_rule('DEFAULT', 'standard', $1)), 0.01) * 100)::numeric(6,2) AS threshold_pct,
+${STRATEGIES.map((st) => `    (COALESCE((SELECT target_ratio FROM resolve_rule('DEFAULT', 'standard', '${st}')), 0.01) * 100)::numeric(6,2) AS threshold_${st},`).join('\n')}
     (
       SELECT coalesce(jsonb_agg(jsonb_build_object('bucket', bucket, 'count', c) ORDER BY bucket), '[]'::jsonb)
       FROM (
@@ -139,13 +161,13 @@ function shapeRow(row: Record<string, unknown>, strategy: string): StatsPayload 
 
   return {
     total: Number(row.total) || 0,
-    onePercentPasses: Number(row.one_pct) || 0,
+    onePercentPasses: Number(row[`one_pct_${strategy}`]) || 0,
     medianRatioPct: row.median_ratio_pct != null ? Number(row.median_ratio_pct) : null,
     markets: Number(row.markets) || 0,
     rentable: Number(row.rentable) || 0,
     rentCalcPending: Number(row.rent_calc_pending) || 0,
     histogram,
-    thresholdPct: row.threshold_pct != null ? Number(row.threshold_pct) : 1.0,
+    thresholdPct: row[`threshold_${strategy}`] != null ? Number(row[`threshold_${strategy}`]) : 1.0,
     strategy,
     lastUpdated: new Date().toISOString(),
     medianRent: row.median_rent != null ? Number(row.median_rent) : null,
@@ -156,10 +178,28 @@ function shapeRow(row: Record<string, unknown>, strategy: string): StatsPayload 
  * Run the expensive aggregate. ~18s on 1.3M rows — callers must keep this OUT
  * of the request path (use `readStatsSummary`, which reads the stored result).
  */
+/**
+ * All strategies from ONE scan.
+ *
+ * The scan is the expensive part (~585k rows) and it is identical for every
+ * strategy, so running it per strategy cost 4x for nothing. Callers that want a
+ * single strategy still can — they just share the same underlying row.
+ */
+export async function computeAllStats(): Promise<Map<string, StatsPayload & { medianRent: number | null }>> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(STATS_SQL);
+    const row = result.rows[0] ?? {};
+    return new Map(STRATEGIES.map((st) => [st, shapeRow(row, st)]));
+  } finally {
+    client.release();
+  }
+}
+
 export async function computeStats(strategy: string): Promise<StatsPayload & { medianRent: number | null }> {
   const client = await pool.connect();
   try {
-    const result = await client.query(STATS_SQL, [strategy]);
+    const result = await client.query(STATS_SQL);
     return shapeRow(result.rows[0] ?? {}, strategy);
   } finally {
     client.release();
@@ -167,6 +207,24 @@ export async function computeStats(strategy: string): Promise<StatsPayload & { m
 }
 
 /** Compute and persist. Returns what it stored. Safe to run concurrently (upsert). */
+/** Persist an already-computed payload. Split out so the single-pass path can
+ *  store all four strategies without recomputing the scan per strategy. */
+export async function storeStats(payload: StatsPayload & { medianRent: number | null }) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO stats_summary (strategy, payload, computed_at)
+       VALUES ($1, $2::jsonb, now())
+       ON CONFLICT (strategy) DO UPDATE
+         SET payload = EXCLUDED.payload, computed_at = EXCLUDED.computed_at`,
+      [payload.strategy, JSON.stringify(payload)],
+    );
+  } finally {
+    client.release();
+  }
+  return payload;
+}
+
 export async function computeAndStoreStats(strategy: string) {
   const payload = await computeStats(strategy);
   const client = await pool.connect();
