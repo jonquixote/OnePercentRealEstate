@@ -86,7 +86,11 @@ PYTHONPATH=${PROJECT_ROOT}/services:${PROJECT_ROOT}/services/scraper_service
 # --- Worker tuning ---
 # Serialized (1) to mimic the old n8n workflow's one-ZIP-at-a-time cadence,
 # which avoided Realtor.com IP blocks for months.
-WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-1}
+# Raised from 1 to 2 on 2026-07-27 after Apollo III measured the source's
+# concurrency tolerance. NOTE: this alone is a no-op — the pacing gate below is
+# per-ENDPOINT, and with a single endpoint it is global, so N runners all queue
+# behind one interval. Both must move together.
+WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-2}
 # Per-scrape-pass HTTP timeout. Kept modest so a hung/OOM'd scraper request
 # ties up a runner for minutes, not the 10-min code default (which throttled
 # throughput at low concurrency and delayed the stuck-job reaper).
@@ -107,6 +111,17 @@ SCRAPE_TIMEOUT_MS=${SCRAPE_TIMEOUT_MS:-240000}
 SCRAPE_PAST_DAYS=${SCRAPE_PAST_DAYS-30}
 # Anti-block pacing: min gap between job starts (~old schedule tick), jitter
 # between a ZIP's passes, and the initial block cool-off (doubles per block).
+# AIMD floor for per-endpoint job spacing — the REAL throughput gate. Measured
+# 2026-07-27 against a live source:
+#   12s (was): 1,075 confirmations/hr, 0 blocks in 24h across 4,534 jobs
+#   10s (now): block-free at settled state, with margin
+#    8s      : ~2x throughput but ~2 blocks/45min — the edge
+#    5s + concurrency 3: sustained blocking, AIMD backed off 5s -> 20s — the wall
+#
+# Apollo III measured 64 req/min safe in a BURST of 20 scrapes. Production is
+# sustained and runs five passes per ZIP, and the sustained ceiling is lower.
+# A safe burst rate is not a safe sustained rate.
+SCRAPER_MIN_INTERVAL_MS=${SCRAPER_MIN_INTERVAL_MS:-10000}
 CRAWL_JOB_MIN_INTERVAL_MS=${CRAWL_JOB_MIN_INTERVAL_MS:-30000}
 CRAWL_PASS_JITTER_MS=${CRAWL_PASS_JITTER_MS:-1500}
 CRAWL_BLOCK_COOLOFF_MS=${CRAWL_BLOCK_COOLOFF_MS:-1800000}
@@ -153,7 +168,7 @@ DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
 # AUTH_SECRET, STRIPE_*, ADMIN_API_KEY, HUD/FRED/TELEGRAM tokens after the
 # systemd cutover (2026-07-10 incident: login + billing ran without
 # secrets). Anything not already rewritten above flows through verbatim.
-$(grep -E '^[A-Z][A-Z0-9_]*=' "$SRC" | grep -vE '^(DATABASE_URL|DATABASE_URL_DIRECT|REDIS_URL|ML_URL|SCRAPER_URL|SCRAPER_URLS|SCRAPE_PAST_DAYS|POSTGRES_PASSWORD|REDIS_PASSWORD|NODE_ENV|ML_PORT|PYTHONPATH|WORKER_CONCURRENCY|SCRAPE_TIMEOUT_MS|CRAWL_JOB_MIN_INTERVAL_MS|CRAWL_PASS_JITTER_MS|CRAWL_BLOCK_COOLOFF_MS|RENT_BACKFILL_BATCH|RENT_WORKER_CONCURRENCY|RENT_DRAIN_INTERVAL_MS|CLUSTER_REFRESH_INTERVAL_MS|MEDIA_HEALTH_CONCURRENCY|MEDIA_HEALTH_INTERVAL_MS|WATCHLIST_TICK_MS|WATCHLIST_FROM_EMAIL|LOG_LEVEL|N8N_|DB_TYPE|DB_POSTGRESDB_|WEBHOOK_URL|GENERIC_TIMEZONE)' || true)
+$(grep -E '^[A-Z][A-Z0-9_]*=' "$SRC" | grep -vE '^(DATABASE_URL|DATABASE_URL_DIRECT|REDIS_URL|ML_URL|SCRAPER_URL|SCRAPER_URLS|SCRAPE_PAST_DAYS|SCRAPER_MIN_INTERVAL_MS|POSTGRES_PASSWORD|REDIS_PASSWORD|NODE_ENV|ML_PORT|PYTHONPATH|WORKER_CONCURRENCY|SCRAPE_TIMEOUT_MS|CRAWL_JOB_MIN_INTERVAL_MS|CRAWL_PASS_JITTER_MS|CRAWL_BLOCK_COOLOFF_MS|RENT_BACKFILL_BATCH|RENT_WORKER_CONCURRENCY|RENT_DRAIN_INTERVAL_MS|CLUSTER_REFRESH_INTERVAL_MS|MEDIA_HEALTH_CONCURRENCY|MEDIA_HEALTH_INTERVAL_MS|WATCHLIST_TICK_MS|WATCHLIST_FROM_EMAIL|LOG_LEVEL|N8N_|DB_TYPE|DB_POSTGRESDB_|WEBHOOK_URL|GENERIC_TIMEZONE)' || true)
 EOF
 
 chmod 600 "$DST"
