@@ -252,6 +252,36 @@ prefixed `two.` so a shared snapshot cannot confuse them.
 > existed and nothing used it. **When a query filters in application code, check
 > whether the database could have done it.**
 
+> **NEVER `scp` a file onto `/opt/onepercent`.** It creates a local
+> modification that makes every later `git pull --ff-only` abort, and the deploy
+> script's pull is quiet — so the box silently freezes at an old commit while
+> deploys appear to succeed. On 2026-07-27 the box sat at `fae5a33` for hours
+> this way; three commits' worth of changes never landed and the smoke gate still
+> passed, because the *running* code was fine — just old. Commit, push, pull.
+> If you must test a file on the box, copy it to `/tmp` and run it from there.
+
+> **A probe must cost less than what it protects.** `rent-coverage.sh` Parallel
+> Seq Scanned the 11 GB table for 9.65 s twice an hour to assert an invariant
+> that had been zero on every run. A partial index whose predicate *is* the
+> violation (so it indexes only already-broken rows — normally none) took it to
+> 0.057 ms. Background maintenance was ~358 s/hour against a database whose only
+> other real work is the crawl; that is why `db-load-budget` fired every window.
+> Now ~180 s/hour. Full accounting: `docs/perf/2026-08-freshness-load-results.md`.
+
+> **Two thresholds that describe the same thing must derive from one value.**
+> The freshness probe used a 7-day window while the reaper (`STALE_AFTER_DAYS`)
+> keeps a listing active for 10, so 145,273 listings were *simultaneously*
+> active and unconfirmed — 98.4% of a permanently-red SLO, by construction.
+> `FRESHNESS_WINDOW_DAYS` now derives from `STALE_AFTER_DAYS`. The tighter 7-day
+> figure is still reported, deliberately **non-alerting**, so the real throughput
+> gap stays visible without pretending to be an outage.
+
+> **An optimisation that worked once does not generalise.** Hoisting
+> `is_rentable` out of the per-row path took the stats aggregate from 25.7 s to
+> 9.5 s. The identical change to `api/featured` made it *twice as slow*
+> (12.3 s → 25.3 s): the stats CTE rode a scan that was already happening, while
+> in `featured` the `DISTINCT` subquery adds one. Measure each site.
+
 > **Liveness ≠ productivity.** The crawl once produced zero listings for ~10
 > hours while every monitor stayed green, because `oper-worker` was "active" the
 > whole time — failing 100% of its scrapes. That is why the crawl-health probes
