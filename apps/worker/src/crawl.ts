@@ -240,7 +240,12 @@ async function processClaimedJob(job: CrawlJob, scraperUrl: string, parentLog: W
       if (passErrors.some((e) => isBlockError(e))) {
         await pool.query(
           `UPDATE crawl_jobs
-              SET status = 'pending', started_at = NULL, error_message = $2
+              SET status = 'pending', started_at = NULL, error_message = $2,
+                  -- Structured, so block RATE is queryable instead of grepped.
+                  -- Counting blocks by grepping logs for 403/429 produced a
+                  -- false reading of 725 blocks that were ZIP codes containing
+                  -- those digits.
+                  blocked = true
             WHERE id = $1`,
           [job.id, `retry (upstream block): ${combined}`.slice(0, 1000)],
         );
@@ -270,7 +275,8 @@ async function processClaimedJob(job: CrawlJob, scraperUrl: string, parentLog: W
               rows_confirmed = $5,
               duration_ms = $6,
               shape = $7,
-              past_days = $8
+              past_days = $8,
+              blocked = $9
         WHERE id = $1`,
       // Keep partial-failure context on otherwise-successful jobs so a creeping
       // block (some passes failing) is visible; NULL when everything succeeded.
@@ -283,6 +289,7 @@ async function processClaimedJob(job: CrawlJob, scraperUrl: string, parentLog: W
         durationMs,
         job.region_type,
         pastDaysForRecord(),
+        passErrors.some((e) => isBlockError(e)),
       ],
     );
     log.info(
