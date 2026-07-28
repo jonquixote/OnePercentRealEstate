@@ -254,6 +254,29 @@ prefixed `two.` so a shared snapshot cannot confuse them.
 > existed and nothing used it. **When a query filters in application code, check
 > whether the database could have done it.**
 
+> **ANY comparison of crawl metrics across time windows is confounded by ZIP
+> density.** Job duration tracks what the ZIP contains, not the configuration:
+> p50 is 6.9 s for a 0-row ZIP, 12.1 s for 1–49 rows, **52.4 s for 50–199**, and
+> **144.8 s for 200+**. A dense ZIP takes ~20× longer than an empty one. On
+> 2026-07-28 this produced two wrong conclusions in a row — "concurrency doubled
+> job duration" (it was an 11→18 rows/job shift) and "a second scraper worker
+> collapsed throughput" (after reverting, the box sat 75% idle with jobs still
+> slow, because the crawler had moved onto denser ZIPs). **Normalise by rows
+> returned, or compare the same ZIP set. Otherwise the numbers mean nothing.**
+
+> **ZIP SWEEP INTERVAL — not confirmations/hour — governs freshness.** A listing
+> is only re-confirmed when its ZIP is swept, so the sweep rate sets the age
+> distribution. Confirmations/hour conflates "more rows per visit" with "more
+> visits": on 2026-07-28 confirmations rose 57% while ZIP coverage fell and
+> 7-day freshness went 72.0% → 68.9%. `crawl-throughput.sh` prints both; the
+> `ZIP SWEEP` line is the honest one.
+
+> **The sweep is NOT round-robin, and a fifth of the country is starved.**
+> Measured 2026-07-28: **5,345 of 24,676 active ZIPs (21.7%) were not crawled at
+> all in seven days**, while others were crawled 9–12 times in the same period.
+> Those listings can never be confirmed, which is why the 7-day figure is stuck
+> around 70% no matter how throughput moves.
+
 > **A listing is CONFIRMED when a scrape advances `last_seen_at`** — on insert,
 > or on update when the row changed or has not refreshed for a day (the upsert
 > bounds that to once/day to cap write amplification, so `skipped` means "already
