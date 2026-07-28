@@ -10,20 +10,19 @@ WorkingDirectory=/opt/onepercent
 EnvironmentFile=/etc/oper.env
 EnvironmentFile=-/etc/oper-role-worker.env
 Environment="PYTHONPATH=/opt/onepercent/services/scraper_service:/opt/onepercent/services"
-# --workers 2: scrape_listings is a synchronous def and homeharvest+pandas work
-# is GIL-bound, so ONE worker serialised concurrent requests. Measured
-# 2026-07-28: raising WORKER_CONCURRENCY 1 -> 2 doubled job duration (7.2s ->
-# 17.5s) and ZIP coverage did not improve, because the two jobs queued on one
-# process. Two worker PROCESSES remove the GIL contention.
+# ONE worker, deliberately. --workers 2 was tried on 2026-07-28 on the theory
+# that the GIL was serialising concurrent jobs, and it made things WORSE: job
+# p50 went 7.2s -> 39.8s -> 70.5s and throughput collapsed to ~60 jobs/hr.
 #
-# Two, not more: the SOURCE blocks at concurrency 3 from a single IP (measured,
-# docs/perf/2026-08-crawl-capacity-results.md), so more local workers would trip
-# the source rather than help. Beyond this, the lever is more egress IPs.
+# The bottleneck is not the scraper's CPU or the GIL. Measured during the test:
+# 31.5% iowait, postgres at 49% CPU, load 1.92 on 2 cores. Two concurrent
+# scrapes both bulk-upsert into an 11GB table with many indexes, and the DB
+# write path is what saturates. Adding scraper processes adds writers to a
+# contended database.
 ExecStart=/opt/onepercent/services/ml/.venv/bin/uvicorn \
     services.scraper_service.main:app \
     --host 127.0.0.1 \
-    --port 8001 \
-    --workers 2
+    --port 8001
 Restart=on-failure
 RestartSec=5
 # homeharvest holds the full result DataFrame in memory and, with
