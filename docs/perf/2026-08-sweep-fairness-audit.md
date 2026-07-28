@@ -221,6 +221,45 @@ request. Sizing that window needs one upstream measurement — for_sale wall tim
 against `past_days` on a dense ZIP — which must run from a disposable IP under
 the Apollo protocol, not from production egress.
 
+### ⚠️ SUPERSEDED: the tail is not a source cost. It is our geocoder.
+
+The window-sizing probe (`ops/probe/apollo4/window_sizing.py`) was authorised
+and run against ZIP 77493 with the production sweep stopped. **Its first request
+— `past_days=7`, the cheapest point on the ladder — had not returned after
+twelve minutes.** A 7-day window cannot involve meaningful pagination, so the
+premise that duration tracks the date window was wrong, and the probe was
+aborted rather than run to a conclusion built on it.
+
+What the box was actually doing, measured while the request hung:
+
+| signal | value |
+|---|---|
+| scraper CPU | **0.5%** (5 ticks in 10 s) |
+| established outbound connection | `2a04:4e42:94::347` = **`nominatim.openstreetmap.org`** |
+| rows already carrying source coordinates | **97.3%** (19,462 of 20,000) |
+
+`batch_geocode()` falls back to Nominatim **sequentially, with `sleep(1.1)` per
+address**. Phase 1 built its address list from *every* returned row, and the use
+site read `coords_map` first with the comment *"Use geocoded coordinates, fall
+back to source coords"* — **the precedence was inverted**. The source hands us
+latitude and longitude on 97.3% of rows, and we re-resolved all of them on every
+sweep, at roughly one address per second.
+
+That is the entire dense-ZIP tail. A ZIP returning several hundred rows spends
+several hundred seconds sleeping in our own fallback loop. It explains ZIP 77493
+at 603 s, the 240 s timeouts, and why the tail correlates with ZIP density —
+density means addresses, and addresses meant geocoder calls.
+
+**The fix is precedence, not window size.** Source coordinates win; geocoding
+covers only the rows that genuinely lack them, gated by `usable_coords()`, which
+rejects nulls, NaN, out-of-range pairs and Null Island. Expected effect: the
+geocoding phase drops from ~100% of rows to ~2.7%.
+
+This retires the window-narrowing recommendation above. Narrowing the date
+window would have reduced duration only by returning fewer rows to geocode —
+treating the symptom, at the cost of the coverage `past_days` controls, while
+leaving the real defect in place for every ZIP.
+
 ### A provenance defect found on the way
 
 `crawl_jobs.past_days` records **90** on all 5,715 jobs. No pass has ever sent

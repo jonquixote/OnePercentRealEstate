@@ -113,7 +113,7 @@ def _detail(body: bytes) -> str | None:
         return body.decode("utf-8", "replace")[:400]
 
 
-def one_request(url: str, zip_code: str, past_days: int) -> tuple[Attempt, dict]:
+def one_request(url: str, zip_code: str, past_days: int) -> Attempt:
     payload = json.dumps(
         {"location": zip_code, "listing_type": "for_sale", "past_days": past_days}
     ).encode()
@@ -147,25 +147,22 @@ def one_request(url: str, zip_code: str, past_days: int) -> tuple[Attempt, dict]
         blocked = True
         kind = kind or "blocked_flag"
 
-    return (
-        Attempt(
-            ts=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            zip_code=zip_code,
-            past_days=past_days,
-            run=-1,
-            warmup=False,
-            wall_s=round(wall, 2),
-            http_status=status,
-            bytes_down=len(body) if body else 0,
-            count=parsed.get("count"),
-            inserted=parsed.get("inserted"),
-            updated=parsed.get("updated"),
-            skipped=parsed.get("skipped"),
-            blocked=blocked,
-            error_kind=kind,
-            error_detail=detail,
-        ),
-        parsed,
+    return Attempt(
+        ts=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        zip_code=zip_code,
+        past_days=past_days,
+        run=-1,
+        warmup=False,
+        wall_s=round(wall, 2),
+        http_status=status,
+        bytes_down=len(body) if body else 0,
+        count=parsed.get("count"),
+        inserted=parsed.get("inserted"),
+        updated=parsed.get("updated"),
+        skipped=parsed.get("skipped"),
+        blocked=blocked,
+        error_kind=kind,
+        error_detail=detail,
     )
 
 
@@ -214,7 +211,7 @@ def main() -> int:
 
         for run in range(args.runs + 1):  # run 0 is warmup
             warm = run == 0
-            attempt, parsed = one_request(args.url, args.zip_code, past_days)
+            attempt = one_request(args.url, args.zip_code, past_days)
             attempt.run = run
             attempt.warmup = warm
             emit(attempt)
