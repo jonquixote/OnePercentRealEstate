@@ -110,11 +110,25 @@ def batch_geocode(address_list):
             else:
                 fallback_list.append((idx, dict(address_list)[idx]))
 
+    # The Nominatim fallback is the expensive path: sequential, ~1.1 s per
+    # address. It was invisible in the logs, which is why several hundred
+    # seconds per dense ZIP went unattributed for so long. Count it explicitly
+    # so external geocoder traffic is measurable rather than inferred.
+    if fallback_list:
+        print(f"Geocode: {len(results)} via Census, "
+              f"{len(fallback_list)} to Nominatim fallback "
+              f"(sequential, ~{len(fallback_list) * 1.1:.0f}s)")
+
+    nominatim_ok = 0
     for idx, addr in fallback_list:
         coords = geocode_address_nominatim(addr)
         if coords:
             results[idx] = coords
+            nominatim_ok += 1
         sleep(1.1)
+
+    if fallback_list:
+        print(f"Geocode: Nominatim resolved {nominatim_ok}/{len(fallback_list)}")
 
     return results
 
