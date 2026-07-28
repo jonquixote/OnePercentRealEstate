@@ -68,6 +68,29 @@ def geocode_address_nominatim(address):
         print(f"Nominatim geocode error: {e}")
     return None
 
+def usable_coords(lat, lon):
+    """Validate a source-supplied coordinate pair.
+
+    Returns (lat, lon) as floats, or None if the pair is missing or not a
+    plausible location. Null Island (0, 0) is rejected because it is the
+    classic "we had no idea" sentinel rather than a real address, and trusting
+    it would silently plant listings in the Gulf of Guinea.
+    """
+    if lat is None or lon is None:
+        return None
+    try:
+        lat_f, lon_f = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None
+    if lat_f != lat_f or lon_f != lon_f:  # NaN
+        return None
+    if not (-90.0 <= lat_f <= 90.0) or not (-180.0 <= lon_f <= 180.0):
+        return None
+    if lat_f == 0.0 and lon_f == 0.0:
+        return None
+    return (lat_f, lon_f)
+
+
 def batch_geocode(address_list):
     """Batch geocode: Census (parallel) then Nominatim fallback (sequential, 1 req/sec).
     
@@ -87,11 +110,25 @@ def batch_geocode(address_list):
             else:
                 fallback_list.append((idx, dict(address_list)[idx]))
 
+    # The Nominatim fallback is the expensive path: sequential, ~1.1 s per
+    # address. It was invisible in the logs, which is why several hundred
+    # seconds per dense ZIP went unattributed for so long. Count it explicitly
+    # so external geocoder traffic is measurable rather than inferred.
+    if fallback_list:
+        print(f"Geocode: {len(results)} via Census, "
+              f"{len(fallback_list)} to Nominatim fallback "
+              f"(sequential, ~{len(fallback_list) * 1.1:.0f}s)")
+
+    nominatim_ok = 0
     for idx, addr in fallback_list:
         coords = geocode_address_nominatim(addr)
         if coords:
             results[idx] = coords
+            nominatim_ok += 1
         sleep(1.1)
+
+    if fallback_list:
+        print(f"Geocode: Nominatim resolved {nominatim_ok}/{len(fallback_list)}")
 
     return results
 
@@ -327,18 +364,40 @@ def scrape_listings(req: ScrapeRequest):
         if not clean_records:
             return {"count": 0, "inserted": 0, "updated": 0, "skipped": 0, "blocked": False}
 
-        # Phase 1: Collect all addresses for batch geocoding
+        # Phase 1: Collect addresses that ACTUALLY need geocoding.
+        #
+        # The source hands us latitude/longitude on the row, and does so for
+        # 97.3% of rows (measured over 20,000 for_sale rows seen in 48h). This
+        # phase used to geocode every row unconditionally and treat the source's
+        # own coordinates as a mere fallback — so every sweep re-resolved
+        # addresses we had already been given, and had already stored.
+        #
+        # That was the dense-ZIP tail. The Nominatim fallback is SEQUENTIAL with
+        # a 1.1 s sleep per address, so a ZIP returning several hundred rows
+        # spent several hundred seconds sleeping. 39 ZIPs consumed 19.1% of all
+        # crawl runner time and every one of them hit the 240 s timeout; ZIP
+        # 77493 was measured at 603 s. See
+        # docs/perf/2026-08-sweep-fairness-audit.md.
+        #
+        # Source coordinates now win, and geocoding is the fallback for the rows
+        # that genuinely lack them.
+        source_coords = {}
         address_list = []
         for i, row in enumerate(clean_records):
+            coords = usable_coords(row.get('latitude'), row.get('longitude'))
+            if coords:
+                source_coords[i] = coords
+                continue
             zip_raw = row.get('zip_code')
             zip_code = str(zip_raw).split('.')[0].zfill(5) if zip_raw else ""
             address = f"{row.get('street', '')}, {row.get('city', '')}, {row.get('state', '')} {zip_code}".strip(", ")
             if address:
                 address_list.append((i, address))
 
-        # Phase 2: Batch geocode (Census parallel + Nominatim fallback)
-        print(f"Batch geocoding {len(address_list)} addresses...")
-        coords_map = batch_geocode(address_list)
+        # Phase 2: Geocode only the remainder (Census parallel + Nominatim fallback)
+        print(f"Coords from source: {len(source_coords)}/{len(clean_records)}; "
+              f"geocoding {len(address_list)} addresses...")
+        coords_map = batch_geocode(address_list) if address_list else {}
         print(f"Geocoded {len(coords_map)}/{len(address_list)} addresses")
 
         # Phase 3: Process and insert
@@ -385,13 +444,15 @@ def scrape_listings(req: ScrapeRequest):
                     elif hasattr(v, 'isoformat'):
                         raw_data[k] = v.isoformat()
 
-                # Use geocoded coordinates, fall back to source coords
-                coords = coords_map.get(i)
+                # Source coordinates win; geocoding covers only what the source
+                # did not supply. The reverse precedence made every sweep
+                # re-resolve addresses we had already been handed — see Phase 1.
+                coords = source_coords.get(i) or coords_map.get(i)
                 if coords:
                     raw_data["lat"], raw_data["lon"] = coords
                 else:
-                    raw_data["lat"] = row.get('latitude')
-                    raw_data["lon"] = row.get('longitude')
+                    raw_data["lat"] = None
+                    raw_data["lon"] = None
 
                 # Extract enrichment fields for insertion
                 enr = extract_enrichment(raw_data)

@@ -30,6 +30,7 @@
 import { Client, Pool, type Notification } from 'pg';
 import { loadEnv } from './env.js';
 import { isBlockError, isTransientScraperError } from './crawl-errors.js';
+import { FOR_SALE_PAST_DAYS, RECENT_PAST_DAYS, pastDaysForRecord } from './crawl-windows.js';
 import { getLogger, newTraceId, withTrace, type WorkerLogger } from './logger.js';
 import { ScraperPool, type Outcome } from './scraper-pool.js';
 import { formatEndpointMetrics } from './metrics.js';
@@ -196,22 +197,22 @@ async function processClaimedJob(job: CrawlJob, scraperUrl: string, parentLog: W
     //
     // A short randomized gap (passGap) is inserted between passes so the five
     // requests for a ZIP don't arrive as one tight burst.
-    const saleResult = await runPass('for_sale', scrape(job, 'for_sale', scraperUrl, log, { pastDays: 30 }));
+    const saleResult = await runPass('for_sale', scrape(job, 'for_sale', scraperUrl, log, { pastDays: FOR_SALE_PAST_DAYS }));
     await passGap();
-    const rentResult = await runPass('for_rent', scrape(job, 'for_rent', scraperUrl, log, { pastDays: 30 }));
+    const rentResult = await runPass('for_rent', scrape(job, 'for_rent', scraperUrl, log, { pastDays: FOR_SALE_PAST_DAYS }));
     await passGap();
     // Distressed inventory via homeharvest's foreclosure filter. The scraper
     // tags these rows sale_type='foreclosure' (source homeharvest_flag) unless
     // its text classifier finds something more specific. foreclosure is a
     // query-wide boolean, so it stays its own windowed pass.
-    const foreclosureResult = await runPass('foreclosure', scrape(job, 'for_sale', scraperUrl, log, { foreclosure: true, pastDays: 30 }));
+    const foreclosureResult = await runPass('foreclosure', scrape(job, 'for_sale', scraperUrl, log, { foreclosure: true, pastDays: FOR_SALE_PAST_DAYS }));
     await passGap();
     // Recently sold listings (14-day lookback overlaps the ZIP recycle cycle).
-    const soldResult = await runPass('sold', scrape(job, 'sold', scraperUrl, log, { pastDays: 14 }));
+    const soldResult = await runPass('sold', scrape(job, 'sold', scraperUrl, log, { pastDays: RECENT_PAST_DAYS }));
     await passGap();
     // Pending listings (leading inventory signal). Kept separate because its
     // contingent/pending or_filters are disabled when mixed with other statuses.
-    const pendingResult = await runPass('pending', scrape(job, 'pending', scraperUrl, log, { pastDays: 14 }));
+    const pendingResult = await runPass('pending', scrape(job, 'pending', scraperUrl, log, { pastDays: RECENT_PAST_DAYS }));
     // NOTE: PadMapper/Zumper rental source is DISABLED — only homeharvest is
     // active until non-homeharvest scrapers are proven in their own sandbox.
 
@@ -337,17 +338,6 @@ async function processClaimedJob(job: CrawlJob, scraperUrl: string, parentLog: W
 // region_value examples in this project: "Tampa, FL", "33611", etc — the
 // scraper's `location` param accepts the same strings n8n was sending.
 // ---------------------------------------------------------------------------
-
-/** What past_days the crawl is running with, recorded alongside throughput so a
- *  number can be attributed to its parameters later. Read from the environment
- *  rather than WorkerEnv because the scraper service owns this setting; unset
- *  means the historical default of 30, empty means no filter. */
-function pastDaysForRecord(): number | null {
-  const raw = (process.env.SCRAPE_PAST_DAYS ?? '30').trim();
-  if (raw === '') return null;
-  const v = Number(raw);
-  return Number.isFinite(v) && v > 0 ? v : null;
-}
 
 interface ScrapeResult {
   count: number;
