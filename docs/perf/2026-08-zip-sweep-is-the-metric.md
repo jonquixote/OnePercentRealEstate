@@ -42,6 +42,51 @@ confirmations/hour rose 57%.
 "more rows per visit" with "more visits". **For freshness, ZIPs/hour is the
 metric.**
 
+## ⚠️ CORRECTION (same day): the duration analysis below was confounded
+
+The claim that "job duration went up 2.4×, cancelling the parallelism" **does
+not survive scrutiny**. Job duration is dominated by ZIP density, not by
+concurrency. Measured over 3 hours:
+
+| rows returned by the job | n | p50 duration |
+|---|---|---|
+| 0 rows | 140 | 6,934 ms |
+| 1–49 | 371 | 12,099 ms |
+| 50–199 | 99 | **52,375 ms** |
+| 200+ | 2 | **144,795 ms** |
+
+**A dense ZIP takes ~20× longer than an empty one.** The BEFORE window averaged
+**11 rows/job**; the AFTER window averaged **18**. Duration scaled with density
+exactly as this table predicts — the concurrency change is not what moved it.
+
+A follow-up test made this unmistakable: adding a second uvicorn worker to the
+scraper appeared to make p50 collapse to 39.8 s and then 70.5 s. It was reverted
+— and after the revert the box went to **75% idle, 0% iowait, load 0.47** with
+jobs still slow, because the crawler had simply moved onto denser ZIPs. The
+transient 31.5% iowait attributed to DB contention was not reproducible either.
+
+**Methodological rule for all future crawl work: any comparison of crawl metrics
+across time windows is confounded by ZIP density.** Normalise by rows returned,
+or compare the same ZIPs, or the numbers mean nothing. Three conclusions in this
+session were reached from unnormalised window comparisons; this is the second to
+fall.
+
+### What still stands
+
+- **ZIP sweep interval, not confirmations/hour, governs freshness.** The age
+  distribution matches the ~5.4-day sweep exactly. That reasoning is
+  density-independent.
+- **ZIP coverage did not improve** (262 → 249/hr). Whatever the mechanism, the
+  concurrency change did not buy sweep rate.
+- **The source blocks at concurrency 3** from one IP — measured directly, with
+  AIMD backing off, and reproducible.
+
+### What must be re-measured
+
+Whether `WORKER_CONCURRENCY=2` helps at all, using a density-normalised
+comparison (e.g. duration per row returned, or the same ZIP set before and
+after). Until then, neither "it helped" nor "it was cancelled out" is supported.
+
 ## Why concurrency cannot be pushed further on this box
 
 The chain, each link measured:
