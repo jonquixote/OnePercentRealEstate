@@ -10,10 +10,20 @@ WorkingDirectory=/opt/onepercent
 EnvironmentFile=/etc/oper.env
 EnvironmentFile=-/etc/oper-role-worker.env
 Environment="PYTHONPATH=/opt/onepercent/services/scraper_service:/opt/onepercent/services"
+# --workers 2: scrape_listings is a synchronous def and homeharvest+pandas work
+# is GIL-bound, so ONE worker serialised concurrent requests. Measured
+# 2026-07-28: raising WORKER_CONCURRENCY 1 -> 2 doubled job duration (7.2s ->
+# 17.5s) and ZIP coverage did not improve, because the two jobs queued on one
+# process. Two worker PROCESSES remove the GIL contention.
+#
+# Two, not more: the SOURCE blocks at concurrency 3 from a single IP (measured,
+# docs/perf/2026-08-crawl-capacity-results.md), so more local workers would trip
+# the source rather than help. Beyond this, the lever is more egress IPs.
 ExecStart=/opt/onepercent/services/ml/.venv/bin/uvicorn \
     services.scraper_service.main:app \
     --host 127.0.0.1 \
-    --port 8001
+    --port 8001 \
+    --workers 2
 Restart=on-failure
 RestartSec=5
 # homeharvest holds the full result DataFrame in memory and, with
