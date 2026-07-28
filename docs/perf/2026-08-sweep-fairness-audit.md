@@ -169,6 +169,71 @@ Three constraints on the implementation:
    history is erased in one statement and every probe goes blind at once. This
    has never fired; `pending` has never reached 0.
 
+## Addendum — where the runner time actually goes
+
+Designing the fix required the job-duration distribution, which turned up a
+larger lever than tiering and disproved part of my own recommendation above.
+
+**39 ZIPs consume 19.1% of all crawl runner time.**
+
+| | |
+|---|---|
+| jobs recording a `for_sale` scrape timeout | **61** |
+| distinct ZIPs | **39** (of 24,685) |
+| runner time | **5.72 h — 19.1% of the total** |
+| runner time freed by capping any job at 60 s | **31%** |
+
+Every timeout is the `for_sale` pass, at the 240,000 ms `SCRAPE_TIMEOUT_MS`
+ceiling. Worst observed: ZIP `77493` at **603 s**. Confirmations per
+runner-second by duration bucket — `<20s` **0.91**, `20–60s` **1.22**,
+`60–200s` 0.79, `>200s` **0.24**.
+
+With only two runners, one 600-second job removes half the crawl's capacity for
+ten minutes. That is why job starts average a 19.83 s gap while their p50 is
+11.88 s, against a pacing gate sitting at its 10 s floor with **zero blocks**.
+The gate is not the constraint; runner occupancy by the tail is.
+
+### Two things this addendum retracts
+
+**There is no coverage hole in those ZIPs.** I asserted one. It is false: the
+timeout ZIPs are **86.5% fresh at 7 days against 70.6% everywhere else**, and
+their freshest listing averages 0.18 days old. The `AbortController` cancels the
+*worker's* fetch, but the scraper service runs to completion and lands its
+upsert regardless — so the data arrives and only the count is discarded.
+
+**The scraper is not GIL-bound.** `2026-08-zip-sweep-is-the-metric.md` reasoned
+that job duration doubled "because the scraper serializes … GIL-bound". Measured
+directly: the scraper process used **0.21 s of CPU in 20 s — 1.05%** — while the
+crawl ran. It is network-bound on serial page fetches. That conclusion should
+not be relied on.
+
+### Why the obvious fix is unsafe
+
+Lowering the worker's timeout does *not* stop the scrape; it abandons it. The
+worker would immediately claim another job while the scraper is still fetching
+the abandoned one, so a third concurrent request would reach the source — and
+**the source is measured to block at concurrency 3** from one IP. The naive fix
+buys throughput by tripping the one limit the crawl cannot afford to trip.
+
+The bound therefore has to reduce the *work per request* for dense ZIPs (a
+narrower date window, with the remainder covered across sweeps), not abandon the
+request. Sizing that window needs one upstream measurement — for_sale wall time
+against `past_days` on a dense ZIP — which must run from a disposable IP under
+the Apollo protocol, not from production egress.
+
+### A provenance defect found on the way
+
+`crawl_jobs.past_days` records **90** on all 5,715 jobs. No pass has ever sent
+90: `pastDaysForRecord()` read `process.env.SCRAPE_PAST_DAYS` while the passes
+hardcoded 30 and 14. **`SCRAPE_PAST_DAYS=90` is set in prod and is inert.**
+
+Every throughput figure gathered since the column shipped on 2026-08-12 is
+attributed to a parameter that was never in effect. Fixed by moving the windows
+into `apps/worker/src/crawl-windows.ts` as the single source of truth that both
+the passes and the record read, with tests pinning it. The env var is
+deliberately left inert — wiring it in is a live ingest change belonging to the
+deferred `past_days` rollout.
+
 ## What this audit does not claim
 
 Whether `WORKER_CONCURRENCY=2` helps remains unmeasured, exactly as
