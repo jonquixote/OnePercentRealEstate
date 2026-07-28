@@ -260,6 +260,61 @@ window would have reduced duration only by returning fewer rows to geocode —
 treating the symptom, at the cost of the coverage `past_days` controls, while
 leaving the real defect in place for every ZIP.
 
+### Deploy result — measured 2026-07-28, scraper restarted 08:23:19 UTC
+
+**Paired re-probe, ZIP 77493, `past_days=30`, sweep paused, one request in flight:**
+
+| | before | after |
+|---|---|---|
+| for_sale pass | **240 s, timed out, 0 rows** | **p50 64.2 s, p90 65.7 s** |
+| rows returned by the pass | — (timed out) | **860** |
+| coords from source | not used | **840/860 = 97.7%** |
+| Nominatim calls | ~all rows | **20** |
+| HTTP status mix | — | 4× 200, **0 errors, 0 blocks** |
+| upsert | — | 37–38 updated, 822 skipped (already fresh today) |
+
+The three recorded pre-fix jobs for this ZIP ran **600.5 s, 596.3 s, 603.1 s**.
+Those were whole jobs (five passes) whose `for_sale` pass timed out and
+contributed nothing, so the honest statement is narrower and stronger: **the
+for_sale pass went from a 240 s timeout returning nothing to 64 s returning 860
+rows.** Inventory that had never landed for this ZIP now lands.
+
+**Fleet-wide, 99 jobs after the restart against 852 in the 6 h before:**
+
+| | before | after |
+|---|---|---|
+| avg | 44.6 s | **23.9 s** |
+| p50 | 18.5 s | **9.7 s** |
+| p90 | 106.4 s | **57.3 s** |
+| max | **603 s** | 217 s |
+| timeouts | **31** | **0** |
+| upsert success | 76.0% | **83.2%** |
+
+That is a cross-window comparison, so by this document's own rule it must be
+normalised before it is believed. It survives: the after window averaged
+**146 rows/job against 50 before — 2.9× denser** — and got faster anyway.
+Per row, **0.892 s → 0.164 s, a 5.4× improvement**. Density moved against the
+result, so the headline understates it.
+
+Scraper and worker both `active`, **0 restarts, 0 tracebacks, 0 stuck jobs**.
+(`grub2-common.service` shows failed; it failed at boot on 2026-07-24, four days
+before this change, and is unrelated.)
+
+### Still on the table: both geocoders resolve nothing
+
+The new instrumentation shows every fallback as **`0 via Census`**, and
+**`Nominatim resolved 0/20`**. Census returns nothing at all, and Nominatim
+returns nothing for the addresses that reach it — while still costing
+`sleep(1.1)` each. Roughly **22 s of 77493's remaining 64 s is Nominatim
+sleeping on 20 addresses it fails to resolve.**
+
+So the geocoding path was never buying coordinates; it was buying delay, and the
+source's own coordinates were doing the work the whole time. Worth a follow-up:
+the Nominatim client sends `User-Agent: OnePercentRealEstate/1.0`, and OSM's
+usage policy requires an identifying contact — a silent refusal would look
+exactly like this. Until that is diagnosed, ~34% of the remaining dense-ZIP cost
+is a call that cannot succeed.
+
 ### A provenance defect found on the way
 
 `crawl_jobs.past_days` records **90** on all 5,715 jobs. No pass has ever sent
