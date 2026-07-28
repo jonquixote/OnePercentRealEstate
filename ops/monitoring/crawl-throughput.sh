@@ -37,6 +37,25 @@ WINDOW_DAYS="${FRESHNESS_WINDOW_DAYS:-$STALE_AFTER_DAYS}"
 AVG_HOURS="${THROUGHPUT_AVG_HOURS:-6}"
 MIN_PCT_OF_REQUIRED="${THROUGHPUT_MIN_PCT:-70}"
 
+# ZIP SWEEP INTERVAL is what actually governs freshness. Confirmations/hour
+# conflates "more rows per visit" with "more visits" — measured 2026-07-28, a
+# concurrency change raised confirmations 57% while ZIP coverage FELL and 7-day
+# freshness went 72.0% -> 68.9%. A listing is only re-confirmed when its ZIP is
+# swept, so sweep interval sets the age distribution.
+# See docs/perf/2026-08-zip-sweep-is-the-metric.md.
+read -r zips_6h active_zips sweep_days <<<"$(psql "$DB" -tA -F' ' -c "
+  SELECT (SELECT count(DISTINCT region_value) FROM crawl_jobs
+           WHERE finished_at > now() - interval '6 hours')::bigint,
+         (SELECT count(DISTINCT zip_code) FROM listings
+           WHERE listing_status='active' AND listing_type='for_sale'
+             AND zip_code ~ '^[0-9]{5}$')::bigint,
+         COALESCE(round((SELECT count(DISTINCT zip_code) FROM listings
+                          WHERE listing_status='active' AND listing_type='for_sale'
+                            AND zip_code ~ '^[0-9]{5}$')::numeric
+                        / NULLIF((SELECT count(DISTINCT region_value) FROM crawl_jobs
+                                   WHERE finished_at > now() - interval '6 hours'), 0)
+                        / 4.0, 1), 0);" 2>/dev/null)"
+
 read -r confirmed_1h active required pct <<<"$(psql "$DB" -tA -F' ' -c "
   WITH a AS (
     SELECT count(*)::numeric AS active
@@ -63,3 +82,5 @@ else
   fi
 fi
 echo "[crawl-throughput] ${confirmed_1h} confirmations/hr (${AVG_HOURS}h avg) = ${pct}% of the ${required}/hr needed for a ${WINDOW_DAYS}d sweep of ${active} active listings"
+# The number that actually sets the freshness age distribution.
+echo "[crawl-throughput] ZIP SWEEP: ${zips_6h} ZIPs in 6h of ${active_zips} active => full sweep every ~${sweep_days}d (SLO window ${WINDOW_DAYS}d)"
