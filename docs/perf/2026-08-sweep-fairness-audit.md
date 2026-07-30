@@ -260,6 +260,31 @@ window would have reduced duration only by returning fewer rows to geocode —
 treating the symptom, at the cost of the coverage `past_days` controls, while
 leaving the real defect in place for every ZIP.
 
+### Two-day outcome — measured 2026-07-30 (deploy was 07-28 08:23 UTC)
+
+The fix held and the sweep problem is closed:
+
+| signal | pre-fix | 2 days after |
+|---|---|---|
+| **7-day freshness** | 70.5% | **91.2%** |
+| 10-day SLO | 99.9% | 99.9% |
+| full seeded ZIP sweep | ~8.8 d | **~4.2 d** (317 jobs/hr) |
+| job duration p50 / p90 | 18.5 / 108 s | **5.2 / 8.2 s** |
+| timeouts (24 h) | 31/6h | **0** |
+| active ZIPs unswept 7 d | 5,353 | **516** (507 queued, 5 no row) |
+| confirmations | ~3,551/hr | **~6,486/hr** |
+
+The crawl is now **gate-bound** — job-start gap p50 11.3 s against the 10 s
+`SCRAPER_MIN_INTERVAL_MS` floor — not duration-bound. That is the healthy
+regime: the bottleneck is now the deliberate politeness gate, and the cold-ZIP
+tiering (`2026-08-14` Task 2) is unnecessary because 4.2 d is comfortably under
+the 7-day target.
+
+The Census/Nominatim fallback still fires on ~2.7% of rows and still resolves
+almost nothing (`0 via Census` every time), but at 1–3 addresses per dense ZIP
+the cost is now trivial. Diagnosing why both geocoders are dead is worth a
+follow-up but no longer urgent.
+
 ### Deploy result — measured 2026-07-28, scraper restarted 08:23:19 UTC
 
 **Paired re-probe, ZIP 77493, `past_days=30`, sweep paused, one request in flight:**

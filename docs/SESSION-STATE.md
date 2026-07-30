@@ -1,27 +1,51 @@
-# Session State — 2026-07-28
+# Session State — 2026-07-30
 
 Written for continuity across context compaction. Live system state, open work,
 and the traps that cost time. `docs/HANDOFF.md` is the durable engineering guide;
 this file is the "where we are right now".
 
-## Production is healthy
+## Production is healthy — and the sweep problem is solved
 
 Box `209.50.61.64`, single host, systemd (not Docker except monitoring).
 
-| signal | value |
-|---|---|
-| freshness SLO (10 d window) | **99.9%** — 276 unconfirmed |
-| 7-day figure (non-alerting target) | **70.5%** — 156,529 outside |
-| confirmations | ~3,551/hr (6 h avg) |
-| **ZIP sweep** | **1,118 ZIPs / 6 h of 24,676 → ~5.5 d** |
-| db-load-budget top query | 14.9% / 38 s — quiet |
-| photos / rent bands | 100% / ~91–93%, 0 malformed |
-| streams (24 h) | for_sale 15,006 · rentals 11,219 · sold 6,277 |
-| failed units · firing alerts | none · none |
+| signal | value | vs pre-fix (07-28) |
+|---|---|---|
+| freshness SLO (10 d window) | **99.9%** | = |
+| **7-day freshness** | **91.2%** | **70.5%** |
+| confirmations | **~6,486/hr** (24 h) | ~3,551 |
+| **full seeded ZIP sweep** | **~4.2 d** (317 jobs/hr, 31,913 ZIPs) | ~8.8 d |
+| job duration p50 / p90 | **5.2 s / 8.2 s** | 18.5 / 108 |
+| timeouts (24 h) | **0** | 31/6h |
+| active ZIPs unswept 7 d | **516** (507 queued, 5 no row) | 5,353 |
+| db-load-budget | quiet | |
+| failed units · firing alerts | none · none | |
+
+**What fixed it:** the dense-ZIP tail was our own geocoder, not the source
+(`f82074b`, PR #91). The scraper re-geocoded every row through a sequential
+Nominatim fallback (~1.1 s/address) although the source supplies coordinates on
+97.3% of rows. Source coords now win. Deployed 07-28 08:23 UTC; two-day outcome
+above confirms it. The crawl is now **gate-bound** (job-start gap p50 11.3 s
+against the 10 s `SCRAPER_MIN_INTERVAL_MS` floor), not duration-bound — the
+healthy regime.
+
+The `2026-08-14-zip-sweep-fairness` cold-ZIP tiering is **not needed**: sweep is
+4.2 d, comfortably under the 7-day target, without it.
 
 Crawl config: `WORKER_CONCURRENCY=2`, `SCRAPER_MIN_INTERVAL_MS=10000`,
-`SCRAPE_PAST_DAYS=90`, scraper **1** uvicorn worker, `SCRAPER_URLS` = one local
-endpoint.
+`SCRAPE_PAST_DAYS=90` (**inert** — see the past_days provenance note),
+scraper **1** uvicorn worker, `SCRAPER_URLS` = one local endpoint.
+
+## Known small defects (not blocking)
+
+- **Both geocoders resolve almost nothing.** Every fallback logs `0 via Census`
+  (Census returns 0 every time), and Nominatim resolves ~0–1 of each small batch
+  while still sleeping 1.1 s each. Post-fix this is trivial (~2.7% of rows, 1–3
+  per dense ZIP) but the geocoding path is effectively dead weight. The Nominatim
+  client sends `User-Agent: OnePercentRealEstate/1.0`; OSM policy requires an
+  identifying contact, and a silent refusal looks exactly like this. Worth a
+  proper diagnosis before relying on geocoding for any coordinate-less source.
+- **5 active-inventory ZIPs have no crawl_jobs row at all** — a genuine seed gap,
+  down from 6. One-line fix (seed them) when convenient.
 
 ## The one thing to know before touching the crawl
 
@@ -48,11 +72,16 @@ ZIP set.
 - `2026-08-03-cold-listings-archival` — table, read-through and resurrection shipped; **zero rows moved**
 - `2026-08-13-crawl-capacity` — concurrency raised, but **its central result was withdrawn as confounded**
 
+**Done — the sweep resolution**
+- `2026-08-14-zip-sweep-fairness` — Task 1 audit **falsified the plan's premise**
+  (the scheduler is a fair round-robin; the 5,345 were queue-position, not
+  starvation). The real cause was the geocoder (see PR #91). Sweep 8.8 d →
+  4.2 d, 7-day freshness 70.5% → 91.2%. Cold-ZIP tiering (Task 2) **not needed**.
+
 **Not started**
 - `2026-08-05-indexability-and-honest-urls` — `/property/<bad-id>` still returns **200**, sitemap advertises unconfirmed listings
 - `2026-08-08-the-stash` — Task 1 (compression) measured and **declined**; **the stash rule still selects zero rows** (no listing has `last_seen_at` older than 30 days — find out why first)
-- `2026-08-14-zip-sweep-fairness` — **new, and the highest-value open work**
-- `2026-08-15-density-normalized-measurement` — **new, gates all further crawl tuning**
+- `2026-08-15-density-normalized-measurement` — gates all further crawl tuning; still owed
 
 **Superseded**
 - `2026-08-04-crawl-yield-scheduling` — ⛔ do not execute
@@ -60,18 +89,16 @@ ZIP set.
 
 ## What to do next, in order
 
-1. **`2026-08-14-zip-sweep-fairness`.** 5,345 of 24,676 active ZIPs (21.7%) went
-   uncrawled for seven days while others were hit 9–12 times. Those listings can
-   never be confirmed — this is why the 7-day figure is pinned near 70%. Nothing
-   else moves it.
-2. **`2026-08-15-density-normalized-measurement`.** Until this exists, no crawl
-   change can be evaluated. `WORKER_CONCURRENCY=2` is live and **nobody knows if
-   it helps**; it sits closer to the source's block threshold (which is 3) than
-   concurrency 1 does.
-3. **`past_days` unlimited** — Apollo III showed it is ~2× *more* request-efficient
-   (195 rows/req vs 96). Deliberately deferred: changing ingest while the
-   measurement methodology is broken would produce another confounded result.
-4. Then: county registry validation, the stash rule, indexability, archival.
+The crawl freshness problem is **solved**; remaining work is elsewhere.
+
+1. **`2026-08-15-density-normalized-measurement`.** Still the methodology gate for
+   any future crawl tuning. `WORKER_CONCURRENCY=2` remains unproven — though the
+   crawl is now gate-bound, so concurrency is no longer the active lever.
+2. **County registry validation** (`2026-08-07` Task 1b) — ~1 in 5 county names
+   misresolve silently; hard prerequisite for incremental crawl.
+3. **`2026-08-05-indexability`** — `/property/<bad-id>` returns 200; product-facing.
+4. **`2026-08-08-the-stash`** — rule still selects zero rows; diagnose first.
+5. Small crawl cleanups: diagnose the dead geocoders, seed the 5 missing ZIPs.
 
 ## Traps that have already cost time
 
