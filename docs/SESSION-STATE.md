@@ -35,17 +35,27 @@ Crawl config: `WORKER_CONCURRENCY=2`, `SCRAPER_MIN_INTERVAL_MS=10000`,
 `SCRAPE_PAST_DAYS=90` (**inert** — see the past_days provenance note),
 scraper **1** uvicorn worker, `SCRAPER_URLS` = one local endpoint.
 
-## Known small defects (not blocking)
+## Four cleanups — done 2026-07-30 (PR #92 + d5edd1a)
 
-- **Both geocoders resolve almost nothing.** Every fallback logs `0 via Census`
-  (Census returns 0 every time), and Nominatim resolves ~0–1 of each small batch
-  while still sleeping 1.1 s each. Post-fix this is trivial (~2.7% of rows, 1–3
-  per dense ZIP) but the geocoding path is effectively dead weight. The Nominatim
-  client sends `User-Agent: OnePercentRealEstate/1.0`; OSM policy requires an
-  identifying contact, and a silent refusal looks exactly like this. Worth a
-  proper diagnosis before relying on geocoding for any coordinate-less source.
-- **5 active-inventory ZIPs have no crawl_jobs row at all** — a genuine seed gap,
-  down from 6. One-line fix (seed them) when convenient.
+1. **Seed gap fixed.** 5 active ZIPs never in the backlog → idempotent backfill
+   (`2026_08_16_seed_unseen_active_zips.sql`), unseen 5 → 0. Not a lifecycle step
+   (distinct scan is ~13 s).
+2. **Geocoders diagnosed — not dead.** Census/Nominatim resolve normal addresses
+   fine; they miss new-construction/rural addresses absent from TIGER/OSM (77493,
+   which I'd watched, is new-construction — that's why it looked dead). My earlier
+   "User-Agent silent refusal" guess was **wrong**. Real waste was the sequential
+   1.1 s/address Nominatim sleep on hopeless lookups; capped at 15/scrape
+   (`MAX_NOMINATIM_FALLBACK`), since 16+ batches resolve ~1%.
+3. **County registry validation — DEFERRED** (user's call). Not a cleanup:
+   ~6,300 source requests needing a disposable IP, and a prerequisite for county
+   sweeps that aren't built and whose value dropped now freshness is solved.
+   Revisit when county sweeps are on the roadmap + a disposable IP is available.
+4. **Honest indexability shipped** (`2026-08-05` plan). Missing property →
+   `noindex` (200 not 404 — documented Next streaming limit, see
+   `docs/perf/2026-08-indexability-decision.md`); sitemap advertises only
+   listings confirmed within 10 d; stale listings `noindex,follow`; one
+   `SEO_FRESHNESS_DAYS=10` threshold drives both so they can't contradict; new
+   `oper-sitemap-honesty.timer` probe (fire/resolve proven).
 
 ## The one thing to know before touching the crawl
 
@@ -78,10 +88,14 @@ ZIP set.
   starvation). The real cause was the geocoder (see PR #91). Sweep 8.8 d →
   4.2 d, 7-day freshness 70.5% → 91.2%. Cold-ZIP tiering (Task 2) **not needed**.
 
+**Done — indexability**
+- `2026-08-05-indexability-and-honest-urls` — all 4 tasks shipped 2026-07-30.
+  Missing → noindex; sitemap 10-day filter; stale → noindex; honesty probe.
+
 **Not started**
-- `2026-08-05-indexability-and-honest-urls` — `/property/<bad-id>` still returns **200**, sitemap advertises unconfirmed listings
 - `2026-08-08-the-stash` — Task 1 (compression) measured and **declined**; **the stash rule still selects zero rows** (no listing has `last_seen_at` older than 30 days — find out why first)
 - `2026-08-15-density-normalized-measurement` — gates all further crawl tuning; still owed
+- `2026-08-07` Task 1b (county registry validation) — **deferred by decision** (disposable IP + no consumer yet)
 
 **Superseded**
 - `2026-08-04-crawl-yield-scheduling` — ⛔ do not execute
