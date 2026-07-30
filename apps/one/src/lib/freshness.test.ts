@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { freshnessOf } from './freshness';
+import { freshnessOf, isSeoStale, SEO_FRESHNESS_DAYS } from './freshness';
 
 const now = new Date('2026-08-02T12:00:00Z');
 const ago = (h: number) => new Date(now.getTime() - h * 3600_000);
+const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000);
 
 describe('freshnessOf', () => {
   it('is verified within a day', () => {
@@ -52,5 +53,26 @@ describe('freshnessOf', () => {
   it('carries a label a user can read without a legend', () => {
     expect(freshnessOf(ago(24 * 10), now).label).toMatch(/unconfirmed/i);
     expect(freshnessOf(ago(6), now).label).toMatch(/today|hours/i);
+  });
+});
+
+describe('isSeoStale (SEO index threshold)', () => {
+  it('indexes a listing confirmed within the SLO window', () => {
+    expect(isSeoStale(daysAgo(SEO_FRESHNESS_DAYS - 1), now)).toBe(false);
+  });
+
+  it('de-indexes a listing unconfirmed past the SLO window', () => {
+    expect(isSeoStale(daysAgo(SEO_FRESHNESS_DAYS + 1), now)).toBe(true);
+  });
+
+  it('de-indexes a listing whose last-seen is unknown', () => {
+    expect(isSeoStale(null, now)).toBe(true);
+  });
+
+  it('is exactly the 10-day SLO window, matching the sitemap filter', () => {
+    // If this ever changes, sitemap.ts's `interval '10 days'` must change too.
+    expect(SEO_FRESHNESS_DAYS).toBe(10);
+    expect(isSeoStale(daysAgo(10), now)).toBe(false); // 10 days == still fresh
+    expect(isSeoStale(daysAgo(11), now)).toBe(true);
   });
 });

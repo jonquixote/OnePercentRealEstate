@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { getProperty, getHudBenchmark, getDemographics } from '@/app/actions';
 import { buildDealTitle, buildDealDescription, type DealLite } from '@/lib/deal-meta';
 import { Schema, type RealEstateListingData } from '@oper/primitives';
@@ -32,7 +33,7 @@ import { cached, CACHE_TTL } from '@/lib/cache';
 import { resetRequestStats, getRequestStats } from '@/lib/query-trace';
 import { LazySection } from '@/components/property/LazySection';
 import { withSpan } from '@/lib/tracing';
-import { freshnessOf } from '@/lib/freshness';
+import { freshnessOf, isSeoStale } from '@/lib/freshness';
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const num = new Intl.NumberFormat('en-US');
@@ -62,6 +63,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     if (!property) return { title: 'Property not found | OnePercent' };
     const lite = toDealLite(property);
     const url = `${site}/property/${id}`;
+    // De-index — do not delete — a listing we have not confirmed within the SLO
+    // window. The page still renders 200 for anyone with the link (relabel, never
+    // delete); search engines just stop surfacing it, and re-index the moment the
+    // crawler re-confirms it. Same threshold as the sitemap filter, so the two
+    // never give a crawler contradictory signals. follow:true keeps link equity
+    // flowing to the still-fresh listings this page references.
+    const stale = isSeoStale(property.last_seen_at as string | null | undefined);
     return {
       // absolute: buildDealTitle already ends in "| OnePercent"; without this the
       // root layout's title template would append a second "| OnePercent".
@@ -70,6 +78,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       alternates: { canonical: url },
       openGraph: { title: buildDealTitle(lite), description: buildDealDescription(lite), url, type: 'website' },
       twitter: { card: 'summary_large_image', title: buildDealTitle(lite), description: buildDealDescription(lite) },
+      ...(stale ? { robots: { index: false, follow: true } } : {}),
     };
   } catch {
     return { title: 'Rental property deal | OnePercent' };
@@ -109,14 +118,6 @@ function buildSchemaData(property: Record<string, any>, id: string): RealEstateL
     };
 }
 
-function NotFound() {
-    return (
-        <div className="flex h-screen items-center justify-center" style={{ background: 'var(--ink)' }}>
-            <p className="text-muted-foreground">Property not found.</p>
-        </div>
-    );
-}
-
 export default async function PropertyPage({ params }: { params: Promise<{ id: string }> }) {
   return withSpan('property.id', () => renderPropertyPage({ params }));
 }
@@ -125,7 +126,15 @@ async function renderPropertyPage({ params }: { params: Promise<{ id: string }> 
     resetRequestStats();
     const { id } = await params;
     const property = await getProperty(id);
-    if (!property) return <NotFound />;
+    // A listing that exists in NEITHER the live table nor the archive must
+    // return a real 404 — not the old scaffold-with-200, which trained crawlers
+    // to keep requesting nonexistent URLs forever. getProperty() reads through
+    // listings_archive first, so an archived listing is a row here and still
+    // renders. (Caveat: getProperty() also returns null on a DB error, so a rare
+    // blip during a crawl can 404 a real page; Google retries, and the next
+    // request re-renders it — an acceptable trade against permanently indexing
+    // pages that never existed.)
+    if (!property) notFound();
 
     const zip = property.raw_data?.zip_code;
     const [hudData, demographics, valuation] = await Promise.all([

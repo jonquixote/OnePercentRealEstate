@@ -1,0 +1,15 @@
+[Unit]
+Description=Check sitemap honesty every 6 hours
+
+[Timer]
+# The sitemap's DB-derived routes are cached for 1h and the freshness filter
+# moves on the crawl's cadence (hours), so 6-hourly is proportionate — frequent
+# enough to catch a broken generator within a quarter-day, infrequent enough that
+# a sampled HEAD sweep is negligible load.
+OnBootSec=20min
+OnUnitActiveSec=6h
+Persistent=true
+Unit=oper-sitemap-honesty.service
+
+[Install]
+WantedBy=timers.target
