@@ -29,6 +29,16 @@ DEFAULT_USER_ID = os.getenv("DEFAULT_USER_ID")
 
 CENSUS_BENCHMARK = 'Public_AR_Current'
 
+# Cap on how many addresses one scrape will push through the Nominatim fallback.
+# Census runs first in parallel and is cheap; Nominatim is sequential at ~1.1 s
+# each. Measured over 6 h (2026-07-30): batches of 1-5 addresses resolve 30%,
+# 6-15 resolve 15%, but 16+ resolve just 1% (5 of 271) — those are dense
+# new-construction ZIPs whose addresses are in neither TIGER nor OSM yet. Capping
+# at 15 keeps essentially all the coverage and stops a single such ZIP from
+# burning ~55 s sleeping on hopeless lookups. Over the cap, coords stay NULL and
+# are filled when the source later supplies them or a later sweep resolves them.
+MAX_NOMINATIM_FALLBACK = int(os.getenv("MAX_NOMINATIM_FALLBACK", "15"))
+
 def get_db_connection():
     try:
         return psycopg2.connect(DATABASE_URL)
@@ -114,10 +124,20 @@ def batch_geocode(address_list):
     # address. It was invisible in the logs, which is why several hundred
     # seconds per dense ZIP went unattributed for so long. Count it explicitly
     # so external geocoder traffic is measurable rather than inferred.
-    if fallback_list:
+    #
+    # Cap the batch: past MAX_NOMINATIM_FALLBACK the resolve rate collapses to
+    # ~1% (dense new-construction ZIPs), so the extra sleeps buy nothing. The
+    # skipped rows keep NULL coords and are filled by the source or a later sweep.
+    skipped = 0
+    if len(fallback_list) > MAX_NOMINATIM_FALLBACK:
+        skipped = len(fallback_list) - MAX_NOMINATIM_FALLBACK
+        fallback_list = fallback_list[:MAX_NOMINATIM_FALLBACK]
+
+    if fallback_list or skipped:
         print(f"Geocode: {len(results)} via Census, "
               f"{len(fallback_list)} to Nominatim fallback "
-              f"(sequential, ~{len(fallback_list) * 1.1:.0f}s)")
+              f"(sequential, ~{len(fallback_list) * 1.1:.0f}s)"
+              f"{f', {skipped} skipped over cap' if skipped else ''}")
 
     nominatim_ok = 0
     for idx, addr in fallback_list:
