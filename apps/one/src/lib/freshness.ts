@@ -35,6 +35,27 @@ const UNKNOWN: Freshness = {
   label: 'Unconfirmed — last check unknown',
 };
 
+/**
+ * The single freshness threshold that governs SEO surfaces — the sitemap filter
+ * and the property page's robots meta. It is the 10-day SLO window (the reaper's
+ * STALE_AFTER_DAYS), so a listing is advertised and indexable exactly while it is
+ * still "active" by the crawler's own definition. Both surfaces MUST use this one
+ * number: if they disagreed, the sitemap would advertise a URL the page then tags
+ * `noindex`, which is a contradictory signal to a crawler.
+ *
+ * The sitemap query is SQL and cannot import this, so it hard-codes `interval
+ * '10 days'` with a comment pointing back here — keep the two in step.
+ */
+export const SEO_FRESHNESS_DAYS = 10;
+
+/** True when a listing is too stale to advertise/index (or its age is unknown). */
+export function isSeoStale(
+  lastSeenAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  return freshnessOf(lastSeenAt, now).days > SEO_FRESHNESS_DAYS;
+}
+
 export function freshnessOf(
   lastSeenAt: Date | string | null | undefined,
   now: Date = new Date(),

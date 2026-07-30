@@ -93,10 +93,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
                 priority: 0.8,
             }));
 
+        // Advertise only listings we can stand behind: confirmed within the
+        // 10-day SLO window. This '10 days' MUST equal SEO_FRESHNESS_DAYS in
+        // @/lib/freshness — the property page tags anything older `noindex`, and
+        // if the two drifted the sitemap would advertise URLs the page de-indexes.
+        // Aligned with the reaper (STALE_AFTER_DAYS=10),
+        // which already demotes anything unconfirmed for 10 days to 'stale' — so
+        // this is mostly belt-and-suspenders, but it holds the line if the reaper
+        // lags a tick, and it keeps the sitemap honest independent of status.
+        // The cutoff sits well above the ~4-day ZIP sweep, so no listing is
+        // excluded merely because the crawler has not reached it yet.
         const propRows = await query<{ id: string; rent_price_ratio: number | null }>(
             `SELECT id, rent_price_ratio FROM listings
              WHERE listing_status NOT IN ('sold','stale','rental_misfiled')
                AND listing_type = 'for_sale'
+               AND last_seen_at > now() - interval '10 days'
              ORDER BY (rent_price_ratio IS NOT NULL) DESC,
                       rent_price_ratio DESC NULLS LAST,
                       last_seen_at DESC

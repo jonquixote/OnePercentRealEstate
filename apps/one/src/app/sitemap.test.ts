@@ -61,6 +61,19 @@ describe('sitemap (single flat file)', () => {
         expect(lo?.priority).toBe(0.6);
     });
 
+    it('advertises only listings confirmed within the 10-day SLO window', async () => {
+        // The freshness cutoff must live in the PROPERTY query (2nd call) and not
+        // in the MARKET query (1st) — a ZIP market page is valid regardless of any
+        // individual listing's freshness.
+        mockQueries([{ zip_code: '77002' }], [{ id: 'p1', rent_price_ratio: 1.2 }]);
+        const { default: sitemap } = await import('./sitemap');
+        await sitemap();
+        const marketSql = String(mockQuery.mock.calls[0][0]);
+        const propertySql = String(mockQuery.mock.calls[1][0]);
+        expect(propertySql).toMatch(/last_seen_at\s*>\s*now\(\)\s*-\s*interval\s*'10 days'/);
+        expect(marketSql).not.toMatch(/last_seen_at/);
+    });
+
     it('degrades to core + index routes when the DB is down (no throw)', async () => {
         mockQuery.mockRejectedValue(new Error('db down'));
         const { default: sitemap } = await import('./sitemap');
