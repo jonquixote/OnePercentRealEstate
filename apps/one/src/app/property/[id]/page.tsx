@@ -60,7 +60,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const site = process.env.NEXT_PUBLIC_SITE_URL || 'https://one.octavo.press';
   try {
     const property = await getProperty(id);
-    if (!property) return { title: 'Property not found | OnePercent' };
+    // A missing listing must be noindex explicitly. notFound() below renders the
+    // not-found UI, and Next injects its own noindex when that fires mid-stream —
+    // but without this the root layout's default `index, follow` also renders,
+    // leaving two contradictory robots tags on the page. Set it here so the
+    // missing page carries a single, unambiguous noindex.
+    if (!property) return { title: 'Property not found | OnePercent', robots: { index: false, follow: false } };
     const lite = toDealLite(property);
     const url = `${site}/property/${id}`;
     // De-index — do not delete — a listing we have not confirmed within the SLO

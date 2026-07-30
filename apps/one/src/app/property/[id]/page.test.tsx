@@ -75,4 +75,11 @@ describe('property metadata robots', () => {
     const meta = await generateMetadata({ params: Promise.resolve({ id: '8' }) });
     expect(meta.robots).toBeUndefined();
   });
+
+  it('de-indexes a missing listing so the root default index tag cannot leak', async () => {
+    h.getProperty.mockResolvedValue(null);
+    const { generateMetadata } = await import('./page');
+    const meta = await generateMetadata({ params: Promise.resolve({ id: '99999999' }) });
+    expect(meta.robots).toEqual({ index: false, follow: false });
+  });
 });
