@@ -37,9 +37,24 @@ echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub
   > /etc/apt/sources.list.d/pgdg.list
 apt-get update -qq
 apt-get install -y postgresql-16 postgresql-16-postgis-3 libpq-dev
-# Don't auto-start — we'll cut over manually
-systemctl disable postgresql 2>/dev/null || true
+# Don't auto-start — oper-postgres.service owns this PGDATA. Leaving the Debian
+# cluster unit enabled means TWO units competing for /var/lib/postgresql/16/main.
+systemctl disable --now postgresql postgresql@16-main 2>/dev/null || true
 systemctl stop postgresql 2>/dev/null || true
+
+# Performance tuning. Without this Postgres runs on stock defaults
+# (shared_buffers 128MB, work_mem 4MB, random_page_cost 4.0 — a spinning-disk
+# assumption), which on this workload is materially slower and makes the planner
+# seq-scan an 11GB listings table. It also enables pg_stat_statements, which
+# ops/monitoring/db-load-budget.sh REQUIRES — without it that probe just prints
+# "query failed" and the one signal that has repeatedly caught slow-query
+# regressions is silently dead.
+#
+# Values assume ~23GB RAM / 12 vCPU; re-derive shared_buffers (~25% RAM) and
+# effective_cache_size (~75%) if the box differs.
+install -m644 -o postgres -g postgres "${PROJECT_ROOT}/ops/db/postgresql-tuning.conf" \
+  /etc/postgresql/16/main/conf.d/10-oper-tuning.conf
+echo "  → Postgres tuning installed (restart required to take effect)"
 
 # ── Step 2: Install Redis ────────────────────────────────────────────
 echo "--- [2/7] Installing Redis ---"
@@ -59,6 +74,14 @@ else
 fi
 # Bind to localhost only
 sed -i 's/^bind .*/bind 127.0.0.1 ::1/' /etc/redis/redis.conf
+
+# oper-redis.service runs redis in the FOREGROUND. Ubuntu's packaged redis.conf
+# ships `daemonize yes`, so redis forked, the parent exited 0, and systemd
+# recorded the unit as cleanly "inactive (dead)" 25ms after start — a silent
+# no-op that looks like success. Force foreground + systemd notification.
+sed -i 's/^daemonize .*/daemonize no/' /etc/redis/redis.conf
+grep -q '^daemonize ' /etc/redis/redis.conf || echo 'daemonize no' >> /etc/redis/redis.conf
+sed -i 's/^supervised .*/supervised systemd/' /etc/redis/redis.conf
 
 # ── Step 3: Install Node.js 22 LTS ──────────────────────────────────
 echo "--- [3/7] Installing Node.js 22 ---"
@@ -83,12 +106,53 @@ fi
 
 # ── Step 5: Install pg_tileserv ──────────────────────────────────────
 echo "--- [5/7] Installing pg_tileserv ---"
+# Download from upstream. This used to `docker cp` the binary out of a running
+# infrastructure-pg_tileserv-1 container — which only worked while the ORIGINAL
+# Docker stack still existed on the box. Rebuilding on a fresh server (2026-07-31)
+# there is no container and no Docker, so that step could never succeed and the
+# installer silently produced a host with no tile server.
+# Upstream (CrunchyData) publishes NO versioned release assets on GitHub — only
+# a rolling `_latest_` archive on S3. Installing that unverified, as root, in an
+# unattended installer is a supply-chain hole: whatever S3 serves that day gets
+# mode 755 in /usr/local/bin.
+#
+# Since we cannot pin a version URL, we pin the CONTENT and fail closed. If the
+# checksum does not match, the install ABORTS rather than trusting a changed
+# artifact. When upstream legitimately publishes a new build this will trip on
+# purpose — verify the new archive by hand, then update PGT_SHA256 below.
+PGT_URL="https://postgisftw.s3.amazonaws.com/pg_tileserv_latest_linux.zip"
+# Verified 2026-07-31 (upstream reported v1.0.11).
+PGT_SHA256="38f95ab9fac1fe8d445e7caaa8547425ac3a720e1e157b1730e19212595d8a3e"
+
 if [[ ! -f /usr/local/bin/pg_tileserv ]]; then
-  echo "Extracting pg_tileserv binary from running Docker container..."
-  docker cp infrastructure-pg_tileserv-1:/usr/bin/pg_tileserv /usr/local/bin/pg_tileserv || \
-  docker cp infrastructure-pg_tileserv-1:/usr/local/bin/pg_tileserv /usr/local/bin/pg_tileserv || \
-  docker cp infrastructure-pg_tileserv-1:/pg_tileserv /usr/local/bin/pg_tileserv
-  chmod +x /usr/local/bin/pg_tileserv
+  echo "Downloading pg_tileserv..."
+  apt-get install -y unzip
+  _pgt_tmp="$(mktemp -d)"
+  curl -sSL --proto '=https' --tlsv1.2 -m 120 -o "${_pgt_tmp}/pgt.zip" "$PGT_URL"
+
+  _pgt_got="$(sha256sum "${_pgt_tmp}/pgt.zip" | awk '{print $1}')"
+  if [[ "$_pgt_got" != "$PGT_SHA256" ]]; then
+    rm -rf "${_pgt_tmp}"
+    cat >&2 <<EOF
+ERROR: pg_tileserv checksum mismatch — REFUSING to install.
+  expected: $PGT_SHA256
+  got:      $_pgt_got
+Upstream ships a rolling "latest" archive, so this trips whenever they publish
+a new build. Verify the new archive independently, then update PGT_SHA256 in
+$(basename "$0"). Do not "fix" this by deleting the check.
+EOF
+    exit 1
+  fi
+
+  unzip -oq "${_pgt_tmp}/pgt.zip" -d "${_pgt_tmp}/pgt"
+  find "${_pgt_tmp}/pgt" -name pg_tileserv -type f \
+    -exec install -m755 {} /usr/local/bin/pg_tileserv \;
+  # Bundled web assets — without them pg_tileserv answers 500 on every page.
+  mkdir -p /usr/local/share/pg_tileserv
+  [[ -d "${_pgt_tmp}/pgt/assets" ]] && cp -r "${_pgt_tmp}/pgt/assets" /usr/local/share/pg_tileserv/
+  rm -rf "${_pgt_tmp}"
+  /usr/local/bin/pg_tileserv --version || {
+    echo "ERROR: pg_tileserv install failed" >&2; exit 1; }
 fi
 
 # ── Step 6: Generate /etc/oper.env ───────────────────────────────────

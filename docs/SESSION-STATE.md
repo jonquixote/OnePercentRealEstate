@@ -1,3 +1,42 @@
+# Session State — 2026-07-31 (SERVER MIGRATED)
+
+## ⚠️ Prod moved to `209.94.60.174`
+
+The old box `209.50.61.64` was **shut down on an expired UpCloud trial** and is
+**unrecoverable** — its disk and backups survive in that account, but every write
+returns `TRIAL_PERIOD_OVER (403)`, so it cannot be started, cloned or exported.
+`upctl` is still authenticated to that dead account and **cannot manage the new
+box** (different account).
+
+| | old | new |
+|---|---|---|
+| host | `209.50.61.64` | **`209.94.60.174`** (`one-percent-prod-main`) |
+| cores / RAM / disk | 2 / 16 GB / 150 GB | **12 / 23 GB / 1008 GB** |
+| OS | Ubuntu 24.04 | **Ubuntu 26.04** |
+
+```
+ssh -i ~/.ssh/id_onepercent root@209.94.60.174
+```
+
+Recovery came from **Cloudflare R2**, not UpCloud: `postgres-2026-07-30.dump`
+restored clean (91 tables, 1.42M listings, 3.52M history, 678k rentals, 204k
+sold). Max data loss ≈ 24 h of crawl, which the sweep re-derives.
+
+**One IP now, deliberately** — capacity was traded for egress. That does not
+speed the crawl: the limit is the source's per-IP tolerance (blocks at
+concurrency 3) and the 10 s pacing gate, so `WORKER_CONCURRENCY` stays at **2**.
+The extra cores help Postgres, ML and restores.
+
+**Provisioning traps, all now fixed in the repo** (PR #95): `pg_tileserv` was
+fetched by `docker cp` from a container that no longer exists; Postgres came up
+on stock defaults because the old tuning lived only in its `postgresql.conf`;
+Redis shipped `daemonize yes` and silently exited; two units fought over one
+`PGDATA`; nginx lacked the `$connection_upgrade` map. See
+`ops/db/postgresql-tuning.conf` and [[postgres-cgroup-memory]] — **size
+`shared_buffers` against the unit's cgroup `MemoryHigh`, not physical RAM.**
+
+---
+
 # Session State — 2026-07-30
 
 Written for continuity across context compaction. Live system state, open work,

@@ -14,8 +14,14 @@ RestartSec=5
 TimeoutStartSec=120
 LimitNOFILE=65536
 OOMScoreAdjust=-900
-MemoryHigh=4G
-MemoryMax=6G
+# Sized for the 23GB box (2026-07-31). These were 4G/6G from the old 16GB
+# server. shared_buffers is INSIDE this cgroup, so a shared_buffers at or
+# near MemoryMax puts the cgroup in permanent reclaim: existing sessions
+# keep working while NEW backends stall in the auth handshake, which reads
+# as 'Connection terminated due to connection timeout' with an idle CPU.
+# Keep MemoryHigh comfortably above shared_buffers + work_mem headroom.
+MemoryHigh=12G
+MemoryMax=16G
 
 [Install]
 WantedBy=multi-user.target

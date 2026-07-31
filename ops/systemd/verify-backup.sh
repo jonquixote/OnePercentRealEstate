@@ -77,7 +77,11 @@ if not objs:
 newest = max(objs, key=lambda o: o["ModTime"])
 mt = datetime.datetime.fromisoformat(newest["ModTime"].replace("Z","+00:00"))
 age_h = (datetime.datetime.now(datetime.timezone.utc) - mt).total_seconds()/3600
-print(f"{age_h:.1f} {newest[\"Size\"]/1048576:.0f}")
+size_mb = newest["Size"] / 1048576
+# Compute size_mb ABOVE the f-string: nesting escaped double quotes inside an
+# f-string inside a single-quoted shell -c is a syntax error, and it silently
+# turned this whole assertion into "0 MB" -> a false FAIL on a healthy backup.
+print("%.1f %.0f" % (age_h, size_mb))
 ')"
 
 echo "  R2 newest: ${R2_MB} MB, ${R2_AGE_H} h old"
@@ -92,7 +96,7 @@ fi
 
 # Size budget: the bucket must stay small enough to keep, and a sync that
 # stopped pruning is exactly how it reached 80+ GB against a 10 GB budget.
-R2_TOTAL_GB="$(rclone size "$R2_REMOTE" --json 2>/dev/null | python3 -c 'import json,sys; print(f"{json.load(sys.stdin)["bytes"]/1073741824:.1f}")' 2>/dev/null || echo 0)"
+R2_TOTAL_GB="$(rclone size "$R2_REMOTE" --json 2>/dev/null | python3 -c 'import json,sys; print("%.1f" % (json.load(sys.stdin)["bytes"]/1073741824))' 2>/dev/null || echo 0)"
 R2_BUDGET_GB="${R2_BUDGET_GB:-10}"
 echo "  R2 total: ${R2_TOTAL_GB} GB (budget ${R2_BUDGET_GB} GB)"
 if awk "BEGIN{exit !($R2_TOTAL_GB > $R2_BUDGET_GB)}"; then
