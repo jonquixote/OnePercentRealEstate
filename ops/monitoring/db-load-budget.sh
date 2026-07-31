@@ -38,10 +38,26 @@ DB="${DATABASE_URL_DIRECT:-${DATABASE_URL:-}}"
 STATE="/var/lib/oper-db-budget/prev.tsv"
 mkdir -p "$(dirname "$STATE")"
 
+# Scope to THIS database only.
+#
+# pg_stat_statements is cluster-wide, so it also records work done in the
+# restore drill's scratch database (ops/systemd/verify-backup.sh restores a full
+# dump into `oper_restore_drill`, then drops it). That work is expected
+# maintenance, not production load — but it is large, and once the scratch DB is
+# dropped its rows have a dangling dbid, so they cannot even be attributed.
+#
+# On 2026-07-31 this fired "one query used 47.9% of DB time (449s)" naming
+# `CREATE EXTENSION postgis` — which is simply what pg_restore runs. Left alone,
+# every weekly drill would raise a false alarm, and a probe that cries wolf on a
+# schedule is how a real alert gets ignored.
+#
+# `dbid = (SELECT oid ... current_database())` keeps both the drill's DB and any
+# dropped database out of the budget.
 CUR="$(psql "$DB" -tA -F$'\t' -c "
   SELECT queryid, round(total_exec_time)::bigint, left(regexp_replace(query, '\s+', ' ', 'g'), 120)
   FROM pg_stat_statements
-  WHERE query NOT ILIKE '%pg_stat_statements%' AND queryid IS NOT NULL;" 2>/dev/null)"
+  WHERE query NOT ILIKE '%pg_stat_statements%' AND queryid IS NOT NULL
+    AND dbid = (SELECT oid FROM pg_database WHERE datname = current_database());" 2>/dev/null)"
 
 if [[ -z "$CUR" ]]; then
   echo "[db-load-budget] query failed" >&2; exit 0
