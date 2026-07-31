@@ -111,15 +111,45 @@ echo "--- [5/7] Installing pg_tileserv ---"
 # Docker stack still existed on the box. Rebuilding on a fresh server (2026-07-31)
 # there is no container and no Docker, so that step could never succeed and the
 # installer silently produced a host with no tile server.
+# Upstream (CrunchyData) publishes NO versioned release assets on GitHub — only
+# a rolling `_latest_` archive on S3. Installing that unverified, as root, in an
+# unattended installer is a supply-chain hole: whatever S3 serves that day gets
+# mode 755 in /usr/local/bin.
+#
+# Since we cannot pin a version URL, we pin the CONTENT and fail closed. If the
+# checksum does not match, the install ABORTS rather than trusting a changed
+# artifact. When upstream legitimately publishes a new build this will trip on
+# purpose — verify the new archive by hand, then update PGT_SHA256 below.
+PGT_URL="https://postgisftw.s3.amazonaws.com/pg_tileserv_latest_linux.zip"
+# Verified 2026-07-31 (upstream reported v1.0.11).
+PGT_SHA256="38f95ab9fac1fe8d445e7caaa8547425ac3a720e1e157b1730e19212595d8a3e"
+
 if [[ ! -f /usr/local/bin/pg_tileserv ]]; then
   echo "Downloading pg_tileserv..."
   apt-get install -y unzip
   _pgt_tmp="$(mktemp -d)"
-  curl -sSL -m 120 -o "${_pgt_tmp}/pgt.zip" \
-    https://postgisftw.s3.amazonaws.com/pg_tileserv_latest_linux.zip
+  curl -sSL --proto '=https' --tlsv1.2 -m 120 -o "${_pgt_tmp}/pgt.zip" "$PGT_URL"
+
+  _pgt_got="$(sha256sum "${_pgt_tmp}/pgt.zip" | awk '{print $1}')"
+  if [[ "$_pgt_got" != "$PGT_SHA256" ]]; then
+    rm -rf "${_pgt_tmp}"
+    cat >&2 <<EOF
+ERROR: pg_tileserv checksum mismatch — REFUSING to install.
+  expected: $PGT_SHA256
+  got:      $_pgt_got
+Upstream ships a rolling "latest" archive, so this trips whenever they publish
+a new build. Verify the new archive independently, then update PGT_SHA256 in
+$(basename "$0"). Do not "fix" this by deleting the check.
+EOF
+    exit 1
+  fi
+
   unzip -oq "${_pgt_tmp}/pgt.zip" -d "${_pgt_tmp}/pgt"
   find "${_pgt_tmp}/pgt" -name pg_tileserv -type f \
     -exec install -m755 {} /usr/local/bin/pg_tileserv \;
+  # Bundled web assets — without them pg_tileserv answers 500 on every page.
+  mkdir -p /usr/local/share/pg_tileserv
+  [[ -d "${_pgt_tmp}/pgt/assets" ]] && cp -r "${_pgt_tmp}/pgt/assets" /usr/local/share/pg_tileserv/
   rm -rf "${_pgt_tmp}"
   /usr/local/bin/pg_tileserv --version || {
     echo "ERROR: pg_tileserv install failed" >&2; exit 1; }
