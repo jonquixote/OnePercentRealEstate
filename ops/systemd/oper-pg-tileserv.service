@@ -9,6 +9,9 @@ User=root
 EnvironmentFile=/etc/oper.env
 EnvironmentFile=-/etc/oper-role-tileserv.env
 WorkingDirectory=/usr/local/share/pg_tileserv
+# Loopback only — nginx proxies /tiles to it. pg_tileserv defaults to all
+# interfaces, exposing an unauthenticated tile API directly (found 2026-07-31).
+Environment=TS_HTTPHOST=127.0.0.1
 ExecStart=/usr/local/bin/pg_tileserv
 Restart=on-failure
 RestartSec=5

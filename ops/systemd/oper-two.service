@@ -9,6 +9,11 @@ User=root
 WorkingDirectory=/opt/onepercent/apps/two/.next/standalone
 EnvironmentFile=/etc/oper.env
 EnvironmentFile=-/etc/oper-role-app.env
+# Bind to loopback only — nginx is the sole public entrypoint and proxies to
+# 127.0.0.1. Next's standalone server defaults to 0.0.0.0, which exposed the
+# app directly on :PORT (found 2026-07-31), bypassing nginx's TLS, rate limits
+# and the x-geo-* overwrite that stops metro spoofing.
+Environment=HOSTNAME=127.0.0.1
 Environment=PORT=3002
 ExecStart=/usr/bin/node apps/two/server.js
 Restart=on-failure
