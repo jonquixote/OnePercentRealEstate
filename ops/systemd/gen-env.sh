@@ -172,6 +172,23 @@ $(grep -E '^[A-Z][A-Z0-9_]*=' "$SRC" | grep -vE '^(DATABASE_URL|DATABASE_URL_DIR
 EOF
 
 chmod 600 "$DST"
+
+# --- Preflight: secrets with NO production fallback ---------------------------
+# These crash the service that needs them rather than degrading. On the
+# 2026-07-31 rebuild, a missing UNSUBSCRIBE_SECRET crash-looped the crawl worker
+# 13 times before anyone looked, and a missing ADMIN_API_KEY made the
+# stats-refresh and perf-flush timers fail with an opaque HTTP 501. Neither said
+# what was wrong at the point of deploy. Say it here, once, loudly.
+_missing=()
+for _k in POSTGRES_PASSWORD REDIS_PASSWORD AUTH_SECRET UNSUBSCRIBE_SECRET ADMIN_API_KEY; do
+  grep -qE "^${_k}=.+" "$DST" || _missing+=("$_k")
+done
+if (( ${#_missing[@]} )); then
+  echo "WARN: required secrets missing from .env — dependent units WILL fail:" >&2
+  for _k in "${_missing[@]}"; do
+    echo "         $_k   (generate: openssl rand -hex 32)" >&2
+  done
+fi
 echo "Generated $DST ($(wc -l < "$DST") lines)"
 
 # --- Per-service DB role env files (A3, backend-db-hardening) -------------
