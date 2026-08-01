@@ -59,6 +59,13 @@ echo "  → Postgres tuning installed (restart required to take effect)"
 # ── Step 2: Install Redis ────────────────────────────────────────────
 echo "--- [2/7] Installing Redis ---"
 apt-get install -y redis-server
+
+# age — encrypts the secrets bundle in backup-postgres.sh. The recipient PUBLIC
+# key is committed (ops/db/backup-age-recipient.pub); the private key is held
+# off-box by the operator and is the only thing that can decrypt. Installing the
+# pub key here lets the daily backup encrypt on a fresh box with no manual step.
+apt-get install -y age
+install -m644 "${PROJECT_ROOT}/ops/db/backup-age-recipient.pub" /etc/oper-backup-age.pub
 # Don't auto-start
 systemctl disable redis-server 2>/dev/null || true
 systemctl stop redis-server 2>/dev/null || true

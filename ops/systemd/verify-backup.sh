@@ -67,31 +67,47 @@ if ! rclone lsd "$R2_REMOTE" >/dev/null 2>&1; then
   exit 5
 fi
 
-# Newest object: modtime + size, whitespace-separated.
-read -r R2_AGE_H R2_MB <<<"$(rclone lsjson "$R2_REMOTE" --files-only 2>/dev/null | python3 -c '
+# Newest DB dump AND newest config bundle, evaluated SEPARATELY. The bucket now
+# holds two kinds of object per day (postgres-*.dump and config-*.tar.age); the
+# config bundle is a few KB, so a naive "newest object" check would compare it
+# against the 200MB dump floor and FALSE-FAIL. Filter by name prefix.
+r2_newest() {  # $1 = filename substring; prints "AGE_H SIZE_MB", or "99999 0" if none
+  rclone lsjson "$R2_REMOTE" --files-only 2>/dev/null | python3 -c '
 import json,sys,datetime
-try: objs = json.load(sys.stdin)
+sub = sys.argv[1]
+try: objs = [o for o in json.load(sys.stdin) if sub in o["Name"]]
 except Exception: objs = []
 if not objs:
     print("99999 0"); sys.exit()
 newest = max(objs, key=lambda o: o["ModTime"])
 mt = datetime.datetime.fromisoformat(newest["ModTime"].replace("Z","+00:00"))
 age_h = (datetime.datetime.now(datetime.timezone.utc) - mt).total_seconds()/3600
-size_mb = newest["Size"] / 1048576
-# Compute size_mb ABOVE the f-string: nesting escaped double quotes inside an
-# f-string inside a single-quoted shell -c is a syntax error, and it silently
-# turned this whole assertion into "0 MB" -> a false FAIL on a healthy backup.
-print("%.1f %.0f" % (age_h, size_mb))
-')"
+print("%.1f %.0f" % (age_h, newest["Size"]/1048576))
+' "$1"
+}
 
-echo "  R2 newest: ${R2_MB} MB, ${R2_AGE_H} h old"
+read -r R2_AGE_H R2_MB <<<"$(r2_newest 'postgres-')"
+echo "  R2 newest dump: ${R2_MB} MB, ${R2_AGE_H} h old"
 if [ "${R2_MB:-0}" -lt "$R2_MIN_MB" ]; then
-  echo "FAIL: newest R2 object is ${R2_MB} MB (< ${R2_MIN_MB} MB) — not a real dump" >&2
+  echo "FAIL: newest R2 dump is ${R2_MB} MB (< ${R2_MIN_MB} MB) — not a real dump" >&2
   exit 6
 fi
 if awk "BEGIN{exit !(${R2_AGE_H:-99999} > $R2_MAX_AGE_H)}"; then
-  echo "FAIL: newest R2 backup is ${R2_AGE_H} h old (> ${R2_MAX_AGE_H} h) — off-box copy is stale" >&2
+  echo "FAIL: newest R2 dump is ${R2_AGE_H} h old (> ${R2_MAX_AGE_H} h) — off-box copy is stale" >&2
   exit 7
+fi
+
+# The encrypted secrets bundle must also be present and recent — it is the half
+# that made losing the old box expensive, and a dump alone cannot rebuild the
+# host. Its size is not asserted (a few KB is fine); only that it exists and is
+# fresh. R2_REQUIRE_CONFIG=0 turns this off for a DB-only deployment.
+if [ "${R2_REQUIRE_CONFIG:-1}" = "1" ]; then
+  read -r CFG_AGE_H CFG_MB <<<"$(r2_newest 'config-')"
+  echo "  R2 newest config bundle: ${CFG_MB} MB, ${CFG_AGE_H} h old"
+  if awk "BEGIN{exit !(${CFG_AGE_H:-99999} > $R2_MAX_AGE_H)}"; then
+    echo "FAIL: encrypted config bundle is ${CFG_AGE_H} h old (> ${R2_MAX_AGE_H} h) or absent — secrets not backed up off-box" >&2
+    exit 9
+  fi
 fi
 
 # Size budget: the bucket must stay small enough to keep, and a sync that

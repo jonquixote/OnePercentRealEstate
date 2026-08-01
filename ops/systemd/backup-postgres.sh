@@ -74,6 +74,46 @@ if [ ! -s "$DUMP" ]; then
   exit 1
 fi
 
+# --- Encrypted config/secrets bundle ---------------------------------------
+#
+# The DB dump does NOT contain the box's secrets. Losing the old server on
+# 2026-07-31 proved the cost: AUTH_SECRET, UNSUBSCRIBE_SECRET, ADMIN_API_KEY,
+# every third-party API key and the Postgres/Redis passwords all had to be
+# regenerated because they lived only in /opt/onepercent/.env. This bundles the
+# un-git-tracked secrets alongside the dump so a full box loss is fully
+# recoverable.
+#
+# ENCRYPTED WITH age, PUBLIC KEY ONLY on the box. The box can encrypt but CANNOT
+# decrypt — the private key is held off-box by the operator. So a compromised
+# box, or a leaked R2 bucket/token, still cannot read the secrets. If the public
+# key is missing the whole backup FAILS rather than shipping plaintext secrets.
+AGE_PUB_FILE="${AGE_PUB_FILE:-/etc/oper-backup-age.pub}"
+CONFIG_BUNDLE="$BACKUP_DIR/config-$DATE.tar.age"
+# Files that are secrets AND not in git. Everything else (unit files, nginx,
+# postgres tuning) is versioned in the repo and rebuilt by install.sh.
+CONFIG_SRC=(/opt/onepercent/.env /root/.r2creds /etc/oper-backup-age.pub)
+
+if [ ! -s "$AGE_PUB_FILE" ]; then
+  echo "FAIL: $AGE_PUB_FILE missing — refusing to back up secrets unencrypted" >&2
+  exit 1
+fi
+if ! command -v age >/dev/null 2>&1; then
+  echo "FAIL: age not installed — cannot encrypt the secrets bundle" >&2
+  exit 1
+fi
+
+# tar only the sources that exist, pipe straight into age (plaintext never
+# touches disk). Recipient = the public key; only the off-box private key opens it.
+_existing=(); for f in "${CONFIG_SRC[@]}"; do [ -e "$f" ] && _existing+=("$f"); done
+tar -czf - "${_existing[@]}" 2>/dev/null | age -r "$(cat "$AGE_PUB_FILE")" -o "$CONFIG_BUNDLE"
+if [ ! -s "$CONFIG_BUNDLE" ]; then
+  echo "FAIL: config bundle is empty; refusing to sync" >&2
+  exit 1
+fi
+echo "Config bundle: $(du -h "$CONFIG_BUNDLE" | cut -f1) encrypted ($(printf '%s ' "${_existing[@]##*/}"))"
+# Same local rotation as the dumps.
+find "$BACKUP_DIR" -maxdepth 1 -name 'config-*.tar.age' -mtime +"$DAILY_KEEP" -delete
+
 # Daily rotation.
 find "$BACKUP_DIR" -maxdepth 1 -name 'postgres-*.dump' -mtime +"$DAILY_KEEP" -delete
 
@@ -94,12 +134,19 @@ if command -v rclone >/dev/null 2>&1; then
   if rclone lsd "$R2_REMOTE" >/dev/null 2>&1; then
     STAGE="$BACKUP_DIR/.r2-stage"
     rm -rf "$STAGE"; mkdir -p "$STAGE"
+    # Stage the newest R2_KEEP of BOTH the DB dump and the encrypted config
+    # bundle. The bucket ends up holding exactly these files, so the newest of
+    # each is present and older ones are pruned — and because rclone sync
+    # --delete-after uploads before deleting, the current pair can never be the
+    # thing that gets removed ("does not delete itself").
     # Hardlink (same filesystem) so staging costs no extra disk; copy if not.
-    for f in $(ls -t "$BACKUP_DIR"/postgres-*.dump 2>/dev/null | head -n "$R2_KEEP"); do
-      ln "$f" "$STAGE/$(basename "$f")" 2>/dev/null || cp -p "$f" "$STAGE/"
+    for pat in 'postgres-*.dump' 'config-*.tar.age'; do
+      for f in $(ls -t "$BACKUP_DIR"/$pat 2>/dev/null | head -n "$R2_KEEP"); do
+        ln "$f" "$STAGE/$(basename "$f")" 2>/dev/null || cp -p "$f" "$STAGE/"
+      done
     done
 
-    echo "Mirroring newest $R2_KEEP dump(s) to R2 ($R2_REMOTE)"
+    echo "Mirroring newest $R2_KEEP dump(s) + config bundle(s) to R2 ($R2_REMOTE)"
     rclone sync "$STAGE" "$R2_REMOTE" \
       --delete-after --low-level-retries 3 --retries 5
     rm -rf "$STAGE"
