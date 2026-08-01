@@ -12,7 +12,21 @@
 #      API does not accept.
 #   3. `upctl storage backup create` takes --title, not --description.
 # It failed nightly and correctly alerted ("failed to discover boot disk").
-# Kept for reference only; oper-snapshot.timer is disabled.
+# Kept for reference only.
+#
+# 2026-07-31: the oper-snapshot.service/.timer unit files were DELETED from this
+# repo. On the rebuild they were still shipped, and a blanket
+# `for t in /etc/systemd/system/oper-*.timer; systemctl enable --now` switched
+# this one back on despite the DO-NOT-ENABLE header above — it then failed daily
+# and raised a false alert. A deprecated unit that still ships is one wildcard
+# away from running, so the units are gone rather than merely disabled.
+#
+# NOTE the gap this leaves: R2 backs up the DATABASE only. Full-disk state --
+# most importantly /opt/onepercent/.env -- is NOT covered. That is exactly why
+# AUTH_SECRET, UNSUBSCRIBE_SECRET, ADMIN_API_KEY and the Postgres/Redis
+# passwords all had to be regenerated when the old server was lost. Systemd
+# units, nginx configs and the Postgres tuning are now in git; keep `.env` in a
+# password manager, or configure provider-side simple backups on the new account.
 # =============================================================================
 # Daily UpCloud snapshot + retention prune.
 # Creates a snapshot of the prod boot disk, then prunes old oper-auto-* backups
