@@ -1,5 +1,8 @@
 # age recipient (PUBLIC key) for the encrypted secrets bundle in backup-postgres.sh.
 # Safe to commit: this only ENCRYPTS. The matching private key is held off-box by
 # the operator and is the only thing that can decrypt the config-*.tar.age files.
-# Generated 2026-08-01 on the migration to 209.94.60.174.
-age12s78tw0ng8xtjdam5fwj6nk8e5nq5r5394mkdwzsxw4lyn6j2ctqv3vygx
+#
+# ROTATED 2026-08-01: the first keypair's PRIVATE key was pasted into a chat
+# transcript, which — combined with the R2 credentials also pasted there — would
+# have allowed decryption of the secrets bundle. Rotated rather than kept.
+age1tfl4n3t82kpm0du0vk0ymrch0zmm7fr6glggf8al29uz2nzwlpzs7dqlvz
