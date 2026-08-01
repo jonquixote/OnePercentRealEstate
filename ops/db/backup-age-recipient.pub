@@ -2,7 +2,13 @@
 # Safe to commit: this only ENCRYPTS. The matching private key is held off-box by
 # the operator and is the only thing that can decrypt the config-*.tar.age files.
 #
-# ROTATED 2026-08-01: the first keypair's PRIVATE key was pasted into a chat
-# transcript, which — combined with the R2 credentials also pasted there — would
-# have allowed decryption of the secrets bundle. Rotated rather than kept.
-age1tfl4n3t82kpm0du0vk0ymrch0zmm7fr6glggf8al29uz2nzwlpzs7dqlvz
+# Key #3, 2026-08-01. History, because both prior keys were lost to process errors:
+#   #1 — private key was pasted into a chat transcript (disclosure) -> rotated.
+#   #2 — destroyed on the box before the operator had actually saved it, on an
+#        ambiguous "ok done". Recoverable only because the source secrets still
+#        lived in /opt/onepercent/.env on the running host.
+#
+# RETRIEVAL RULE: never `cat` the private key to a transcribed channel, and never
+# delete it from the box until the operator has DECRYPTED something with their
+# saved copy. "Saved it" is not confirmation; a successful decrypt is.
+age1hhnh6e0h7jqdyqtyx8pl5jmkrfjh3m97ezyfnfgv76yzzrp8fdxs4lz0jv
