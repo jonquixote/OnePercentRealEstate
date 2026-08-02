@@ -1,4 +1,5 @@
 'use client';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { useEffect, useMemo, useState } from 'react';
 
@@ -37,15 +38,8 @@ const num = new Intl.NumberFormat('en-US');
  */
 export function RatioTape({ bins, thresholdPct, clears, total, loading }: RatioTapeProps) {
   const [lit, setLit] = useState(false);
-  const [reduced, setReduced] = useState(false);
+  const reduced = useReducedMotion();
 
-  useEffect(() => {
-    const m = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const on = () => setReduced(m.matches);
-    on();
-    m.addEventListener?.('change', on);
-    return () => m.removeEventListener?.('change', on);
-  }, []);
 
   useEffect(() => {
     if (reduced) {
