@@ -70,3 +70,61 @@ export function shapeSpotlight(row: Record<string, unknown>): Spotlight | null {
     zip: row.zip_code != null ? String(row.zip_code) : '',
   };
 }
+
+// ---------------------------------------------------------------------------
+// Server-side accessors.
+//
+// buildSpotlightQuery/shapeSpotlight above are pure, but EXECUTION lived inside
+// the /api/spotlight route — so a server component had to HTTP-fetch an API
+// route on its own box to get data it could query directly. Lifting execution
+// and caching here lets the route (ZIP pinning) and the hero (first paint)
+// share one code path, one cache, and one definition of "best deal in a metro".
+//
+// NOTE for client files: this module imports `pool`. Import ONLY types from it
+// in a 'use client' file (`import type { TourEntry } …`) or pg is pulled into
+// the browser bundle and the build fails.
+// ---------------------------------------------------------------------------
+import pool from '@/lib/db';
+import { METROS, type Metro } from '@/lib/metros';
+
+const CACHE_MS = 5 * 60 * 1000;
+const cache = new Map<string, { at: number; body: SpotlightEntry }>();
+
+export async function spotlightFor(metro: Metro): Promise<SpotlightEntry> {
+  const hit = cache.get(metro.zip);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.body;
+  try {
+    const { sql, params } = buildSpotlightQuery({ zip: metro.zip, lat: metro.lat, lng: metro.lng });
+    const res = await pool.query(sql, params);
+    const deal = res.rows[0] ? shapeSpotlight(res.rows[0]) : null;
+    const body: SpotlightEntry = { metro: { label: metro.label, zip: metro.zip }, deal };
+    cache.set(metro.zip, { at: Date.now(), body });
+    return body;
+  } catch (err) {
+    // One metro failing must never take down the whole tour.
+    console.error('spotlightFor error:', metro.zip, err);
+    return { metro: { label: metro.label, zip: metro.zip }, deal: null };
+  }
+}
+
+/** A SpotlightEntry narrowed so `deal` is non-null — removes every `deal!`. */
+export type TourEntry = SpotlightEntry & { deal: NonNullable<SpotlightEntry['deal']> };
+
+/**
+ * Every metro with a live line-clearing deal, plus where the visitor's metro
+ * sits in that FILTERED list.
+ *
+ * Two deliberate changes from the old `?all=1` route path:
+ *  1. Promise.all instead of `for (…) await` — a cold tour cost N × latency.
+ *  2. startIndex is computed here against the same array the caller renders.
+ *     The client used to compute it after a second fetch resolved, so the tour
+ *     started on the wrong metro and visibly jumped.
+ */
+export async function getSpotlightTour(geoMetro: Metro): Promise<{
+  entries: TourEntry[];
+  startIndex: number;
+}> {
+  const results = await Promise.all(METROS.map(spotlightFor));
+  const entries = results.filter((e): e is TourEntry => e.deal !== null);
+  return { entries, startIndex: entries.findIndex((e) => e.metro.zip === geoMetro.zip) };
+}

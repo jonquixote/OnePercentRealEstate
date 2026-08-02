@@ -35,21 +35,25 @@ describe('resolveLoc', () => {
   });
 });
 
-describe('GET ?all=1', () => {
-  it('returns one entry per canonical metro, in METROS order', async () => {
+describe('GET — single-metro only', () => {
+  // The `?all=1` batch mode was removed: the metro tour is now rendered
+  // server-side by the hero via getSpotlightTour (see lib/spotlight.test.ts,
+  // which covers the fan-out and startIndex logic). This route is only the
+  // ZIP-pinning path now, so `?all=1` must behave like any other request —
+  // a single entry — rather than silently returning a batch again.
+  it('returns ONE entry, never a batch, even when ?all=1 is passed', async () => {
     const { GET } = await import('./route');
-    const { METROS } = await import('@/lib/metros');
     const req = new NextRequest('http://x/api/spotlight?all=1');
-    const res = await GET(req);
-    const body = await res.json();
-    expect(Array.isArray(body.metros)).toBe(true);
-    expect(body.metros).toHaveLength(METROS.length);
-    expect(body.metros.map((m: { metro: { zip: string } }) => m.metro.zip)).toEqual(
-      METROS.map((m) => m.zip),
-    );
-    for (const entry of body.metros) {
-      expect(entry.metro.label).toBeTruthy();
-      expect('deal' in entry).toBe(true);
-    }
+    const body = await (await GET(req)).json();
+    expect(body.metros).toBeUndefined();
+    expect(body.metro).toBeTruthy();
+    expect('deal' in body).toBe(true);
+  });
+
+  it('resolves a pinned ZIP to its metro', async () => {
+    const { GET } = await import('./route');
+    const req = new NextRequest('http://x/api/spotlight?zip=77002');
+    const body = await (await GET(req)).json();
+    expect(body.metro.zip).toBe('77002');
   });
 });
