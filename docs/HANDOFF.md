@@ -152,6 +152,7 @@ search (opt-in to see it).
 | `oper-image-availability` | hourly | Samples the listing-photo CDN — every photo comes from rdcpix |
 | `oper-crawl-throughput` | hourly | **Confirmations/hour vs what the SLO arithmetically needs** (6h average) |
 | `oper-stream-coverage` | 6 h | Daily production of all three crawl streams; alerts on collapse |
+| `oper-lens-coverage` | 6 h | **Per-buyer-lens underwriting coverage** — rent, sqft and ARV comps, the inputs the home page's claim rests on |
 
 Alerts go to **Telegram** via `ops/monitoring/notify-telegram.sh` (30-min dedup,
 auto-RESOLVED). Credentials already live in `/etc/oper.env`.
