@@ -1,5 +1,5 @@
 import pool from '@/lib/db';
-import { evaluateRules, type Strategy, type Grade } from '@oper/primitives';
+import { evaluateRules, type Strategy, type Grade, type SaleType } from '@oper/primitives';
 import { ruleConfigFromRow } from '@/lib/rule-config';
 
 /**
@@ -76,7 +76,8 @@ export interface LensVerdict {
  */
 const ARV_CTE = `
   WITH subj AS (
-    SELECT id, price, estimated_rent, sqft, property_type, sale_type, zip_code
+    SELECT id, price, estimated_rent, sqft, property_type, sale_type, zip_code,
+           year_built, hoa_fee
       FROM listings WHERE id = $1
   ),
   comps AS (
@@ -162,6 +163,8 @@ export async function underwriteDeal(dealId: string): Promise<LensVerdict[]> {
   const price = Number(listing.price);
   const monthlyRent = Number(listing.estimated_rent);
   const sqft = Number(listing.sqft);
+  const yearBuilt = Number(listing.year_built);
+  const hoaFee = Number(listing.hoa_fee);
   const arv = listing.arv != null ? Number(listing.arv) : null;
   const arvCompCount = listing.arv_comp_count != null ? Number(listing.arv_comp_count) : null;
 
@@ -219,6 +222,14 @@ export async function underwriteDeal(dealId: string): Promise<LensVerdict[]> {
         price,
         monthlyRent,
         sqft: sqft > 0 ? sqft : null,
+        // year_built is populated on 82% of active for-sale listings and
+        // hoa_fee on 30%; both feed the engine's property-quality scoring and
+        // its real-cost model, so passing them earns a better-founded grade.
+        // days_on_market, tax_annual_amount and assessed_value are all
+        // populated on ZERO rows — passing them would add nothing but the
+        // appearance of rigour, so they are deliberately absent.
+        yearBuilt: yearBuilt > 0 ? yearBuilt : null,
+        hoaMonthly: hoaFee > 0 ? hoaFee : null,
         // Only pass an ARV we actually derived. `undefined` lets the engine
         // apply its own not-gradable rule for flip rather than us faking one.
         arv: arv ?? undefined,
@@ -226,7 +237,7 @@ export async function underwriteDeal(dealId: string): Promise<LensVerdict[]> {
       cfg,
       {
         propertyType: (listing.property_type as string) ?? null,
-        saleType: (listing.sale_type as never) ?? null,
+        saleType: (listing.sale_type as SaleType) ?? null,
       },
     );
 
