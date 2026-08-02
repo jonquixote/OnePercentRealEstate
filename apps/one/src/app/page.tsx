@@ -24,7 +24,6 @@ import { WatchSearchButton } from '@/components/WatchSearchButton';
 import { useQueryStates } from 'nuqs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { FirstDealHero } from '@/components/home/FirstDealHero';
 import { HomeHero } from '@/components/home/HomeHero';
 import { FeaturedDeals } from '@/components/home/FeaturedDeals';
 import { useSessionUser } from '@/lib/useSessionUser';
@@ -344,10 +343,6 @@ export default function Dashboard() {
           </div>
         </div>
       </section>
-
-      {/* First-Deal Magic: ten-second deal reveal, placed low on the page so
-          the editorial hero leads and the full tool follows the rail. */}
-      <FirstDealHero />
 
       <footer className="border-t border-line bg-ink">
         <div className="mx-auto max-w-7xl px-6 py-7 lg:px-8">
