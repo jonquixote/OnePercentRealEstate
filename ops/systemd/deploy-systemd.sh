@@ -320,11 +320,25 @@ else
   build_node
   build_ml
   echo "--- Restarting all services ---"
+  # A blanket deploy must not override an operator's explicit `disable`.
+  # oper-n8n and oper-pgbouncer are units for software that is not installed on
+  # this box (both are migration leftovers), and restarting them turned a clean
+  # deploy into one failed unit plus an endless Restart=always loop. `disabled`
+  # and `masked` are deliberate statements — honour them here. Naming a service
+  # explicitly (`deploy-systemd.sh pgbouncer`) still restarts it, because that
+  # IS the operator asking.
+  restart_targets=()
   for u in "${ALL_UNITS[@]}"; do
+    state=$(systemctl is-enabled "$u" 2>/dev/null || echo unknown)
+    if [[ "$state" == "disabled" || "$state" == "masked" ]]; then
+      echo "  Skipping $u (${state})"
+      continue
+    fi
     echo "  Restarting $u..."
     systemctl restart "$u"
+    restart_targets+=("$u")
   done
-  RESTARTED_UNITS=("${ALL_UNITS[@]}")
+  RESTARTED_UNITS=("${restart_targets[@]}")
 fi
 
 # Prove the build wrote fresh output and the units actually restarted, before
