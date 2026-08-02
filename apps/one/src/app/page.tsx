@@ -40,7 +40,7 @@ export default async function Home({
 
   return (
     <div className="min-h-screen bg-ink font-sans text-foreground">
-      <HeroSection stats={stats} priceCuts={priceCuts} medianRent={medianRent} />
+      <HeroSection stats={stats} priceCuts={priceCuts} medianRent={medianRent} strategy={strategy} />
 
       <FeaturedDeals strategy={strategy} rentCalcPending={stats?.rentCalcPending ?? 0} />
       <ReducedRail />

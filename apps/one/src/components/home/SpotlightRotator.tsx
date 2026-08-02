@@ -13,6 +13,13 @@ interface Props {
   startIndex: number;
   /** Server-rendered first frame. */
   children: ReactNode;
+  /**
+   * One server-rendered underwriting verdict per entry, in the same order as
+   * `entries`. These are finished HTML, not data: the underwriting math stays
+   * on the server, and the card and its verdict can never describe two
+   * different properties.
+   */
+  verdicts?: ReactNode[];
 }
 
 /**
@@ -23,7 +30,7 @@ interface Props {
  * starts `index` at 0 and places `startIndex` first in `order`, so "the client
  * has taken over" is index !== 0.
  */
-export function SpotlightRotator({ entries, startIndex, children }: Props) {
+export function SpotlightRotator({ entries, startIndex, children, verdicts }: Props) {
   const reduceMotion = useReducedMotion();
   const rot = useMetroRotation(entries.length, { reduceMotion, startIndex });
   const [pinned, setPinned] = useState<TourEntry | null>(null);
@@ -33,8 +40,13 @@ export function SpotlightRotator({ entries, startIndex, children }: Props) {
 
   if (!tookOver && !pinned && rot.index !== 0 && entries.length > 1) setTookOver(true);
 
-  const current: TourEntry | null =
-    pinned ?? (entries.length ? entries[rot.order[rot.index] % entries.length] : null);
+  const currentIndex = entries.length ? rot.order[rot.index] % entries.length : -1;
+  const current: TourEntry | null = pinned ?? (currentIndex >= 0 ? entries[currentIndex] : null);
+
+  // A pinned ZIP is fetched at runtime, so no server-rendered verdict exists for
+  // it. Showing the tour's verdict there would attach one property's analysis to
+  // another, so we show nothing and say why.
+  const currentVerdict = pinned ? null : verdicts?.[currentIndex];
 
   async function loadPinned(zip: string) {
     setPinState('loading');
@@ -77,6 +89,16 @@ export function SpotlightRotator({ entries, startIndex, children }: Props) {
             )
           : children}
       </div>
+
+      {currentVerdict}
+
+      {pinned && current && (
+        <p className="mt-3 text-[12px]" style={{ color: 'var(--haze)' }}>
+          <a href={`/property/${current.deal.id}`} className="underline underline-offset-2">
+            Underwrite {current.metro.label} pick →
+          </a>
+        </p>
+      )}
 
       <div className="mt-3 flex items-center justify-between text-[12px]" style={{ color: 'var(--mute)' }}>
         {/* Plain text, not aria-live: announcing every 6s rotation would be

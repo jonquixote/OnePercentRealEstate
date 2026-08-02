@@ -87,3 +87,52 @@ describe('SpotlightRotator', () => {
     expect(screen.queryByTestId('server-frame')).toBeNull();
   });
 });
+
+describe('SpotlightRotator verdict pairing', () => {
+  const two = [entry('77002', 'Houston'), entry('44113', 'Cleveland')];
+  const verdicts = [
+    <p key="a" data-testid="v-77002">verdict for 77002</p>,
+    <p key="b" data-testid="v-44113">verdict for 44113</p>,
+  ];
+
+  it('shows the verdict belonging to the entry currently on screen', () => {
+    render(
+      <SpotlightRotator entries={two} startIndex={0} verdicts={verdicts}>
+        <div>server</div>
+      </SpotlightRotator>,
+    );
+    // Index 0 is the server frame's entry, so its verdict — and only its
+    // verdict — is on screen. A verdict rendered for the wrong entry would
+    // attach one property's analysis to another.
+    expect(screen.getByTestId('v-77002')).toBeTruthy();
+    expect(screen.queryByTestId('v-44113')).toBeNull();
+  });
+
+  it('drops the verdict entirely when a ZIP is pinned, rather than showing a stale one', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, json: async () => entry('30310', 'Atlanta'),
+    }));
+    render(
+      <SpotlightRotator entries={two} startIndex={0} verdicts={verdicts}>
+        <div>server</div>
+      </SpotlightRotator>,
+    );
+    fireEvent.change(screen.getByLabelText(/pin a zip/i), { target: { value: '30310' } });
+    fireEvent.submit(screen.getByRole('button', { name: /go/i }).closest('form')!);
+
+    await waitFor(() => expect(screen.getByText(/resume tour/i)).toBeTruthy());
+    // The pinned deal was fetched at runtime and has no server-rendered
+    // verdict. Neither tour verdict may leak onto it.
+    expect(screen.queryByTestId('v-77002')).toBeNull();
+    expect(screen.queryByTestId('v-44113')).toBeNull();
+  });
+
+  it('renders without verdicts at all — the prop is optional', () => {
+    render(
+      <SpotlightRotator entries={two} startIndex={0}>
+        <div data-testid="server-frame">server</div>
+      </SpotlightRotator>,
+    );
+    expect(screen.getByTestId('server-frame')).toBeTruthy();
+  });
+});

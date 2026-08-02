@@ -98,6 +98,46 @@ const ARV_CTE = `
     FROM subj s CROSS JOIN comps c
 `;
 
+/**
+ * resolve_rule() cache.
+ *
+ * The hero underwrites every deal in the metro tour, and those deals share a
+ * handful of property types between them, so without this the page issues the
+ * same three lookups ten times over. Rules are edited by hand and versioned;
+ * an hour of staleness is not a correctness concern.
+ */
+const RULE_TTL_MS = 60 * 60 * 1000;
+const ruleCache = new Map<string, { at: number; row: Record<string, unknown> | null }>();
+
+async function resolveRule(
+  propertyType: string,
+  saleType: string,
+  strategy: Strategy,
+): Promise<Record<string, unknown> | null> {
+  const key = `${propertyType}|${saleType}|${strategy}`;
+  const hit = ruleCache.get(key);
+  if (hit && Date.now() - hit.at < RULE_TTL_MS) return hit.row;
+  try {
+    const res = await pool.query(`SELECT * FROM resolve_rule($1, $2, $3)`, [
+      propertyType,
+      saleType,
+      strategy,
+    ]);
+    const row = res.rows[0] ?? null;
+    ruleCache.set(key, { at: Date.now(), row });
+    return row;
+  } catch (err) {
+    // Not cached: a transient failure must not pin "no rule" for an hour.
+    console.error(`resolve_rule failed for ${key}:`, err);
+    return null;
+  }
+}
+
+/** Test seam: the cache is module state, so it must not leak between cases. */
+export function __clearRuleCache() {
+  ruleCache.clear();
+}
+
 const unavailable = (strategy: Strategy, reason: string): LensVerdict => ({
   strategy,
   available: false,
@@ -163,17 +203,11 @@ export async function underwriteDeal(dealId: string): Promise<LensVerdict[]> {
       }
     }
 
-    let cfgRow: Record<string, unknown> | undefined;
-    try {
-      const cfgRes = await pool.query(`SELECT * FROM resolve_rule($1, $2, $3)`, [
-        (listing.property_type as string) ?? 'DEFAULT',
-        (listing.sale_type as string) ?? 'standard',
-        strategy,
-      ]);
-      cfgRow = cfgRes.rows[0];
-    } catch (err) {
-      console.error(`resolve_rule failed for ${strategy}:`, err);
-    }
+    const cfgRow = await resolveRule(
+      (listing.property_type as string) ?? 'DEFAULT',
+      (listing.sale_type as string) ?? 'standard',
+      strategy,
+    );
     if (!cfgRow) {
       out.push(unavailable(strategy, 'No underwriting rule is configured for this property type.'));
       continue;

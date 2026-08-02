@@ -70,8 +70,12 @@ function mockDb(subject: Record<string, unknown> | undefined, rule: Record<strin
 // teardown function — so it invokes the mock with zero arguments after every
 // test, and any implementation that reads its first argument throws during
 // cleanup.
-beforeEach(() => {
+beforeEach(async () => {
   h.query.mockReset();
+  // resolve_rule() results are cached in module state for an hour; without this
+  // a later test would be answered by an earlier test's rule row.
+  const { __clearRuleCache } = await import('./underwrite-deal');
+  __clearRuleCache();
 });
 
 describe('underwriteDeal', () => {
