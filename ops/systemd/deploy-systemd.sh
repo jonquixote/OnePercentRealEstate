@@ -329,7 +329,12 @@ else
   # IS the operator asking.
   restart_targets=()
   for u in "${ALL_UNITS[@]}"; do
-    state=$(systemctl is-enabled "$u" 2>/dev/null || echo unknown)
+    # `systemctl is-enabled` PRINTS the state and EXITS NONZERO for disabled
+    # units, so the obvious `$(... || echo unknown)` appends to a perfectly good
+    # answer and yields "disabled\nunknown" — which matches nothing, and the
+    # skip silently never happens. Take stdout, ignore the exit code.
+    state=$(systemctl is-enabled "$u" 2>/dev/null) || true
+    [[ -z "$state" ]] && state=unknown
     if [[ "$state" == "disabled" || "$state" == "masked" ]]; then
       echo "  Skipping $u (${state})"
       continue
