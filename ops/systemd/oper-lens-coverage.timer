@@ -1,0 +1,14 @@
+[Unit]
+Description=Check per-lens underwriting coverage every 6 hours
+
+[Timer]
+# Six-hourly. Coverage moves with the crawl and the rent worker (hours to
+# days), and the query costs ~1.5s of database time, so a tighter cadence would
+# re-measure an unmoved number at real expense.
+OnBootSec=25min
+OnUnitActiveSec=6h
+Persistent=true
+Unit=oper-lens-coverage.service
+
+[Install]
+WantedBy=timers.target

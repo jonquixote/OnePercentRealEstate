@@ -131,6 +131,18 @@ export interface RuleResult {
   available: boolean; // had data + a threshold to evaluate
   passes: boolean | null; // null when unavailable
   summary: string;
+  /**
+   * `value` rendered with this rule's own formatter — "5.20%", "8.4×", "1.35",
+   * "$182,000". Each rule knows its unit; only mkRule has that formatter, so a
+   * consumer that wants just the number (rather than the whole `summary`
+   * sentence) would otherwise have to guess the unit. Guessing gets the
+   * dollar-denominated rules — the 70% rule's MAO and BRRRR's capital left in
+   * the deal — badly wrong: formatted as a percentage, $182,000 reads
+   * "18200000.00%". Null when the rule is unavailable.
+   */
+  display: string | null;
+  /** `threshold` rendered with the same formatter. Null when unavailable. */
+  thresholdDisplay: string | null;
 }
 
 /** A weighted scoring category (property-quality + rule signals) for the grade. */
@@ -402,7 +414,18 @@ function mkRule(
   const summary = available
     ? `${label}: ${fmt(value!)} ${comparator === 'gte' ? '≥' : '≤'} ${fmt(t!)} → ${passes ? 'pass' : 'fail'}`
     : `${label}: insufficient data`;
-  return { rule, label, comparator, value, threshold: t, available, passes, summary };
+  return {
+    rule,
+    label,
+    comparator,
+    value,
+    threshold: t,
+    available,
+    passes,
+    summary,
+    display: available ? fmt(value!) : null,
+    thresholdDisplay: available ? fmt(t!) : null,
+  };
 }
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`;

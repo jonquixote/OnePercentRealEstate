@@ -31,8 +31,8 @@ Monorepo (pnpm workspaces): `apps/one`, `apps/two`, `apps/worker`,
 
 | Thing | Value |
 |---|---|
-| Main / driver | `209.50.61.64`, mesh `10.8.0.105`, UUID `003b1626-d145-47b6-9cf6-b9fff3025829` |
-| SSH | `ssh -i ~/.ssh/id_onepercent root@209.50.61.64` |
+| Main / driver | `209.94.60.174`, mesh `10.8.0.105`, UUID `003b1626-d145-47b6-9cf6-b9fff3025829` |
+| SSH | `ssh -i ~/.ssh/id_onepercent root@209.94.60.174` |
 | App root | `/opt/onepercent` (a real git checkout) |
 | Runtime env | `/etc/oper.env` (generated — never edit by hand) |
 | Scraper nodes | `oper-scraper-2` (mesh `10.8.0.182`), `oper-scraper-3` (mesh `10.8.0.246`) |
@@ -48,7 +48,7 @@ the local scraper, and ~10 workers. All units are `oper-*`.
 ## 3. Deploying
 
 ```bash
-ssh -i ~/.ssh/id_onepercent root@209.50.61.64 \
+ssh -i ~/.ssh/id_onepercent root@209.94.60.174 \
   'cd /opt/onepercent && git pull --ff-only && \
    rm -rf apps/worker/dist apps/worker/*.tsbuildinfo && \
    bash ops/systemd/deploy-systemd.sh app two worker'
@@ -152,6 +152,7 @@ search (opt-in to see it).
 | `oper-image-availability` | hourly | Samples the listing-photo CDN — every photo comes from rdcpix |
 | `oper-crawl-throughput` | hourly | **Confirmations/hour vs what the SLO arithmetically needs** (6h average) |
 | `oper-stream-coverage` | 6 h | Daily production of all three crawl streams; alerts on collapse |
+| `oper-lens-coverage` | 6 h | **Per-buyer-lens underwriting coverage** — rent, sqft and ARV comps, the inputs the home page's claim rests on |
 
 Alerts go to **Telegram** via `ops/monitoring/notify-telegram.sh` (30-min dedup,
 auto-RESOLVED). Credentials already live in `/etc/oper.env`.
@@ -420,7 +421,7 @@ have provisioned a node as written:
 
 | Issue | Detail |
 |---|---|
-| **DNS not moved** | `one`/`two.octavo.press` still point at the old, deleted box. Must become `209.50.61.64`. |
+| ~~DNS not moved~~ | **FIXED 2026-08-02**: `one`/`two.octavo.press` resolve to `209.94.60.174`; site serves 200 over TLS. |
 | **Scraper nodes idle** | Provisioned but out of the pool — they cannot reach Postgres (§9.13). Plan: `docs/superpowers/plans/2026-07-25-stateless-scraper-nodes.md`. |
 | ~~Homepage stats cold path~~ | **FIXED 2026-07-26**: precomputed into `stats_summary` + SWR/single-flight. 18.5 s → **0.012 s**; 20 concurrent cold requests now peak at 0.12 s. |
 | ~~Monitoring eats the DB~~ | **FIXED 2026-07-26**: exporter reads `listing_status_counters`/`reltuples`. Was **79 % of all DB time**; now 0.02 ms. Guarded by `db-load-budget.sh`. |

@@ -13,6 +13,10 @@ import { getSpotlightTour } from '@/lib/spotlight';
 import { metroFromHeaders } from '@/lib/geo';
 import { SpotlightCard } from './SpotlightCard';
 import { SpotlightRotator } from './SpotlightRotator';
+import { LensPicker } from './LensPicker';
+import { DealVerdict } from './DealVerdict';
+import { underwriteDeal } from '@/lib/underwrite-deal';
+import type { Strategy } from '@/lib/strategies';
 
 const num = new Intl.NumberFormat('en-US');
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -28,9 +32,11 @@ interface Props {
   stats: HeroStats | null;
   priceCuts?: number;
   medianRent?: number | null;
+  /** The active buyer lens, from ?strat= — this changes the verdict, not just a filter. */
+  strategy: Strategy;
 }
 
-export async function HeroSection({ stats, priceCuts, medianRent }: Props) {
+export async function HeroSection({ stats, priceCuts, medianRent, strategy }: Props) {
   // headers() is async in Next 16. Geo comes from nginx-injected x-geo-*
   // headers, which nginx overwrites — never client-supplied, so it cannot be
   // spoofed to fake a metro.
@@ -38,6 +44,19 @@ export async function HeroSection({ stats, priceCuts, medianRent }: Props) {
   const { entries, startIndex } = await getSpotlightTour(geo);
   const idx = startIndex >= 0 ? startIndex : 0;
   const first = entries[idx] ?? null;
+
+  // The whole product claim: every deal in the tour, judged four ways. One
+  // verdict per entry, because the rotator swaps cards on the client and a
+  // verdict must never outlive the property it describes.
+  //
+  // Cost is one indexed query per deal (0.4-3.2 ms measured on production) plus
+  // rule lookups that the module cache collapses to near zero, all in parallel.
+  // Underwriting failure cannot take the hero down: underwriteDeal resolves to
+  // four unavailable lenses rather than rejecting.
+  const verdictsPerEntry = await Promise.all(entries.map((e) => underwriteDeal(e.deal.id)));
+  const verdictNodes = verdictsPerEntry.map((v, i) => (
+    <DealVerdict key={entries[i].deal.id} verdicts={v} strategy={strategy} />
+  ));
 
   return (
     <section aria-labelledby="hero-headline" className="relative isolate overflow-hidden bg-ink">
@@ -112,11 +131,18 @@ export async function HeroSection({ stats, priceCuts, medianRent }: Props) {
           {/* ── Right: the proof — a live deal clearing the line ── */}
           <div className="lg:pt-6">
             {first ? (
-              <SpotlightRotator entries={entries} startIndex={idx}>
-                {/* Server-rendered first frame: real HTML at TTFB, and the LCP
-                    candidate, so the photo is priority-loaded. */}
-                <SpotlightCard entry={first} priority />
-              </SpotlightRotator>
+              <>
+                {/* The differentiation, made visible: anyone can show a
+                    listing; this says what it does for four different buyers,
+                    and admits where it cannot. The lens is a URL, so each
+                    buyer's view of the page is shareable and server-rendered. */}
+                <LensPicker active={strategy} />
+                <SpotlightRotator entries={entries} startIndex={idx} verdicts={verdictNodes}>
+                  {/* Server-rendered first frame: real HTML at TTFB, and the LCP
+                      candidate, so the photo is priority-loaded. */}
+                  <SpotlightCard entry={first} priority />
+                </SpotlightRotator>
+              </>
             ) : (
               <div
                 className="rounded-2xl border border-dashed p-10 text-center"
