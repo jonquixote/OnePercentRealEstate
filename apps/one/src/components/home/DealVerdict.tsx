@@ -24,9 +24,13 @@ export function DealVerdict({
 
   if (!active) return null;
 
+  // STR is unavailable on every property and flip/BRRRR on most, so the chosen
+  // lens is often one we cannot compute. Offer the nearest one we can.
+  const fallback = active.available ? null : (others.find((v) => v.available) ?? null);
+
   return (
     <>
-      <ActiveVerdict verdict={active} />
+      <ActiveVerdict verdict={active} fallback={fallback} />
       <LensVerdictStrip verdicts={others} />
     </>
   );
