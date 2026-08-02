@@ -1,4 +1,5 @@
 'use client';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { useEffect, useRef, useState } from 'react';
 import { STRATEGY_BY_ID, type Strategy } from '@/lib/strategies';
@@ -26,17 +27,10 @@ const fmt = new Intl.NumberFormat('en-US');
  */
 export function MarketPulse({ strategy, histogram, thresholdPct, clears, medianRatioPct }: MarketPulseProps) {
   const [seen, setSeen] = useState(false);
-  const [reduced, setReduced] = useState(false);
+  const reduced = useReducedMotion();
   const ref = useRef<HTMLDivElement | null>(null);
   const meta = STRATEGY_BY_ID[strategy];
 
-  useEffect(() => {
-    const m = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const on = () => setReduced(m.matches);
-    on();
-    m.addEventListener?.('change', on);
-    return () => m.removeEventListener?.('change', on);
-  }, []);
 
   useEffect(() => {
     const el = ref.current;
